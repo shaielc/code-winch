@@ -100,14 +100,36 @@ database lease permits rehydration and later horizontal scaling.
 
 ### Harness adapters
 
-A harness adapter translates the generic runner contract into a provider's
-native execution model. It supplies a launch specification, parses output into
-normalized events, encodes user input, reports capabilities, and classifies
-exit/failure states. Adapters may preserve provider extensions in a namespaced
-payload so richer UI features do not require core-schema changes.
+A harness adapter is the provider-specific translation layer between Code
+Winch and one coding-agent CLI or API. Its purpose is to keep provider checks
+and wire formats out of the run supervisor, workflows, and generic UI. For
+example, the same Code Winch `UserMessage` might be encoded as a JSON record for
+one agent and as text written to a PTY for another; both agents' replies are
+decoded into the same canonical message and tool-call events.
+
+The adapter:
+
+- describes the harness's supported capabilities, such as structured messages,
+  terminal resize, approvals, resume, and usage reporting;
+- converts a generic run specification into an executable, arguments, terminal
+  requirements, and other launch instructions;
+- incrementally decodes native stdout, stderr, or protocol messages into
+  normalized events and encodes generic user input into native input frames;
+- maps native exits and errors to stable Code Winch outcomes; and
+- may preserve provider-only data in a namespaced extension so a specialized UI
+  can use it without making the core schema provider-specific.
+
+The launch instructions are handed to the selected sandbox driver. This keeps
+the two independent choices composable: **which agent to run** belongs to the
+harness adapter, while **where and under which isolation policy to run it**
+belongs to the sandbox driver. Consequently, adding a Docker or future microVM
+backend does not require a separate implementation for every agent.
 
 Adapters do **not** create containers, access the web session, store secrets, or
-write directly to the event store.
+write directly to the event store. The runner owns process I/O, the supervisor
+redacts and sequences adapter-produced events, and the event store persists
+them. Keeping these boundaries prevents provider code from bypassing lifecycle,
+security, and ordering rules.
 
 ### Sandbox drivers
 
