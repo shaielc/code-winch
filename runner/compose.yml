@@ -1,0 +1,26 @@
+services:
+  runner:
+    build:
+      context: ..
+      dockerfile: runner/Dockerfile
+      args:
+        RUNNER_IMAGE: ${RUNNER_IMAGE:-ghcr.io/actions/actions-runner:latest}
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-bookworm-slim}
+        CODEX_VERSION: ${CODEX_VERSION:-latest}
+    image: code-winch-runner:local
+    init: true
+    restart: unless-stopped
+    environment:
+      GITHUB_URL: ${GITHUB_URL:?Set GITHUB_URL in runner/.env}
+      RUNNER_TOKEN: ${RUNNER_TOKEN:-}
+      RUNNER_NAME: ${RUNNER_NAME:-code-winch-local}
+      RUNNER_LABELS: ${RUNNER_LABELS:-code-winch,task-scheduler}
+    volumes:
+      - codex-auth:/home/runner/.codex
+      - runner-work:/home/runner/_work
+      - scheduler-state:/var/lib/code-winch
+
+volumes:
+  codex-auth:
+  runner-work:
+  scheduler-state:
