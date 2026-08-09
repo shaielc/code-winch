@@ -13,6 +13,7 @@ multi-agent workflows.
 - [Harness and event contracts](docs/contracts.md)
 - [Sandbox and security model](docs/security.md)
 - [Delivery roadmap](docs/roadmap.md)
+- [Implementation workplan](docs/workplan/README.md)
 - [Architecture decisions](docs/decisions/README.md)
 
 ## Project status
