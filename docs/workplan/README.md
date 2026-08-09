@@ -106,16 +106,56 @@ Update only these tracking fields as work progresses:
 - `owner`: an agent or contributor identifier, or `null` when unassigned; and
 - `blocked_reason`: a non-empty explanation for `blocked` tasks, otherwise `null`.
 
-Availability is derived rather than stored: a task is **next available** when its status is `pending` and every ID in `depends_on` has status `completed`. This avoids a stale duplicated `ready` flag. Return all currently available tasks with:
+Availability is derived rather than stored: a task is **next available** when its status is `pending` and every ID in `depends_on` has status `completed`. This avoids a stale duplicated `ready` flag. From the repository root, list all currently available tasks with:
 
 ```sh
-jq '. as $tracker | [
-  $tracker.tasks[]
-  | select(.status == "pending")
-  | select(.depends_on | all(. as $dependency
-      | any($tracker.tasks[]; .id == $dependency and .status == "completed")))
-  | {id, title, phase, owner, brief}
-]' docs/workplan/tasks.json
+scripts/list-available-tasks.sh
 ```
 
 The initial result contains `P0-001`, `P0-002`, and `P0-009`. Once a task is marked `completed`, rerun the query to reveal newly unblocked work. A blocked or in-progress task is never returned even if all its dependencies are complete.
+
+## Containerized GitHub runner
+
+The preferred deployment is the repository-scoped self-hosted runner in
+`runner/`. It receives merge jobs over the GitHub Actions runner connection, so
+it requires outbound network access but no public webhook endpoint. Copy
+`runner/.env.example` to `runner/.env`, set the repository URL and a current
+runner registration token, then build the image:
+
+```sh
+docker compose --env-file runner/.env -f runner/compose.yml build
+```
+
+Codex authentication is stored in a dedicated Docker volume. Populate it using
+the interactive Codex login before starting the runner service:
+
+```sh
+docker compose --env-file runner/.env -f runner/compose.yml run --rm \
+  --entrypoint codex runner login
+docker compose --env-file runner/.env -f runner/compose.yml up -d
+```
+
+The runner configuration, work directory, Codex credentials, and scheduler
+state survive container replacement in named volumes. `RUNNER_TOKEN` is used
+only for initial runner registration; generate a new token if the runner volume
+is removed. Set the repository Actions variable `CODEX_ENV_ID` to the Codex
+Cloud environment used for dispatched tasks.
+
+Treat the Docker volumes as secrets: the Codex volume contains the CLI login,
+and the scheduler-state volume also retains the GitHub runner credentials.
+Never mount the Docker socket into this runner.
+
+The example defaults to the latest runner image and Codex CLI. For repeatable
+deployments, replace `RUNNER_IMAGE` and `NODE_IMAGE` with reviewed image digests
+and `CODEX_VERSION` with a tested CLI version before building.
+
+When a pull request containing exactly one known task ID merges, the Actions
+workflow invokes `scripts/task_scheduler.py` once with GitHub's event file. The
+scheduler records completion locally, overlays that state on the tracker from
+`origin/main`, and submits newly available tasks with `codex cloud exec`. An
+adjacent lock file prevents overlapping scheduler jobs from dispatching the
+same task.
+
+Run the **Schedule available tasks** workflow manually after installing the
+runner to dispatch the initial dependency-free tasks. The same manual trigger
+can retry tasks after a transient Codex launch failure.
