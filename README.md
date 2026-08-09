@@ -18,7 +18,30 @@ multi-agent workflows.
 
 ## Project status
 
-This is an architecture-only foundation. No runtime is implemented yet. The
-documents distinguish initial interfaces from later deployment choices so that
-the first vertical slice does not prematurely require Docker, a workflow
-engine, or a particular coding-agent provider.
+The Go workspace and an intentionally empty daemon composition root are in
+place; domain and adapter behavior have not been implemented yet. The documents
+distinguish initial interfaces from later deployment choices so that the first
+vertical slice does not prematurely require Docker, a workflow engine, or a
+particular coding-agent provider.
+
+## Go development
+
+Go 1.24 or newer and golangci-lint 2.1.6 are required. Install the linter with
+`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6`.
+The repository exposes the same quality gates used in CI through the root
+`Makefile`:
+
+```sh
+make format        # format Go source files
+make format-check  # verify formatting without changing files
+make vet           # run go vet
+make lint          # run the pinned golangci-lint release
+make test          # run Go unit tests
+make build         # build cmd/winchd
+make check         # run all non-mutating CI checks
+```
+
+CI installs the pinned linter before invoking these commands. Run `make format`
+when `make format-check` reports file names, then rerun `make check` before
+submitting a change. Set `GOLANGCI_LINT` to an alternate binary path when your
+linter is not on `PATH`.
