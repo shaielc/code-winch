@@ -106,16 +106,10 @@ Update only these tracking fields as work progresses:
 - `owner`: an agent or contributor identifier, or `null` when unassigned; and
 - `blocked_reason`: a non-empty explanation for `blocked` tasks, otherwise `null`.
 
-Availability is derived rather than stored: a task is **next available** when its status is `pending` and every ID in `depends_on` has status `completed`. This avoids a stale duplicated `ready` flag. Return all currently available tasks with:
+Availability is derived rather than stored: a task is **next available** when its status is `pending` and every ID in `depends_on` has status `completed`. This avoids a stale duplicated `ready` flag. From the repository root, list all currently available tasks with:
 
 ```sh
-jq '. as $tracker | [
-  $tracker.tasks[]
-  | select(.status == "pending")
-  | select(.depends_on | all(. as $dependency
-      | any($tracker.tasks[]; .id == $dependency and .status == "completed")))
-  | {id, title, phase, owner, brief}
-]' docs/workplan/tasks.json
+scripts/list-available-tasks.sh
 ```
 
 The initial result contains `P0-001`, `P0-002`, and `P0-009`. Once a task is marked `completed`, rerun the query to reveal newly unblocked work. A blocked or in-progress task is never returned even if all its dependencies are complete.
