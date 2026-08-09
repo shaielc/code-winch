@@ -113,3 +113,30 @@ scripts/list-available-tasks.sh
 ```
 
 The initial result contains `P0-001`, `P0-002`, and `P0-009`. Once a task is marked `completed`, rerun the query to reveal newly unblocked work. A blocked or in-progress task is never returned even if all its dependencies are complete.
+
+## Local task daemon
+
+The task daemon keeps lifecycle state under the repository's Git directory, so
+automated `in_progress` updates never modify a tracking branch or conflict with
+pull requests. Each cycle fetches task definitions from `origin/main`, overlays
+the local lifecycle state, observes merged GitHub pull requests containing a
+single task ID, and submits newly available tasks with `codex cloud exec`.
+
+Authenticate `codex`, set `GITHUB_TOKEN` when the repository is private, and
+start the daemon with the Codex Cloud environment ID:
+
+```sh
+scripts/task_daemon.py --env <ENV_ID>
+```
+
+Use `--once` for a single cycle while testing. By default the daemon polls every
+30 seconds, examines the 100 most recently updated closed pull requests, and
+allows at most three locally tracked tasks to be in progress. See `--help` to
+override these settings, the GitHub repository, branch, remote, or state path.
+An adjacent lock file prevents two daemon processes from dispatching the same
+task from one checkout.
+
+Every task pull request must include exactly one known task ID, such as
+`Task: P0-003`, in its title, body, or source branch. The daemon marks that task
+completed locally after the pull request merges. The prompt sent to Codex asks
+the cloud task to preserve this convention.
