@@ -18,7 +18,9 @@ multi-agent workflows.
 
 ## Project status
 
-This is an architecture-only foundation. No runtime is implemented yet. The
-documents distinguish initial interfaces from later deployment choices so that
-the first vertical slice does not prematurely require Docker, a workflow
-engine, or a particular coding-agent provider.
+The implementation foundation includes a bootstrapped web workspace; product
+runtime behavior is not implemented yet. See [`web/README.md`](web/README.md)
+for its deterministic development and generated-client checks. The documents
+distinguish initial interfaces from later deployment choices so that the first
+vertical slice does not prematurely require Docker, a workflow engine, or a
+particular coding-agent provider.
