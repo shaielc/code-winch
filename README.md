@@ -18,11 +18,13 @@ multi-agent workflows.
 
 ## Project status
 
-The Go workspace and an intentionally empty daemon composition root are in
-place; domain and adapter behavior have not been implemented yet. The documents
-distinguish initial interfaces from later deployment choices so that the first
-vertical slice does not prematurely require Docker, a workflow engine, or a
-particular coding-agent provider.
+The Go workspace, an intentionally empty daemon composition root, and a
+bootstrapped web workspace are in place; domain, adapter, and product behavior
+have not been implemented yet. See [`web/README.md`](web/README.md) for the web
+workspace's deterministic development and generated-client checks. The
+documents distinguish initial interfaces from later deployment choices so that
+the first vertical slice does not prematurely require Docker, a workflow
+engine, or a particular coding-agent provider.
 
 ## Go development
 
