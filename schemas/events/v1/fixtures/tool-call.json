@@ -1,0 +1,22 @@
+{
+  "eventId": "evt-0004",
+  "runId": "run-0001",
+  "sequence": 4,
+  "occurredAt": "2026-08-07T12:34:56.789Z",
+  "schemaVersion": 1,
+  "source": {
+    "type": "harness",
+    "adapter": "fixture",
+    "version": "1.0.0"
+  },
+  "sensitivity": "operational",
+  "extensions": {},
+  "kind": "tool.call",
+  "payload": {
+    "toolCallId": "tool-1",
+    "name": "read_file",
+    "arguments": {
+      "path": "README.md"
+    }
+  }
+}

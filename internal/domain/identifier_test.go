@@ -8,14 +8,14 @@ func TestIdentifierTypesParseCanonicalUUID(t *testing.T) {
 	tests := map[string]struct {
 		parse func(string) (interface{ String() string }, error)
 	}{
-		"workspace":  func(value string) (interface{ String() string }, error) { return ParseWorkspaceID(value) },
-		"run":        func(value string) (interface{ String() string }, error) { return ParseRunID(value) },
-		"attempt":    func(value string) (interface{ String() string }, error) { return ParseAttemptID(value) },
-		"event":      func(value string) (interface{ String() string }, error) { return ParseEventID(value) },
-		"command":    func(value string) (interface{ String() string }, error) { return ParseCommandID(value) },
-		"artifact":   func(value string) (interface{ String() string }, error) { return ParseArtifactID(value) },
-		"credential": func(value string) (interface{ String() string }, error) { return ParseCredentialID(value) },
-		"workflow":   func(value string) (interface{ String() string }, error) { return ParseWorkflowID(value) },
+		"workspace":  {parse: func(value string) (interface{ String() string }, error) { return ParseWorkspaceID(value) }},
+		"run":        {parse: func(value string) (interface{ String() string }, error) { return ParseRunID(value) }},
+		"attempt":    {parse: func(value string) (interface{ String() string }, error) { return ParseAttemptID(value) }},
+		"event":      {parse: func(value string) (interface{ String() string }, error) { return ParseEventID(value) }},
+		"command":    {parse: func(value string) (interface{ String() string }, error) { return ParseCommandID(value) }},
+		"artifact":   {parse: func(value string) (interface{ String() string }, error) { return ParseArtifactID(value) }},
+		"credential": {parse: func(value string) (interface{ String() string }, error) { return ParseCredentialID(value) }},
+		"workflow":   {parse: func(value string) (interface{ String() string }, error) { return ParseWorkflowID(value) }},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

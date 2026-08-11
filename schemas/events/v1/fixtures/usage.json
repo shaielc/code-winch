@@ -1,0 +1,19 @@
+{
+  "eventId": "evt-0010",
+  "runId": "run-0001",
+  "sequence": 10,
+  "occurredAt": "2026-08-07T12:34:56.789Z",
+  "schemaVersion": 1,
+  "source": {
+    "type": "harness",
+    "adapter": "fixture",
+    "version": "1.0.0"
+  },
+  "sensitivity": "operational",
+  "extensions": {},
+  "kind": "usage.recorded",
+  "payload": {
+    "unit": "input-token",
+    "quantity": 123
+  }
+}
