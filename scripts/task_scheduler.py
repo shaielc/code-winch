@@ -14,9 +14,11 @@ import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from string import Template
 from typing import Any
 
 TASK_ID = re.compile(r"(?<![A-Z0-9])P\d+-\d{3}(?![A-Z0-9])", re.IGNORECASE)
+PROMPT_TEMPLATE = Path("scripts/task-prompt.md")
 
 
 def run(*command: str, cwd: Path, capture: bool = True) -> str:
@@ -139,14 +141,13 @@ def available_tasks(repo_root: Path, tracker: dict[str, Any]) -> list[dict[str, 
     return json.loads(output)
 
 
-def prompt_for(task: dict[str, Any]) -> str:
-    return f"""Implement {task['id']}: {task['title']}.
+def load_prompt_template(repo_root: Path, path: Path) -> Template:
+    resolved = path if path.is_absolute() else repo_root / path
+    return Template(resolved.read_text())
 
-Read docs/workplan/{task['brief']} and all applicable AGENTS.md files. Run the
-required verification, commit the changes, and open a pull request. Include
-`Task: {task['id']}` in the pull request body so the local scheduler can detect
-completion. Do not edit task status fields in docs/workplan/tasks.json.
-"""
+
+def prompt_for(template: Template, task: dict[str, Any]) -> str:
+    return template.substitute(id=task["id"], title=task["title"], brief=task["brief"])
 
 
 def dispatch(
@@ -154,6 +155,7 @@ def dispatch(
     state_file: Path,
     state: dict[str, Any],
     tasks: list[dict[str, Any]],
+    template: Template,
     environment: str,
     capacity: int,
 ) -> None:
@@ -170,7 +172,13 @@ def dispatch(
         save_state(state_file, state)
         try:
             output = run(
-                "codex", "cloud", "exec", "--env", environment, prompt_for(task), cwd=repo_root
+                "codex",
+                "cloud",
+                "exec",
+                "--env",
+                environment,
+                prompt_for(template, task),
+                cwd=repo_root,
             )
         except (OSError, subprocess.CalledProcessError) as error:
             state["tasks"][task_id] = {
@@ -194,6 +202,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--remote", default="origin")
     parser.add_argument("--branch", default="main")
     parser.add_argument("--state-file", type=Path)
+    parser.add_argument("--prompt-template", type=Path, default=PROMPT_TEMPLATE)
     parser.add_argument("--max-concurrent", type=int, default=3)
     parser.add_argument(
         "--event-file",
@@ -215,8 +224,11 @@ def schedule(
     known_ids = {task["id"] for task in tracker["tasks"]}
     if record_completions(state, pulls, known_ids):
         save_state(state_file, state)
+    template = load_prompt_template(repo_root, args.prompt_template)
     available = available_tasks(repo_root, effective_tracker(tracker, state))
-    dispatch(repo_root, state_file, state, available, args.env, args.max_concurrent)
+    dispatch(
+        repo_root, state_file, state, available, template, args.env, args.max_concurrent
+    )
 
 
 def main() -> int:
