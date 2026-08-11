@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import fcntl
 import json
 import os
@@ -80,15 +81,23 @@ def load_tracker(repo_root: Path, remote: str, branch: str) -> dict[str, Any]:
 
 
 def effective_tracker(tracker: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
-    effective = json.loads(json.dumps(tracker))
+    effective = copy.deepcopy(tracker)
     overrides = state["tasks"]
     for task in effective["tasks"]:
         local = overrides.get(task["id"])
-        if local:
+        if local and task["status"] != "completed":
             task["status"] = local["status"]
             task["owner"] = local.get("owner")
             task["blocked_reason"] = local.get("blocked_reason")
     return effective
+
+
+def prune_completed(tracker: dict[str, Any], state: dict[str, Any]) -> bool:
+    completed = {task["id"] for task in tracker["tasks"] if task["status"] == "completed"}
+    stale = [task_id for task_id in state["tasks"] if task_id in completed]
+    for task_id in stale:
+        del state["tasks"][task_id]
+    return bool(stale)
 
 
 def merged_pull_request(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -203,12 +212,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--branch", default="main")
     parser.add_argument("--state-file", type=Path)
     parser.add_argument("--prompt-template", type=Path, default=PROMPT_TEMPLATE)
+    parser.add_argument("--task", help="dispatch only this task ID when it is available")
     parser.add_argument("--max-concurrent", type=int, default=3)
     parser.add_argument(
         "--event-file",
         type=Path,
-        required=True,
-        help="GitHub Actions event file",
+        help="GitHub Actions event file; omit for a manual run",
     )
     return parser.parse_args()
 
@@ -222,10 +231,17 @@ def schedule(
     tracker = load_tracker(repo_root, args.remote, args.branch)
     state = load_state(state_file)
     known_ids = {task["id"] for task in tracker["tasks"]}
-    if record_completions(state, pulls, known_ids):
+    changed = record_completions(state, pulls, known_ids)
+    if prune_completed(tracker, state) or changed:
         save_state(state_file, state)
     template = load_prompt_template(repo_root, args.prompt_template)
     available = available_tasks(repo_root, effective_tracker(tracker, state))
+    if args.task:
+        requested = args.task.upper()
+        available = [task for task in available if task["id"] == requested]
+        if not available:
+            print(f"{requested} is not currently available; nothing to dispatch")
+            return
     dispatch(
         repo_root, state_file, state, available, template, args.env, args.max_concurrent
     )
@@ -237,7 +253,7 @@ def main() -> int:
     state_file = (args.state_file or default_state_file(repo_root)).resolve()
     lock_handle = acquire_lock(state_file)
     try:
-        payload = json.loads(args.event_file.read_text())
+        payload = json.loads(args.event_file.read_text()) if args.event_file else {}
         pull = merged_pull_request(payload)
         if "pull_request" in payload and not pull:
             print("event is not a merged pull request; nothing to do")
