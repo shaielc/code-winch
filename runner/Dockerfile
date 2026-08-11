@@ -12,10 +12,10 @@ COPY --from=node-runtime /usr/local/ /usr/local/
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends jq python3 \
-    && npm install --global "@openai/codex@${CODEX_VERSION}" \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /home/runner/.codex /home/runner/_work /var/lib/code-winch \
     && chown -R runner:runner /home/runner/.codex /home/runner/_work /var/lib/code-winch
+RUN npm install --global "@openai/codex@${CODEX_VERSION}"
 
 COPY --chown=runner:runner runner/entrypoint.sh /usr/local/bin/code-winch-runner
 

@@ -8,6 +8,7 @@ reverse. Status values are Proposed, Accepted, Superseded, or Rejected.
 | [ADR-0001](0001-modular-monolith-and-runner-boundary.md) | Modular monolith with a serializable runner boundary | Proposed |
 | [ADR-0002](0002-canonical-events-and-renderers.md) | Canonical events separated from rendering | Proposed |
 | [ADR-0003](0003-capability-based-adapters.md) | Capability-based harness and sandbox ports | Proposed |
+| [ADR-0004](0004-task-status-authority.md) | Task status authority and scheduler state | Proposed |
 
 New ADRs should contain context, decision, consequences, alternatives, and a
 clear trigger for reassessment. Accepted ADRs are immutable; superseding one
