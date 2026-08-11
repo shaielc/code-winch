@@ -34,7 +34,7 @@
       "title": "Define domain identifiers and clocks",
       "phase": 0,
       "phase_name": "Contracts and development foundation",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P0-001"
       ],
