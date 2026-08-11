@@ -22,21 +22,27 @@ services:
       - scheduler-state:/var/lib/code-winch
 
   control-panel:
-    image: ${PANEL_IMAGE:-python:3.12-slim}
+    image: code-winch-runner:local
     init: true
     restart: unless-stopped
-    command:
+    depends_on:
+      - runner
+    entrypoint:
       - python3
       - /app/control_panel.py
-      - --tracker=/workplan/tasks.json
       - --state-file=/var/lib/code-winch/task-state.json
+      - --repo=/home/runner/panel-repo
       - --host=0.0.0.0
       - --port=8765
+    environment:
+      GITHUB_URL: ${GITHUB_URL:?Set GITHUB_URL in runner/.env}
+      CODEX_ENV_ID: ${CODEX_ENV_ID:-}
+      PYTHONUNBUFFERED: "1"
     ports:
       - "${PANEL_BIND:-127.0.0.1}:${PANEL_PORT:-8765}:8765"
     volumes:
       - ./control_panel.py:/app/control_panel.py:ro
-      - ../docs/workplan:/workplan:ro
+      - codex-auth:/home/runner/.codex
       - scheduler-state:/var/lib/code-winch
 
 volumes:
