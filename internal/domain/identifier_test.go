@@ -5,9 +5,7 @@ import "testing"
 const validID = "123e4567-e89b-12d3-a456-426614174000"
 
 func TestIdentifierTypesParseCanonicalUUID(t *testing.T) {
-	tests := map[string]struct {
-		parse func(string) (interface{ String() string }, error)
-	}{
+	tests := map[string]func(string) (interface{ String() string }, error){
 		"workspace":  func(value string) (interface{ String() string }, error) { return ParseWorkspaceID(value) },
 		"run":        func(value string) (interface{ String() string }, error) { return ParseRunID(value) },
 		"attempt":    func(value string) (interface{ String() string }, error) { return ParseAttemptID(value) },
@@ -19,7 +17,7 @@ func TestIdentifierTypesParseCanonicalUUID(t *testing.T) {
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			id, err := test.parse(validID)
+			id, err := test(validID)
 			if err != nil {
 				t.Fatalf("parse valid ID: %v", err)
 			}
