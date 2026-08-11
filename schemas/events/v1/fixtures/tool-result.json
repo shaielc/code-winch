@@ -1,0 +1,22 @@
+{
+  "eventId": "evt-0005",
+  "runId": "run-0001",
+  "sequence": 5,
+  "occurredAt": "2026-08-07T12:34:56.789Z",
+  "schemaVersion": 1,
+  "source": {
+    "type": "harness",
+    "adapter": "fixture",
+    "version": "1.0.0"
+  },
+  "sensitivity": "operational",
+  "extensions": {},
+  "kind": "tool.result",
+  "payload": {
+    "toolCallId": "tool-1",
+    "status": "succeeded",
+    "result": {
+      "bytes": 42
+    }
+  }
+}

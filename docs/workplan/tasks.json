@@ -60,7 +60,7 @@
       "title": "Define canonical event schemas and fixtures",
       "phase": 0,
       "phase_name": "Contracts and development foundation",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P0-003"
       ],

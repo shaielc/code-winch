@@ -6,7 +6,9 @@ import { App } from "./app/App";
 const root = document.getElementById("root");
 
 if (root === null) {
-  throw new Error('Unable to start Code Winch: required element "#root" was not found.');
+  throw new Error(
+    'Unable to start Code Winch: required element "#root" was not found.',
+  );
 }
 
 createRoot(root).render(
