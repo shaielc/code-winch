@@ -54,7 +54,11 @@ Rules:
   does not change the version; incompatible meaning creates a new version.
 - Unknown event kinds and extension namespaces are preserved or ignored, never
   treated as fatal by generic consumers.
-- Sensitivity drives retention, export, telemetry, and display policy.
+- Sensitivity is one of `public`, `operational`, `user-content`, `confidential`,
+  or `secret`. Producers must choose the most restrictive applicable class;
+  unknown or missing values are treated as `confidential`. Sensitivity drives
+  the retention, export, telemetry, and deletion defaults in
+  [the security model](security.md#5-data-handling-and-retention-defaults).
 
 Initial event families are lifecycle, raw stream, user/assistant/system message,
 tool call/result, approval request/resolution, file change, artifact, usage,
