@@ -1,0 +1,20 @@
+{
+  "eventId": "evt-0003",
+  "runId": "run-0001",
+  "sequence": 3,
+  "occurredAt": "2026-08-07T12:34:56.789Z",
+  "schemaVersion": 1,
+  "source": {
+    "type": "harness",
+    "adapter": "fixture",
+    "version": "1.0.0"
+  },
+  "sensitivity": "operational",
+  "extensions": {},
+  "kind": "message.created",
+  "payload": {
+    "messageId": "message-1",
+    "role": "assistant",
+    "content": "fixture response"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "eventId": "evt-0002",
+  "runId": "run-0001",
+  "sequence": 2,
+  "occurredAt": "2026-08-07T12:34:56.789Z",
+  "schemaVersion": 1,
+  "source": {
+    "type": "harness",
+    "adapter": "fixture",
+    "version": "1.0.0"
+  },
+  "sensitivity": "operational",
+  "extensions": {},
+  "kind": "stream.raw",
+  "payload": {
+    "stream": "stdout",
+    "encoding": "utf-8",
+    "data": "fixture output",
+    "ordinal": 0
+  }
+}
