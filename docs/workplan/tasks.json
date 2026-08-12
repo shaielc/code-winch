@@ -158,7 +158,7 @@
       "title": "Implement transactional outbox delivery",
       "phase": 1,
       "phase_name": "Local single-user vertical slice",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P1-011"
       ],
