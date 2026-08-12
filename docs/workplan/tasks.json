@@ -472,7 +472,7 @@
       "title": "Define and validate workflow graph schemas",
       "phase": 4,
       "phase_name": "Top-level workflows",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P0-005",
         "P1-010"

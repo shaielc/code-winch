@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "definitionId": "review",
+  "version": "1.0.0",
+  "steps": [
+    { "id": "start", "type": "run.start", "inputs": { "prompt": { "type": "string", "literal": "review the change" } } },
+    { "id": "wait", "type": "event.wait", "inputs": {
+      "run": { "type": "run", "ref": { "stepId": "start", "output": "run" } },
+      "eventKind": { "type": "string", "literal": "lifecycle" }
+    }, "timeout": "1h" }
+  ]
+}

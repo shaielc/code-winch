@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://code-winch.dev/schemas/workflow/v1/workflow-definition.schema.json",
+  "title": "Code Winch workflow definition v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "definitionId", "version", "steps"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "definitionId": { "$ref": "#/$defs/id" },
+    "version": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "inputs": { "type": "object", "maxProperties": 100, "additionalProperties": { "$ref": "#/$defs/valueType" } },
+    "steps": { "type": "array", "minItems": 1, "maxItems": 1000, "items": { "$ref": "#/$defs/step" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9._-]{0,127}$" },
+    "valueType": { "enum": ["string", "number", "boolean", "object", "array", "run", "event", "approval", "artifact"] },
+    "reference": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "stepId": { "$ref": "#/$defs/id" }, "input": { "$ref": "#/$defs/id" }, "output": { "$ref": "#/$defs/id" } },
+      "oneOf": [ { "required": ["stepId", "output"] }, { "required": ["input"] } ]
+    },
+    "binding": {
+      "type": "object", "additionalProperties": false, "required": ["type"],
+      "properties": { "type": { "$ref": "#/$defs/valueType" }, "literal": true, "ref": { "$ref": "#/$defs/reference" } },
+      "oneOf": [ { "required": ["literal"] }, { "required": ["ref"] } ]
+    },
+    "retry": {
+      "type": "object", "additionalProperties": false, "required": ["maxAttempts"],
+      "properties": { "maxAttempts": { "type": "integer", "minimum": 1, "maximum": 100 }, "backoff": { "type": "string", "minLength": 1 } }
+    },
+    "step": {
+      "type": "object", "additionalProperties": false, "required": ["id", "type"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "enum": ["run.start", "run.send", "run.stop", "event.wait", "approval.wait", "condition", "parallel", "foreach", "artifact.publish"] },
+        "dependsOn": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "inputs": { "type": "object", "additionalProperties": { "$ref": "#/$defs/binding" } },
+        "timeout": { "type": "string", "minLength": 1 },
+        "retry": { "$ref": "#/$defs/retry" },
+        "compensateWith": { "$ref": "#/$defs/id" },
+        "maxConcurrency": { "type": "integer", "minimum": 1, "maximum": 100 }
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "enum": ["parallel", "foreach"] } }, "required": ["type"] }, "then": { "required": ["maxConcurrency"] } },
+        { "if": { "properties": { "type": { "not": { "enum": ["parallel", "foreach"] } } }, "required": ["type"] }, "then": { "not": { "required": ["maxConcurrency"] } } }
+      ]
+    }
+  }
+}
