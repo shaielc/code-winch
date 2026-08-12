@@ -143,7 +143,7 @@
       "title": "Implement PostgreSQL run and event storage",
       "phase": 1,
       "phase_name": "Local single-user vertical slice",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P0-004",
         "P0-005",
