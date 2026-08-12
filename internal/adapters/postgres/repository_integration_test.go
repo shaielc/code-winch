@@ -1,0 +1,162 @@
+//go:build integration
+
+package postgres_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	pgstore "github.com/shaielc/code-winch/internal/adapters/postgres"
+	"github.com/shaielc/code-winch/internal/application"
+	"github.com/shaielc/code-winch/internal/domain"
+	"github.com/shaielc/code-winch/pkg/protocol"
+)
+
+var (
+	_ application.RunRepository = (*pgstore.Store)(nil)
+	_ application.EventStore    = (*pgstore.Store)(nil)
+)
+
+func id[T any](t *testing.T, parse func(string) (T, error), n int) T {
+	t.Helper()
+	v, err := parse(fmt.Sprintf("00000000-0000-0000-0000-%012d", n))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
+func database(t *testing.T) (*pgxpool.Pool, *pgstore.Store) {
+	t.Helper()
+	url := os.Getenv("PG_TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("PG_TEST_DATABASE_URL is required")
+	}
+	pool, err := pgxpool.New(context.Background(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	_, _ = pool.Exec(context.Background(), `DROP SCHEMA public CASCADE; CREATE SCHEMA public`)
+	if err = pgstore.MigrateUp(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	return pool, pgstore.New(pool)
+}
+
+func TestMigrationRoundTripOnCleanDatabase(t *testing.T) {
+	pool, _ := database(t)
+	if err := pgstore.MigrateDown(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	if err := pgstore.MigrateUp(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunHistoryConfigurationAndCommands(t *testing.T) {
+	pool, store := database(t)
+	runID := id(t, domain.ParseRunID, 1)
+	aid := id(t, domain.ParseAttemptID, 2)
+	record := application.RunRecord{ID: runID, Attempts: []domain.Attempt{{ID: aid, State: domain.RunStateFailed}}}
+	version, err := store.Save(context.Background(), record, 0)
+	if err != nil || version != 1 {
+		t.Fatalf("save: version=%d err=%v", version, err)
+	}
+	got, gotVersion, err := store.Get(context.Background(), runID)
+	if err != nil || gotVersion != 1 || len(got.Attempts) != 1 {
+		t.Fatalf("get: %#v %d %v", got, gotVersion, err)
+	}
+	if err = store.SaveResolvedConfiguration(context.Background(), runID, []byte(`{"profile":"safe","credentialRef":"vault:item"}`)); err != nil {
+		t.Fatal(err)
+	}
+	record.Attempts[0].State = domain.RunStateRunning
+	if _, err = store.Save(context.Background(), record, 1); !errors.Is(err, application.ErrConflict) {
+		t.Fatalf("terminal mutation: %v", err)
+	}
+
+	if _, err = pool.Exec(context.Background(), `UPDATE run_attempts SET state='running' WHERE run_id=$1`, runID.String()); err == nil {
+		t.Fatal("database allowed terminal history mutation")
+	}
+	command := pgstore.InputCommand{ID: id(t, domain.ParseCommandID, 3), RunID: runID, IdempotencyKey: "client-1", Kind: "input", Payload: []byte(`{"text":"hello"}`)}
+	created, err := store.PutCommand(context.Background(), command)
+	if err != nil || !created {
+		t.Fatalf("command create: %v %v", created, err)
+	}
+	created, err = store.PutCommand(context.Background(), command)
+	if err != nil || created {
+		t.Fatalf("command replay: %v %v", created, err)
+	}
+}
+
+func TestConcurrentAppendIsGapFreeAndSecretCanaryAbsent(t *testing.T) {
+	pool, store := database(t)
+	runID := id(t, domain.ParseRunID, 10)
+	if _, err := store.Save(context.Background(), application.RunRecord{ID: runID}, 0); err != nil {
+		t.Fatal(err)
+	}
+	now, _ := domain.NewTimestamp(time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC))
+	const writers = 32
+	var wg sync.WaitGroup
+	results := make(chan error, writers)
+	for n := 1; n <= writers; n++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			for {
+				current, err := store.Read(context.Background(), runID, 0, writers+1)
+				if err != nil {
+					results <- err
+					return
+				}
+				_, err = store.Append(context.Background(), runID, uint64(len(current)), []application.UnsequencedEvent{{EventID: id(t, domain.ParseEventID, 100+n), OccurredAt: now, Kind: "message", SchemaVersion: 1, Source: protocol.Source{Type: "test"}, Sensitivity: protocol.SensitivityUserContent, Payload: []byte(`{"text":"safe"}`)}})
+				if errors.Is(err, application.ErrConflict) {
+					continue
+				}
+				results <- err
+				return
+			}
+		}(n)
+	}
+	wg.Wait()
+	close(results)
+	success := 0
+	for err := range results {
+		if err == nil {
+			success++
+		} else {
+			t.Fatal(err)
+		}
+	}
+	if success != writers {
+		t.Fatalf("success=%d", success)
+	}
+	events, err := store.Read(context.Background(), runID, 0, 100)
+	if err != nil || len(events) != writers {
+		t.Fatalf("events=%#v err=%v", events, err)
+	}
+	for i, event := range events {
+		if event.Sequence != uint64(i+1) {
+			t.Fatalf("sequence[%d]=%d", i, event.Sequence)
+		}
+	}
+	canary := "SECRET_CANARY_DO_NOT_STORE"
+	_, err = store.Append(context.Background(), runID, writers, []application.UnsequencedEvent{{EventID: id(t, domain.ParseEventID, 999), OccurredAt: now, Kind: "message", SchemaVersion: 1, Source: protocol.Source{Type: "test"}, Sensitivity: protocol.SensitivitySecret, Payload: []byte(fmt.Sprintf(`{"value":%q}`, canary))}})
+	if err == nil {
+		t.Fatal("secret event accepted")
+	}
+	var dump string
+	if err = pool.QueryRow(context.Background(), `SELECT COALESCE(string_agg(payload::text,''),'') FROM run_events`).Scan(&dump); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(dump, canary) {
+		t.Fatal("secret canary persisted")
+	}
+}
