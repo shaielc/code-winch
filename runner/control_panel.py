@@ -16,6 +16,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode
 
 STATUS_ORDER = ["in_progress", "blocked", "pending", "completed"]
+SNAPSHOT_HINT = "run the Schedule available tasks workflow once so the runner publishes one"
 
 
 def load_tracker(path: Path) -> dict[str, Any]:
@@ -71,42 +72,30 @@ def expire(state_file: Path, task_id: str) -> str:
         return f"expired the local override for {task_id}"
 
 
-def git(*arguments: str, cwd: Path | None = None) -> None:
-    subprocess.run(("git", *arguments), cwd=cwd, check=True, capture_output=True, text=True)
-
-
-def ensure_repo(repo: Path, url: str, ref: str) -> None:
-    if not (repo / ".git").exists():
-        repo.parent.mkdir(parents=True, exist_ok=True)
-        git("clone", "--filter=blob:none", url, str(repo))
-    git("fetch", "--quiet", "origin", ref, cwd=repo)
-    git("reset", "--quiet", "--hard", f"origin/{ref}", cwd=repo)
-
-
 def run_scheduler(
-    repo: Path, url: str, ref: str, state_file: Path, environment: str, task_id: str | None
+    repo_root: Path, tracker: Path, state_file: Path, environment: str, task_id: str | None
 ) -> str:
-    if not url:
-        return "set GITHUB_URL so the panel knows which repository to schedule from"
     if not environment:
         return "set CODEX_ENV_ID in runner/.env so the panel can dispatch to Codex Cloud"
-    try:
-        ensure_repo(repo, url, ref)
-    except subprocess.CalledProcessError as error:
-        return f"could not update the panel's clone: {(error.stderr or '').strip()[:300]}"
+    if not tracker.exists():
+        return f"no tracker snapshot at {tracker}; {SNAPSHOT_HINT}"
 
     command = [
         "python3",
         "scripts/task_scheduler.py",
         "--env",
         environment,
+        "--repo-root",
+        str(repo_root),
+        "--tracker-file",
+        str(tracker),
         "--state-file",
         str(state_file),
     ]
     if task_id:
         command += ["--task", task_id]
     result = subprocess.run(
-        command, cwd=repo, capture_output=True, text=True, timeout=900, check=False
+        command, cwd=repo_root, capture_output=True, text=True, timeout=900, check=False
     )
     output = (result.stdout + result.stderr).strip() or "scheduler produced no output"
     if result.returncode != 0:
@@ -264,9 +253,7 @@ def render(tracker: dict[str, Any], state: dict[str, Any], message: str, busy: b
 class Handler(BaseHTTPRequestHandler):
     tracker_path: Path
     state_file: Path
-    repo: Path
-    url: str
-    ref: str
+    repo_root: Path
     environment: str
 
     def log_message(self, *args: Any) -> None:
@@ -291,8 +278,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         message = parse_qs(query).get("msg", [""])[0]
         try:
+            tracker: dict[str, Any] = {"tasks": []}
+            if self.tracker_path.exists():
+                tracker = load_tracker(self.tracker_path)
+            elif not message:
+                message = f"no tracker snapshot at {self.tracker_path}; {SNAPSHOT_HINT}"
             page = render(
-                load_tracker(self.tracker_path),
+                tracker,
                 load_state(self.state_file),
                 message,
                 scheduler_running(self.state_file),
@@ -313,9 +305,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/run":
             self._redirect(
                 run_scheduler(
-                    self.repo,
-                    self.url,
-                    self.ref,
+                    self.repo_root,
+                    self.tracker_path,
                     self.state_file,
                     self.environment,
                     task_id or None,
@@ -327,11 +318,18 @@ class Handler(BaseHTTPRequestHandler):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tracker", type=Path)
+    parser.add_argument(
+        "--tracker",
+        type=Path,
+        help="tracker snapshot; defaults to tracker.json beside the state file",
+    )
     parser.add_argument("--state-file", type=Path, required=True)
-    parser.add_argument("--repo", type=Path, default=Path("/home/runner/panel-repo"))
-    parser.add_argument("--github-url", default=os.environ.get("GITHUB_URL", ""))
-    parser.add_argument("--ref", default="main")
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=Path("/opt/code-winch"),
+        help="directory holding the scripts/ the panel runs",
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--expire", metavar="TASK_ID")
@@ -344,18 +342,11 @@ def main() -> int:
         print(expire(args.state_file, args.expire.upper()))
         return 0
 
-    Handler.tracker_path = args.tracker or args.repo / "docs/workplan/tasks.json"
+    Handler.tracker_path = args.tracker or args.state_file.parent / "tracker.json"
     Handler.state_file = args.state_file
-    Handler.repo = args.repo
-    Handler.url = args.github_url
-    Handler.ref = args.ref
+    Handler.repo_root = args.repo_root
     Handler.environment = os.environ.get("CODEX_ENV_ID", "")
 
-    if args.github_url and not (args.repo / ".git").exists():
-        try:
-            ensure_repo(args.repo, args.github_url, args.ref)
-        except subprocess.CalledProcessError as error:
-            print(f"could not clone {args.github_url}: {(error.stderr or '').strip()}")
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"control panel on http://{args.host}:{args.port}")
     try:

@@ -51,11 +51,15 @@ def load_state(path: Path) -> dict[str, Any]:
     return state
 
 
-def save_state(path: Path, state: dict[str, Any]) -> None:
+def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
+    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     temporary.replace(path)
+
+
+def save_state(path: Path, state: dict[str, Any]) -> None:
+    write_json(path, state)
 
 
 def acquire_lock(state_file: Path) -> Any:
@@ -210,7 +214,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--env", required=True, help="Codex Cloud environment ID")
     parser.add_argument("--remote", default="origin")
     parser.add_argument("--branch", default="main")
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        help="directory holding scripts/; defaults to the enclosing git checkout",
+    )
     parser.add_argument("--state-file", type=Path)
+    parser.add_argument(
+        "--tracker-file",
+        type=Path,
+        help="read the tracker from this file instead of the remote default branch",
+    )
+    parser.add_argument(
+        "--tracker-snapshot",
+        type=Path,
+        help="write the tracker this run scheduled from to this path",
+    )
     parser.add_argument("--prompt-template", type=Path, default=PROMPT_TEMPLATE)
     parser.add_argument("--task", help="dispatch only this task ID when it is available")
     parser.add_argument("--max-concurrent", type=int, default=3)
@@ -219,7 +238,10 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="GitHub Actions event file; omit for a manual run",
     )
-    return parser.parse_args()
+    arguments = parser.parse_args()
+    if arguments.repo_root and not arguments.state_file:
+        parser.error("--state-file is required when --repo-root is not a git checkout")
+    return arguments
 
 
 def schedule(
@@ -228,7 +250,13 @@ def schedule(
     state_file: Path,
     pulls: list[dict[str, Any]],
 ) -> None:
-    tracker = load_tracker(repo_root, args.remote, args.branch)
+    tracker = (
+        json.loads(args.tracker_file.read_text())
+        if args.tracker_file
+        else load_tracker(repo_root, args.remote, args.branch)
+    )
+    if args.tracker_snapshot:
+        write_json(args.tracker_snapshot, tracker)
     state = load_state(state_file)
     known_ids = {task["id"] for task in tracker["tasks"]}
     changed = record_completions(state, pulls, known_ids)
@@ -249,7 +277,9 @@ def schedule(
 
 def main() -> int:
     args = parse_args()
-    repo_root = Path(run("git", "rev-parse", "--show-toplevel", cwd=Path.cwd()))
+    repo_root = (
+        args.repo_root or Path(run("git", "rev-parse", "--show-toplevel", cwd=Path.cwd()))
+    ).resolve()
     state_file = (args.state_file or default_state_file(repo_root)).resolve()
     lock_handle = acquire_lock(state_file)
     try:

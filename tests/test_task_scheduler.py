@@ -1,6 +1,10 @@
 import importlib.util
+import io
+import sys
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
+from unittest.mock import patch
 
 
 SPEC = importlib.util.spec_from_file_location(
@@ -72,6 +76,14 @@ class TaskSchedulerTests(unittest.TestCase):
         self.assertTrue(task_scheduler.record_completions(state, pulls, {"P0-001"}))
         self.assertFalse(task_scheduler.record_completions(state, pulls, {"P0-001"}))
         self.assertEqual(state["tasks"]["P0-001"]["status"], "completed")
+
+    def test_repo_root_requires_an_explicit_state_file(self):
+        argv = ["task_scheduler.py", "--env", "environment", "--repo-root", "/opt/code-winch"]
+        with patch.object(sys, "argv", argv), redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                task_scheduler.parse_args()
+        with patch.object(sys, "argv", [*argv, "--state-file", "/var/lib/state.json"]):
+            self.assertEqual(task_scheduler.parse_args().repo_root, Path("/opt/code-winch"))
 
 
 if __name__ == "__main__":

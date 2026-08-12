@@ -31,4 +31,5 @@ jobs:
           python3 scripts/task_scheduler.py \
             --event-file "$GITHUB_EVENT_PATH" \
             --env "$CODEX_ENV_ID" \
-            --state-file /var/lib/code-winch/task-state.json
+            --state-file /var/lib/code-winch/task-state.json \
+            --tracker-snapshot /var/lib/code-winch/tracker.json
