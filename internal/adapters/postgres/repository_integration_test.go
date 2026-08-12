@@ -22,6 +22,7 @@ import (
 var (
 	_ application.RunRepository = (*pgstore.Store)(nil)
 	_ application.EventStore    = (*pgstore.Store)(nil)
+	_ application.OutboxStore   = (*pgstore.Store)(nil)
 )
 
 func id[T any](t *testing.T, parse func(string) (T, error), n int) T {
@@ -31,6 +32,70 @@ func id[T any](t *testing.T, parse func(string) (T, error), n int) T {
 		t.Fatal(err)
 	}
 	return v
+}
+
+func TestAppendCommitCreatesOutboxAndClaimsAreExclusive(t *testing.T) {
+	pool, store := database(t)
+	runID := id(t, domain.ParseRunID, 500)
+	if _, err := store.Save(context.Background(), application.RunRecord{ID: runID}, 0); err != nil {
+		t.Fatal(err)
+	}
+	nowTime := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
+	now, _ := domain.NewTimestamp(nowTime)
+	values := []application.UnsequencedEvent{
+		{EventID: id(t, domain.ParseEventID, 501), OccurredAt: now, Kind: "message", SchemaVersion: 1, Source: protocol.Source{Type: "test"}, Sensitivity: protocol.SensitivityUserContent, Payload: []byte(`{"n":1}`)},
+		{EventID: id(t, domain.ParseEventID, 502), OccurredAt: now, Kind: "message", SchemaVersion: 1, Source: protocol.Source{Type: "test"}, Sensitivity: protocol.SensitivityUserContent, Payload: []byte(`{"n":2}`)},
+	}
+	if _, err := store.Append(context.Background(), runID, 0, values); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM outbox`).Scan(&count); err != nil || count != 2 {
+		t.Fatalf("outbox count=%d err=%v", count, err)
+	}
+	until, _ := domain.NewTimestamp(nowTime.Add(time.Minute))
+	type result struct {
+		records []application.OutboxRecord
+		err     error
+	}
+	results := make(chan result, 2)
+	for n := 1; n <= 2; n++ {
+		go func(n int) {
+			records, err := store.ClaimOutbox(context.Background(), fmt.Sprintf("worker-%d", n), fmt.Sprintf("00000000-0000-0000-0000-%012d", 600+n), now, until, 1)
+			results <- result{records, err}
+		}(n)
+	}
+	total := 0
+	for range 2 {
+		r := <-results
+		if r.err != nil {
+			t.Fatal(r.err)
+		}
+		total += len(r.records)
+	}
+	if total != 1 {
+		t.Fatalf("concurrent workers claimed %d ordered records, want 1", total)
+	}
+}
+
+func TestRollbackLeavesNoEventOrPublishIntent(t *testing.T) {
+	pool, store := database(t)
+	runID := id(t, domain.ParseRunID, 700)
+	if _, err := store.Save(context.Background(), application.RunRecord{ID: runID}, 0); err != nil {
+		t.Fatal(err)
+	}
+	now, _ := domain.NewTimestamp(time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC))
+	// The second event duplicates the first ID, forcing the entire append transaction to roll back.
+	event := application.UnsequencedEvent{EventID: id(t, domain.ParseEventID, 701), OccurredAt: now, Kind: "message", SchemaVersion: 1, Source: protocol.Source{Type: "test"}, Sensitivity: protocol.SensitivityUserContent, Payload: []byte(`{}`)}
+	if _, err := store.Append(context.Background(), runID, 0, []application.UnsequencedEvent{event, event}); err == nil {
+		t.Fatal("append succeeded")
+	}
+	var events, outbox int
+	_ = pool.QueryRow(context.Background(), `SELECT count(*) FROM run_events`).Scan(&events)
+	_ = pool.QueryRow(context.Background(), `SELECT count(*) FROM outbox`).Scan(&outbox)
+	if events != 0 || outbox != 0 {
+		t.Fatalf("rollback events=%d outbox=%d", events, outbox)
+	}
 }
 
 func database(t *testing.T) (*pgxpool.Pool, *pgstore.Store) {
