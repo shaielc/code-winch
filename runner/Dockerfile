@@ -18,6 +18,7 @@ RUN apt-get update \
 RUN npm install --global "@openai/codex@${CODEX_VERSION}"
 
 COPY --chown=runner:runner runner/entrypoint.sh /usr/local/bin/code-winch-runner
+COPY --chown=runner:runner scripts/ /opt/code-winch/scripts/
 
 USER runner
 WORKDIR /home/runner

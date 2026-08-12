@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import fcntl
 import json
 import os
@@ -18,6 +19,7 @@ from string import Template
 from typing import Any
 
 TASK_ID = re.compile(r"(?<![A-Z0-9])P\d+-\d{3}(?![A-Z0-9])", re.IGNORECASE)
+TASK_URL = re.compile(r"https?://\S+/codex/tasks/\S+")
 PROMPT_TEMPLATE = Path("scripts/task-prompt.md")
 
 
@@ -28,9 +30,20 @@ def run(*command: str, cwd: Path, capture: bool = True) -> str:
         check=True,
         text=True,
         stdout=subprocess.PIPE if capture else None,
-        stderr=subprocess.STDOUT if capture else None,
+        stderr=subprocess.PIPE if capture else None,
     )
     return result.stdout.strip() if capture else ""
+
+
+def failure_detail(error: Exception) -> str:
+    """Recover the diagnostics that check=True drops from the exception text."""
+    stderr = getattr(error, "stderr", None)
+    return f"{error}: {stderr.strip()}" if stderr else str(error)
+
+
+def task_url_from(output: str) -> str | None:
+    match = TASK_URL.search(output)
+    return match.group(0) if match else None
 
 
 def default_state_file(repo_root: Path) -> Path:
@@ -50,11 +63,15 @@ def load_state(path: Path) -> dict[str, Any]:
     return state
 
 
-def save_state(path: Path, state: dict[str, Any]) -> None:
+def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
+    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     temporary.replace(path)
+
+
+def save_state(path: Path, state: dict[str, Any]) -> None:
+    write_json(path, state)
 
 
 def acquire_lock(state_file: Path) -> Any:
@@ -80,15 +97,23 @@ def load_tracker(repo_root: Path, remote: str, branch: str) -> dict[str, Any]:
 
 
 def effective_tracker(tracker: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
-    effective = json.loads(json.dumps(tracker))
+    effective = copy.deepcopy(tracker)
     overrides = state["tasks"]
     for task in effective["tasks"]:
         local = overrides.get(task["id"])
-        if local:
+        if local and task["status"] != "completed":
             task["status"] = local["status"]
             task["owner"] = local.get("owner")
             task["blocked_reason"] = local.get("blocked_reason")
     return effective
+
+
+def prune_completed(tracker: dict[str, Any], state: dict[str, Any]) -> bool:
+    completed = {task["id"] for task in tracker["tasks"] if task["status"] == "completed"}
+    stale = [task_id for task_id in state["tasks"] if task_id in completed]
+    for task_id in stale:
+        del state["tasks"][task_id]
+    return bool(stale)
 
 
 def merged_pull_request(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -181,17 +206,18 @@ def dispatch(
                 cwd=repo_root,
             )
         except (OSError, subprocess.CalledProcessError) as error:
+            detail = failure_detail(error)
             state["tasks"][task_id] = {
                 "status": "pending",
                 "owner": None,
                 "blocked_reason": None,
-                "launch_error": str(error),
+                "launch_error": detail,
                 "updated_at": datetime.now(UTC).isoformat(),
             }
             save_state(state_file, state)
-            print(f"failed to dispatch {task_id}: {error}", file=sys.stderr)
+            print(f"failed to dispatch {task_id}: {detail}", file=sys.stderr)
             continue
-        state["tasks"][task_id]["cloud_output"] = output
+        state["tasks"][task_id]["task_url"] = task_url_from(output) or output
         save_state(state_file, state)
         print(f"dispatched {task_id}: {output}")
 
@@ -201,16 +227,34 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--env", required=True, help="Codex Cloud environment ID")
     parser.add_argument("--remote", default="origin")
     parser.add_argument("--branch", default="main")
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        help="directory holding scripts/; defaults to the enclosing git checkout",
+    )
     parser.add_argument("--state-file", type=Path)
+    parser.add_argument(
+        "--tracker-file",
+        type=Path,
+        help="read the tracker from this file instead of the remote default branch",
+    )
+    parser.add_argument(
+        "--tracker-snapshot",
+        type=Path,
+        help="write the tracker this run scheduled from to this path",
+    )
     parser.add_argument("--prompt-template", type=Path, default=PROMPT_TEMPLATE)
+    parser.add_argument("--task", help="dispatch only this task ID when it is available")
     parser.add_argument("--max-concurrent", type=int, default=3)
     parser.add_argument(
         "--event-file",
         type=Path,
-        required=True,
-        help="GitHub Actions event file",
+        help="GitHub Actions event file; omit for a manual run",
     )
-    return parser.parse_args()
+    arguments = parser.parse_args()
+    if arguments.repo_root and not arguments.state_file:
+        parser.error("--state-file is required when --repo-root is not a git checkout")
+    return arguments
 
 
 def schedule(
@@ -219,13 +263,26 @@ def schedule(
     state_file: Path,
     pulls: list[dict[str, Any]],
 ) -> None:
-    tracker = load_tracker(repo_root, args.remote, args.branch)
+    tracker = (
+        json.loads(args.tracker_file.read_text())
+        if args.tracker_file
+        else load_tracker(repo_root, args.remote, args.branch)
+    )
+    if args.tracker_snapshot:
+        write_json(args.tracker_snapshot, tracker)
     state = load_state(state_file)
     known_ids = {task["id"] for task in tracker["tasks"]}
-    if record_completions(state, pulls, known_ids):
+    changed = record_completions(state, pulls, known_ids)
+    if prune_completed(tracker, state) or changed:
         save_state(state_file, state)
     template = load_prompt_template(repo_root, args.prompt_template)
     available = available_tasks(repo_root, effective_tracker(tracker, state))
+    if args.task:
+        requested = args.task.upper()
+        available = [task for task in available if task["id"] == requested]
+        if not available:
+            print(f"{requested} is not currently available; nothing to dispatch")
+            return
     dispatch(
         repo_root, state_file, state, available, template, args.env, args.max_concurrent
     )
@@ -233,11 +290,13 @@ def schedule(
 
 def main() -> int:
     args = parse_args()
-    repo_root = Path(run("git", "rev-parse", "--show-toplevel", cwd=Path.cwd()))
+    repo_root = (
+        args.repo_root or Path(run("git", "rev-parse", "--show-toplevel", cwd=Path.cwd()))
+    ).resolve()
     state_file = (args.state_file or default_state_file(repo_root)).resolve()
     lock_handle = acquire_lock(state_file)
     try:
-        payload = json.loads(args.event_file.read_text())
+        payload = json.loads(args.event_file.read_text()) if args.event_file else {}
         pull = merged_pull_request(payload)
         if "pull_request" in payload and not pull:
             print("event is not a merged pull request; nothing to do")

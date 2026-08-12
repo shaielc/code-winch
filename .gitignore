@@ -6,3 +6,6 @@ dist/
 
 # Local runner secrets
 runner/.env
+
+# Deployment-specific compose overrides
+runner/compose.override.yml
