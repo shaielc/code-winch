@@ -152,11 +152,75 @@ func (s *Store) Append(ctx context.Context, runID domain.RunID, expected uint64,
 			return nil, conflict(err, "run="+runID.String())
 		}
 		out[i] = protocol.Event{EventID: v.EventID.String(), RunID: runID.String(), Sequence: seq, OccurredAt: v.OccurredAt.Time(), Kind: v.Kind, SchemaVersion: v.SchemaVersion, Source: v.Source, Sensitivity: v.Sensitivity, Payload: v.Payload, Extensions: rawMap(v.Extensions)}
+		envelope, marshalErr := json.Marshal(out[i])
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO outbox(id,topic,payload,run_id,sequence) VALUES($1,'run.events',$2,$3,$4)`, v.EventID.String(), envelope, runID.String(), seq)
+		if err != nil {
+			return nil, conflict(err, "run="+runID.String())
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, conflict(err, "run="+runID.String())
 	}
 	return out, nil
+}
+
+func (s *Store) ClaimOutbox(ctx context.Context, owner, token string, now, until domain.Timestamp, limit int) ([]application.OutboxRecord, error) {
+	if limit <= 0 {
+		return []application.OutboxRecord{}, nil
+	}
+	rows, err := s.pool.Query(ctx, `WITH candidates AS (
+		SELECT o.id FROM outbox o WHERE o.completed_at IS NULL AND o.poisoned_at IS NULL AND o.available_at <= $3
+		AND (o.lease_expires_at IS NULL OR o.lease_expires_at <= $3)
+		AND NOT EXISTS (SELECT 1 FROM outbox prior WHERE prior.run_id=o.run_id AND prior.sequence<o.sequence AND prior.completed_at IS NULL AND prior.poisoned_at IS NULL)
+		ORDER BY o.run_id, o.sequence FOR UPDATE OF o SKIP LOCKED LIMIT $4
+	) UPDATE outbox o SET lease_owner=$1,lease_token=$2,lease_expires_at=$5,attempts=attempts+1
+	FROM candidates c WHERE o.id=c.id RETURNING o.id,o.topic,o.payload,o.lease_token::text,o.attempts`, owner, token, now.Time(), limit, until.Time())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []application.OutboxRecord{}
+	for rows.Next() {
+		var id string
+		var r application.OutboxRecord
+		if err = rows.Scan(&id, &r.Message.Topic, &r.Message.Payload, &r.LeaseToken, &r.Attempts); err != nil {
+			return nil, err
+		}
+		r.Message.ID, _ = domain.ParseCommandID(id)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) updateOutbox(ctx context.Context, id domain.CommandID, token string, query string, args ...any) error {
+	params := []any{id.String(), token}
+	params = append(params, args...)
+	tag, err := s.pool.Exec(ctx, query, params...)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("%w: outbox=%s lease_token_stale", application.ErrConflict, id)
+	}
+	return nil
+}
+
+func (s *Store) CompleteOutbox(ctx context.Context, id domain.CommandID, token string, at domain.Timestamp) error {
+	return s.updateOutbox(ctx, id, token, `UPDATE outbox SET completed_at=$3,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL WHERE id=$1 AND lease_token=$2 AND completed_at IS NULL`, at.Time())
+}
+func (s *Store) RetryOutbox(ctx context.Context, id domain.CommandID, token string, at domain.Timestamp, code string) error {
+	return s.updateOutbox(ctx, id, token, `UPDATE outbox SET available_at=$3,last_error_code=$4,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL WHERE id=$1 AND lease_token=$2 AND completed_at IS NULL`, at.Time(), code)
+}
+func (s *Store) PoisonOutbox(ctx context.Context, id domain.CommandID, token string, at domain.Timestamp, code string) error {
+	return s.updateOutbox(ctx, id, token, `UPDATE outbox SET poisoned_at=$3,last_error_code=$4,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL WHERE id=$1 AND lease_token=$2 AND completed_at IS NULL`, at.Time(), code)
+}
+func (s *Store) OutboxBacklog(ctx context.Context, now domain.Timestamp) (uint64, error) {
+	var count uint64
+	err := s.pool.QueryRow(ctx, `SELECT count(*) FROM outbox WHERE completed_at IS NULL AND poisoned_at IS NULL AND available_at <= $1`, now.Time()).Scan(&count)
+	return count, err
 }
 
 func rawMap(in map[string][]byte) map[string]json.RawMessage {

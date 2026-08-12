@@ -11,5 +11,10 @@ only resource identifiers. Secret-sensitivity events and invalid JSON are
 rejected before commit. Resolved run configuration passed to
 `SaveResolvedConfiguration` must contain non-secret values only; callers retain
 responsibility for replacing credentials with opaque references before storage.
-Command persistence remains adapter-local until its dedicated delivery task
-introduces an application port.
+Every committed run event also creates a `run.events` outbox row in the same
+transaction. Start one or more `application.OutboxWorker` loops with unique
+worker IDs and UUID lease tokens. Claims use expiring, fenced leases and
+`SKIP LOCKED`; delivery is at least once, so subscribers must deduplicate by
+message/event ID. Failed publishes use bounded exponential backoff and become
+poison records after the configured attempt limit. Worker metrics expose the
+ready backlog, retry count, and poison count without payload content.

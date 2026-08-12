@@ -67,6 +67,24 @@ type OutboxPublisher interface {
 	Publish(context.Context, OutboxMessage) error
 }
 
+// OutboxRecord is durable publish intent. LeaseToken fences completion and
+// retry updates made by workers whose lease has subsequently expired.
+type OutboxRecord struct {
+	Message    OutboxMessage
+	LeaseToken string
+	Attempts   uint
+}
+
+// OutboxStore is the durable side of at-least-once delivery. Implementations
+// must claim records exclusively and only accept updates with the active token.
+type OutboxStore interface {
+	ClaimOutbox(context.Context, string, string, domain.Timestamp, domain.Timestamp, int) ([]OutboxRecord, error)
+	CompleteOutbox(context.Context, domain.CommandID, string, domain.Timestamp) error
+	RetryOutbox(context.Context, domain.CommandID, string, domain.Timestamp, string) error
+	PoisonOutbox(context.Context, domain.CommandID, string, domain.Timestamp, string) error
+	OutboxBacklog(context.Context, domain.Timestamp) (uint64, error)
+}
+
 type SecretReference struct {
 	CredentialID domain.CredentialID
 	Provider     string
