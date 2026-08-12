@@ -87,7 +87,7 @@
       "title": "Create in-memory application ports",
       "phase": 0,
       "phase_name": "Contracts and development foundation",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P0-003",
         "P0-005",
