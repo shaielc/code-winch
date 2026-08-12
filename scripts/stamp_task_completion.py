@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from task_scheduler import run, task_id_for_pr
+from task_scheduler import failure_detail, run, task_id_for_pr
 
 TRACKER = Path("docs/workplan/tasks.json")
 BOT_NAME = "github-actions[bot]"
@@ -38,6 +38,18 @@ def contains_base(repo_root: Path, remote: str, branch: str) -> bool:
     return result.returncode == 0
 
 
+def merge_base_branch(repo_root: Path, remote: str, branch: str) -> bool:
+    """Merge the base branch in, leaving the branch untouched when it conflicts."""
+    result = subprocess.run(
+        ("git", "merge", "--no-edit", f"{remote}/{branch}"),
+        cwd=repo_root,
+        check=False,
+    )
+    if result.returncode:
+        subprocess.run(("git", "merge", "--abort"), cwd=repo_root, check=False)
+    return result.returncode == 0
+
+
 def is_fork(pr: dict[str, Any], payload: dict[str, Any]) -> bool:
     head = pr.get("head", {}).get("repo") or {}
     base = pr.get("base", {}).get("repo") or {}
@@ -48,12 +60,56 @@ def skipped(pr: dict[str, Any], label: str) -> bool:
     return any(item.get("name") == label for item in pr.get("labels", []))
 
 
-def push_stamp(repo_root: Path, remote: str, head_ref: str, task_id: str) -> None:
+def configure_identity(repo_root: Path) -> None:
     run("git", "config", "user.name", BOT_NAME, cwd=repo_root)
     run("git", "config", "user.email", BOT_EMAIL, cwd=repo_root)
+
+
+def push_head(repo_root: Path, remote: str, head_ref: str) -> None:
+    run("git", "push", remote, f"HEAD:refs/heads/{head_ref}", cwd=repo_root)
+
+
+def push_stamp(repo_root: Path, remote: str, head_ref: str, task_id: str) -> None:
+    configure_identity(repo_root)
     run("git", "add", str(TRACKER), cwd=repo_root)
     run("git", "commit", "-m", f"chore: mark {task_id} completed", cwd=repo_root)
-    run("git", "push", remote, f"HEAD:refs/heads/{head_ref}", cwd=repo_root)
+    push_head(repo_root, remote, head_ref)
+
+
+def catch_up_with_base(
+    repo_root: Path,
+    args: argparse.Namespace,
+    pr: dict[str, Any],
+    payload: dict[str, Any],
+    task_id: str,
+) -> int:
+    """Fold the base branch into a stale branch so the next approval can stamp it."""
+    base = f"{args.remote}/{args.branch}"
+    if is_fork(pr, payload):
+        print(
+            f"error: this branch does not contain {base} and lives in a fork, so it "
+            f"cannot be updated from here. Merge {args.branch} into it and push again.",
+            file=sys.stderr,
+        )
+        return 1
+
+    configure_identity(repo_root)
+    if not merge_base_branch(repo_root, args.remote, args.branch):
+        print(
+            f"error: {base} conflicts with this branch. Resolve the conflicts locally "
+            "and push again so the tracker cannot revert another task's status.",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        push_head(repo_root, args.remote, pr["head"]["ref"])
+    except subprocess.CalledProcessError as error:
+        print(f"error: could not push the {base} merge: {failure_detail(error)}", file=sys.stderr)
+        return 1
+
+    print(f"merged {base}; approve again to stamp {task_id} completed")
+    return 0
 
 
 def parse_args() -> argparse.Namespace:
@@ -103,12 +159,7 @@ def main() -> int:
         return 0
 
     if not contains_base(repo_root, args.remote, args.branch):
-        print(
-            f"error: this branch does not contain {args.remote}/{args.branch}. Rebase or "
-            f"merge so the tracker cannot revert another task's status, then push again.",
-            file=sys.stderr,
-        )
-        return 1
+        return catch_up_with_base(repo_root, args, pr, payload, task_id)
 
     task["status"] = "completed"
     task["owner"] = None
