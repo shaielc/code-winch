@@ -21,6 +21,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a run */
+        post: operations["createRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        /** Read a run */
+        get: operations["getRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{runId}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start a created run */
+        post: operations["startRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{runId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a run
+         * @description Replaying this operation, including for a terminal run, is safe.
+         */
+        post: operations["stopRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{runId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        /** Read a page of durable run events */
+        get: operations["listRunEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -29,11 +125,256 @@ export interface components {
             /** @enum {string} */
             status: "ok";
         };
+        /** @example 01J00000000000000000000000 */
+        RunId: string;
+        /** @enum {string} */
+        RunState: "created" | "queued" | "preparing" | "running" | "stopping" | "completed" | "failed" | "cancelled";
+        CreateRunRequest: {
+            /** @description Workspace reference; it must not contain credentials. */
+            workspacePath: string;
+            harnessProfile: string;
+            sandboxProfile: string;
+        };
+        StopRunRequest: {
+            reason?: string;
+        };
+        Run: {
+            id: components["schemas"]["RunId"];
+            state: components["schemas"]["RunState"];
+            /**
+             * Format: int64
+             * @description Monotonic concurrency version represented by ETag.
+             */
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            workspacePath: string;
+            harnessProfile: string;
+            sandboxProfile: string;
+            /**
+             * Format: int64
+             * @default 0
+             */
+            lastSequence: number;
+        };
+        Event: {
+            eventId: string;
+            runId: components["schemas"]["RunId"];
+            /** Format: int64 */
+            sequence: number;
+            /** Format: date-time */
+            occurredAt: string;
+            kind: string;
+            schemaVersion: number;
+            source: {
+                [key: string]: unknown;
+            };
+            /** @enum {string} */
+            sensitivity: "public" | "operational" | "user-content" | "confidential" | "secret";
+            payload: {
+                [key: string]: unknown;
+            };
+            extensions?: {
+                [key: string]: unknown;
+            };
+        };
+        EventPage: {
+            events: components["schemas"]["Event"][];
+            /** Format: int64 */
+            nextAfterSequence: number;
+            hasMore: boolean;
+        };
+        FieldError: {
+            field: string;
+            code: string;
+            message: string;
+        };
+        Problem: {
+            /** Format: uri */
+            type: string;
+            title: string;
+            status: number;
+            /** @description Stable machine-readable error code. */
+            code: string;
+            /** @description Actionable summary that contains no content or secrets. */
+            detail: string;
+            /** @description Correlation identifier safe to include in logs. */
+            requestId: string;
+            errors?: components["schemas"]["FieldError"][];
+        };
     };
-    responses: never;
-    parameters: never;
+    responses: {
+        /** @description The command was accepted or safely replayed. */
+        RunAccepted: {
+            headers: {
+                ETag: components["headers"]["ETag"];
+                "Idempotency-Key": components["headers"]["IdempotencyKey"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Run"];
+            };
+        };
+        /** @description The request could not be parsed. */
+        ProblemBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /** @example {
+                 *       "type": "https://code-winch.dev/problems/bad-request",
+                 *       "title": "Bad request",
+                 *       "status": 400,
+                 *       "code": "bad_request",
+                 *       "detail": "The request body is not valid JSON.",
+                 *       "requestId": "01K0EXAMPLE00000000000000"
+                 *     } */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Authentication is required or invalid. */
+        ProblemUnauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /** @example {
+                 *       "type": "https://code-winch.dev/problems/unauthorized",
+                 *       "title": "Unauthorized",
+                 *       "status": 401,
+                 *       "code": "unauthorized",
+                 *       "detail": "Valid authentication is required.",
+                 *       "requestId": "01K0EXAMPLE00000000000000"
+                 *     } */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The run does not exist or is not visible to the caller. */
+        ProblemRunNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /** @example {
+                 *       "type": "https://code-winch.dev/problems/run-not-found",
+                 *       "title": "Run not found",
+                 *       "status": 404,
+                 *       "code": "run_not_found",
+                 *       "detail": "The requested run was not found.",
+                 *       "requestId": "01K0EXAMPLE00000000000000"
+                 *     } */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The requested transition is invalid for the current run state. */
+        ProblemStateConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /** @example {
+                 *       "type": "https://code-winch.dev/problems/run-state-conflict",
+                 *       "title": "Run state conflict",
+                 *       "status": 409,
+                 *       "code": "run_state_conflict",
+                 *       "detail": "The run cannot be started from its current state.",
+                 *       "requestId": "01K0EXAMPLE00000000000000"
+                 *     } */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The idempotency key was previously used for a different request. */
+        ProblemIdempotencyConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /** @example {
+                 *       "type": "https://code-winch.dev/problems/idempotency-conflict",
+                 *       "title": "Idempotency conflict",
+                 *       "status": 409,
+                 *       "code": "idempotency_conflict",
+                 *       "detail": "Use a new Idempotency-Key for a different request.",
+                 *       "requestId": "01K0EXAMPLE00000000000000"
+                 *     } */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The supplied ETag no longer represents the run. */
+        ProblemPreconditionFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /** @example {
+                 *       "type": "https://code-winch.dev/problems/precondition-failed",
+                 *       "title": "Precondition failed",
+                 *       "status": 412,
+                 *       "code": "precondition_failed",
+                 *       "detail": "Read the run and retry with its current ETag.",
+                 *       "requestId": "01K0EXAMPLE00000000000000"
+                 *     } */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description If-Match is required for this command. */
+        ProblemPreconditionRequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /** @example {
+                 *       "type": "https://code-winch.dev/problems/precondition-required",
+                 *       "title": "Precondition required",
+                 *       "status": 428,
+                 *       "code": "precondition_required",
+                 *       "detail": "Supply the run's current ETag in If-Match.",
+                 *       "requestId": "01K0EXAMPLE00000000000000"
+                 *     } */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description One or more request fields are invalid. */
+        ProblemValidationFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /** @example {
+                 *       "type": "https://code-winch.dev/problems/validation-failed",
+                 *       "title": "Validation failed",
+                 *       "status": 422,
+                 *       "code": "validation_failed",
+                 *       "detail": "Correct the invalid fields and retry.",
+                 *       "requestId": "01K0EXAMPLE00000000000000",
+                 *       "errors": [
+                 *         {
+                 *           "field": "workspacePath",
+                 *           "code": "required",
+                 *           "message": "workspacePath is required"
+                 *         }
+                 *       ]
+                 *     } */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+    };
+    parameters: {
+        RunId: components["schemas"]["RunId"];
+        /** @description Client-generated key. Reuse with a different request returns an idempotency conflict. */
+        IdempotencyKey: string;
+        /** @description Strong ETag from the most recently read run representation. */
+        IfMatch: string;
+    };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description Strong validator representing the run's current version. */
+        ETag: string;
+        /** @description Idempotency key associated with the response. */
+        IdempotencyKey: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -56,6 +397,149 @@ export interface operations {
                     "application/json": components["schemas"]["HealthResponse"];
                 };
             };
+        };
+    };
+    createRun: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Client-generated key. Reuse with a different request returns an idempotency conflict. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRunRequest"];
+            };
+        };
+        responses: {
+            /** @description The run was created. */
+            201: {
+                headers: {
+                    /** @description Canonical URL of the created run. */
+                    Location?: string;
+                    ETag: components["headers"]["ETag"];
+                    "Idempotency-Key": components["headers"]["IdempotencyKey"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            400: components["responses"]["ProblemBadRequest"];
+            401: components["responses"]["ProblemUnauthorized"];
+            409: components["responses"]["ProblemIdempotencyConflict"];
+            422: components["responses"]["ProblemValidationFailed"];
+        };
+    };
+    getRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current run representation. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            401: components["responses"]["ProblemUnauthorized"];
+            404: components["responses"]["ProblemRunNotFound"];
+        };
+    };
+    startRun: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Client-generated key. Reuse with a different request returns an idempotency conflict. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Strong ETag from the most recently read run representation. */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["RunAccepted"];
+            400: components["responses"]["ProblemBadRequest"];
+            401: components["responses"]["ProblemUnauthorized"];
+            404: components["responses"]["ProblemRunNotFound"];
+            409: components["responses"]["ProblemStateConflict"];
+            412: components["responses"]["ProblemPreconditionFailed"];
+            428: components["responses"]["ProblemPreconditionRequired"];
+        };
+    };
+    stopRun: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Client-generated key. Reuse with a different request returns an idempotency conflict. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Strong ETag from the most recently read run representation. */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StopRunRequest"];
+            };
+        };
+        responses: {
+            202: components["responses"]["RunAccepted"];
+            400: components["responses"]["ProblemBadRequest"];
+            401: components["responses"]["ProblemUnauthorized"];
+            404: components["responses"]["ProblemRunNotFound"];
+            409: components["responses"]["ProblemIdempotencyConflict"];
+            412: components["responses"]["ProblemPreconditionFailed"];
+            428: components["responses"]["ProblemPreconditionRequired"];
+        };
+    };
+    listRunEvents: {
+        parameters: {
+            query?: {
+                /** @description Return events with a sequence strictly greater than this value. */
+                after_sequence?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Events ordered by ascending sequence. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventPage"];
+                };
+            };
+            400: components["responses"]["ProblemBadRequest"];
+            401: components["responses"]["ProblemUnauthorized"];
+            404: components["responses"]["ProblemRunNotFound"];
         };
     };
 }
