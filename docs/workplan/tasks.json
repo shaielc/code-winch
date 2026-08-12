@@ -102,7 +102,7 @@
       "title": "Build fake harness and adapter contract kits",
       "phase": 0,
       "phase_name": "Contracts and development foundation",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P0-005",
         "P0-006",
