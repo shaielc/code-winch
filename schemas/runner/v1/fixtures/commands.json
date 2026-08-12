@@ -1,0 +1,9 @@
+[
+  {"version":{"major":1,"minor":0},"kind":"prepare","commandId":"cmd-1","executionId":"exec-1","leaseToken":"lease-example","payload":{"workspaceId":"ws-1"}},
+  {"version":{"major":1,"minor":0},"kind":"start","commandId":"cmd-2","executionId":"exec-1","leaseToken":"lease-example","payload":{"launchProfile":"default"}},
+  {"version":{"major":1,"minor":0},"kind":"input","commandId":"cmd-3","executionId":"exec-1","leaseToken":"lease-example","payload":{"inputId":"input-1","text":"hello"}},
+  {"version":{"major":1,"minor":0},"kind":"resize","commandId":"cmd-4","executionId":"exec-1","leaseToken":"lease-example","payload":{"columns":120,"rows":40}},
+  {"version":{"major":1,"minor":0},"kind":"stop","commandId":"cmd-5","executionId":"exec-1","leaseToken":"lease-example","payload":{"graceMilliseconds":5000}},
+  {"version":{"major":1,"minor":0},"kind":"inspect","commandId":"cmd-6","executionId":"exec-1","leaseToken":"lease-example","payload":{}},
+  {"version":{"major":1,"minor":0},"kind":"cleanup","commandId":"cmd-7","executionId":"exec-1","leaseToken":"lease-example","payload":{}}
+]
