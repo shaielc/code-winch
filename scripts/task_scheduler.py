@@ -19,6 +19,7 @@ from string import Template
 from typing import Any
 
 TASK_ID = re.compile(r"(?<![A-Z0-9])P\d+-\d{3}(?![A-Z0-9])", re.IGNORECASE)
+TASK_URL = re.compile(r"https?://\S+/codex/tasks/\S+")
 PROMPT_TEMPLATE = Path("scripts/task-prompt.md")
 
 
@@ -29,9 +30,20 @@ def run(*command: str, cwd: Path, capture: bool = True) -> str:
         check=True,
         text=True,
         stdout=subprocess.PIPE if capture else None,
-        stderr=subprocess.STDOUT if capture else None,
+        stderr=subprocess.PIPE if capture else None,
     )
     return result.stdout.strip() if capture else ""
+
+
+def failure_detail(error: Exception) -> str:
+    """Recover the diagnostics that check=True drops from the exception text."""
+    stderr = getattr(error, "stderr", None)
+    return f"{error}: {stderr.strip()}" if stderr else str(error)
+
+
+def task_url_from(output: str) -> str | None:
+    match = TASK_URL.search(output)
+    return match.group(0) if match else None
 
 
 def default_state_file(repo_root: Path) -> Path:
@@ -194,17 +206,18 @@ def dispatch(
                 cwd=repo_root,
             )
         except (OSError, subprocess.CalledProcessError) as error:
+            detail = failure_detail(error)
             state["tasks"][task_id] = {
                 "status": "pending",
                 "owner": None,
                 "blocked_reason": None,
-                "launch_error": str(error),
+                "launch_error": detail,
                 "updated_at": datetime.now(UTC).isoformat(),
             }
             save_state(state_file, state)
-            print(f"failed to dispatch {task_id}: {error}", file=sys.stderr)
+            print(f"failed to dispatch {task_id}: {detail}", file=sys.stderr)
             continue
-        state["tasks"][task_id]["cloud_output"] = output
+        state["tasks"][task_id]["task_url"] = task_url_from(output) or output
         save_state(state_file, state)
         print(f"dispatched {task_id}: {output}")
 
