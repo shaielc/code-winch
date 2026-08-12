@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://code-winch.dev/schemas/runner/v1/runner-message.schema.json",
+  "title": "Code Winch runner protocol v1 message",
+  "type": "object",
+  "required": ["version", "kind", "commandId", "executionId", "leaseToken", "payload"],
+  "properties": {
+    "version": {"type":"object","required":["major","minor"],"properties":{"major":{"const":1},"minor":{"type":"integer","minimum":0}},"additionalProperties":true},
+    "kind": {"enum":["prepare","start","input","resize","stop","inspect","cleanup","observation"]},
+    "commandId": {"type":"string","minLength":1,"maxLength":128},
+    "executionId": {"type":"string","minLength":1,"maxLength":128},
+    "leaseToken": {"type":"string","minLength":1,"maxLength":512},
+    "ordinal": {"type":"integer","minimum":1},
+    "payload": {"type":"object"}
+  },
+  "allOf": [{"if":{"properties":{"kind":{"const":"observation"}}},"then":{"required":["ordinal"]}}],
+  "additionalProperties": true
+}

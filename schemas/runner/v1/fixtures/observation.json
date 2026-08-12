@@ -1,0 +1,1 @@
+{"version":{"major":1,"minor":0,"futureVersionField":true},"kind":"observation","commandId":"cmd-2","executionId":"exec-1","leaseToken":"lease-example","ordinal":1,"payload":{"type":"stdout","bytes":"aGVsbG8="},"futureEnvelopeField":{"enabled":true}}
