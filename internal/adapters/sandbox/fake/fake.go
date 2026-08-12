@@ -62,6 +62,20 @@ func (d *Driver) Inspect(_ context.Context, handle application.ExecutionHandle) 
 	}
 	return value, nil
 }
+func (d *Driver) Resize(_ context.Context, handle application.ExecutionHandle, size application.TerminalSize) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.CapabilitiesValue.Resize {
+		return errors.New("fake sandbox: code=UNSUPPORTED_CAPABILITY capability=resize")
+	}
+	if _, ok := d.executions[handle.ID]; !ok {
+		return fmt.Errorf("fake sandbox: code=NOT_FOUND execution_id=%s", handle.ID)
+	}
+	if size.Rows == 0 || size.Cols == 0 {
+		return errors.New("fake sandbox: code=INVALID_SIZE")
+	}
+	return nil
+}
 func (d *Driver) Stop(_ context.Context, handle application.ExecutionHandle, _ application.StopPolicy) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
