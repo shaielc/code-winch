@@ -1,5 +1,6 @@
 import importlib.util
 import io
+import subprocess
 import sys
 import unittest
 from contextlib import redirect_stderr
@@ -52,7 +53,7 @@ class TaskSchedulerTests(unittest.TestCase):
                     "status": "in_progress",
                     "owner": "worker",
                     "blocked_reason": None,
-                    "cloud_output": "ignored",
+                    "task_url": "ignored",
                 }
             }
         }
@@ -60,7 +61,7 @@ class TaskSchedulerTests(unittest.TestCase):
         self.assertEqual(effective["tasks"][0]["title"], "Upstream")
         self.assertEqual(effective["tasks"][0]["status"], "in_progress")
         self.assertEqual(effective["tasks"][0]["owner"], "worker")
-        self.assertNotIn("cloud_output", effective["tasks"][0])
+        self.assertNotIn("task_url", effective["tasks"][0])
 
     def test_record_completions_is_idempotent(self):
         state = {"schema_version": 1, "tasks": {}}
@@ -76,6 +77,17 @@ class TaskSchedulerTests(unittest.TestCase):
         self.assertTrue(task_scheduler.record_completions(state, pulls, {"P0-001"}))
         self.assertFalse(task_scheduler.record_completions(state, pulls, {"P0-001"}))
         self.assertEqual(state["tasks"]["P0-001"]["status"], "completed")
+
+    def test_task_url_survives_noise_on_the_dispatch_output(self):
+        url = "https://chatgpt.com/codex/tasks/task_e_6a7c22f3f85c83209a1c137b454a5ed9"
+        self.assertEqual(task_scheduler.task_url_from(url), url)
+        self.assertEqual(task_scheduler.task_url_from(f"warning: stale login\n{url}\n"), url)
+        self.assertIsNone(task_scheduler.task_url_from("Not signed in. Please run 'codex login'."))
+
+    def test_failure_detail_keeps_the_captured_stderr(self):
+        error = subprocess.CalledProcessError(1, ["codex"], stderr="environment not found\n")
+        self.assertIn("environment not found", task_scheduler.failure_detail(error))
+        self.assertEqual(task_scheduler.failure_detail(OSError("no codex")), "no codex")
 
     def test_repo_root_requires_an_explicit_state_file(self):
         argv = ["task_scheduler.py", "--env", "environment", "--repo-root", "/opt/code-winch"]
