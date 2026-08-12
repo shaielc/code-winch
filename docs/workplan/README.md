@@ -117,45 +117,7 @@ The initial result contains `P0-001`, `P0-002`, and `P0-009`. Once a task is mar
 ## Containerized GitHub runner
 
 The preferred deployment is the repository-scoped self-hosted runner in
-`runner/`. It receives merge jobs over the GitHub Actions runner connection, so
-it requires outbound network access but no public webhook endpoint. Copy
-`runner/.env.example` to `runner/.env`, set the repository URL and a current
-runner registration token, then build the image:
-
-```sh
-docker compose --env-file runner/.env -f runner/compose.yml build
-```
-
-Codex authentication is stored in a dedicated Docker volume. Populate it using
-the interactive Codex login before starting the runner service:
-
-```sh
-docker compose --env-file runner/.env -f runner/compose.yml run --rm \
-  --entrypoint codex runner login
-docker compose --env-file runner/.env -f runner/compose.yml up -d
-```
-
-The runner configuration, work directory, Codex credentials, and scheduler
-state survive container replacement in named volumes. `RUNNER_TOKEN` is used
-only for initial runner registration; generate a new token if the runner volume
-is removed. Set the repository Actions variable `CODEX_ENV_ID` to the Codex
-Cloud environment used for dispatched tasks.
-
-Treat the Docker volumes as secrets: the Codex volume contains the CLI login,
-and the scheduler-state volume also retains the GitHub runner credentials.
-Never mount the Docker socket into this runner.
-
-The example defaults to the latest runner image and Codex CLI. For repeatable
-deployments, replace `RUNNER_IMAGE` and `NODE_IMAGE` with reviewed image digests
-and `CODEX_VERSION` with a tested CLI version before building.
-
-When a pull request containing exactly one known task ID merges, the Actions
-workflow invokes `scripts/task_scheduler.py` once with GitHub's event file. The
-scheduler records completion locally, overlays that state on the tracker from
-`origin/main`, and submits newly available tasks with `codex cloud exec`. An
-adjacent lock file prevents overlapping scheduler jobs from dispatching the
-same task.
-
-Run the **Schedule available tasks** workflow manually after installing the
-runner to dispatch the initial dependency-free tasks. The same manual trigger
-can retry tasks after a transient Codex launch failure.
+`runner/`, which dispatches available tasks to Codex Cloud when a task pull
+request merges. See [`runner/README.md`](../../runner/README.md) for
+installation, deployment overrides, and how scheduling and the control panel
+work.

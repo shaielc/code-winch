@@ -30,12 +30,12 @@ services:
     entrypoint:
       - python3
       - /app/control_panel.py
+      - --tracker=/var/lib/code-winch/tracker.json
       - --state-file=/var/lib/code-winch/task-state.json
-      - --repo=/home/runner/panel-repo
+      - --repo-root=/opt/code-winch
       - --host=0.0.0.0
       - --port=8765
     environment:
-      GITHUB_URL: ${GITHUB_URL:?Set GITHUB_URL in runner/.env}
       CODEX_ENV_ID: ${CODEX_ENV_ID:-}
       PYTHONUNBUFFERED: "1"
     ports:
