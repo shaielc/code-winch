@@ -44,6 +44,9 @@ type HarnessCodec interface {
 }
 
 type SandboxCapabilities struct {
+	// Isolation is a stable, user-facing description of the security boundary.
+	// Drivers which run directly on the host must report "unisolated".
+	Isolation      string
 	Resize         bool
 	NetworkPolicy  bool
 	ResourceLimits bool
@@ -60,12 +63,17 @@ type ObservedExecution struct {
 	ExitCode *int
 }
 type StopPolicy struct{ GracePeriod time.Duration }
+type TerminalSize struct {
+	Rows uint16
+	Cols uint16
+}
 
 type SandboxDriver interface {
 	Capabilities(context.Context) SandboxCapabilities
 	Prepare(context.Context, SandboxSpec) (PreparedSandbox, error)
 	Start(context.Context, PreparedSandbox, LaunchSpec) (ExecutionHandle, error)
 	Inspect(context.Context, ExecutionHandle) (ObservedExecution, error)
+	Resize(context.Context, ExecutionHandle, TerminalSize) error
 	Stop(context.Context, ExecutionHandle, StopPolicy) error
 	Cleanup(context.Context, PreparedSandbox) error
 }
