@@ -5,6 +5,7 @@ package fake
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,6 +29,12 @@ func (Driver) BuildLaunch(_ context.Context, spec application.RunSpec, _ applica
 }
 func (Driver) NewCodec(context.Context, application.RunSpec) (application.HarnessCodec, error) {
 	return &Codec{}, nil
+}
+func (Driver) MapExit(code int) application.HarnessExit {
+	if code == 0 {
+		return application.HarnessExit{Successful: true, Code: "OK", Message: "fake harness exited successfully"}
+	}
+	return application.HarnessExit{Code: "PROCESS_FAILED", Message: "fake harness exited unsuccessfully"}
 }
 
 type record struct {
@@ -55,7 +62,8 @@ func (c *Codec) Consume(chunk application.OutputChunk) ([]application.Unsequence
 		}
 		event, err := decode(line)
 		if err != nil {
-			return events, err
+			events = append(events, fallback(line)...)
+			continue
 		}
 		events = append(events, event)
 	}
@@ -77,6 +85,15 @@ func decode(line []byte) (application.UnsequencedEvent, error) {
 	return application.UnsequencedEvent{Kind: value.Kind, SchemaVersion: 1, Source: protocol.Source{Type: "harness", Adapter: AdapterID, Version: "1.0.0"}, Sensitivity: value.Sensitivity, Payload: append([]byte(nil), value.Payload...)}, nil
 }
 
+func fallback(line []byte) []application.UnsequencedEvent {
+	raw, _ := json.Marshal(map[string]string{"stream": "stdout", "encoding": "base64", "data": base64.StdEncoding.EncodeToString(line)})
+	diagnostic, _ := json.Marshal(map[string]string{"code": "FAKE_MALFORMED_RECORD", "message": "Fake harness emitted an invalid JSON-lines record"})
+	return []application.UnsequencedEvent{
+		{Kind: "raw.output", SchemaVersion: 1, Source: protocol.Source{Type: "harness", Adapter: AdapterID, Version: "1.0.0"}, Sensitivity: protocol.SensitivityConfidential, Payload: raw},
+		{Kind: "diagnostic", SchemaVersion: 1, Source: protocol.Source{Type: "harness", Adapter: AdapterID, Version: "1.0.0"}, Sensitivity: protocol.SensitivityOperational, Payload: diagnostic},
+	}
+}
+
 func (c *Codec) Encode(message application.InputMessage) ([]application.InputFrame, error) {
 	if message.ID == "" {
 		return nil, errors.New("fake harness codec: code=INVALID_INPUT field=id")
@@ -89,8 +106,9 @@ func (c *Codec) Encode(message application.InputMessage) ([]application.InputFra
 }
 func (c *Codec) Flush() ([]application.UnsequencedEvent, error) {
 	if len(bytes.TrimSpace(c.pending)) != 0 {
+		line := append([]byte(nil), c.pending...)
 		c.pending = nil
-		return nil, errors.New("fake harness codec: code=TRUNCATED_RECORD")
+		return fallback(line), nil
 	}
 	c.pending = nil
 	return nil, nil

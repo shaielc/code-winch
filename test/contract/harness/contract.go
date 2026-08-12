@@ -24,6 +24,12 @@ func Run(t *testing.T, factory Factory, spec application.RunSpec, validRecord []
 	if _, err = driver.BuildLaunch(context.Background(), spec, nil); err != nil {
 		t.Fatalf("BuildLaunch: %v", err)
 	}
+	if exit := driver.MapExit(0); !exit.Successful || exit.Code == "" || exit.Message == "" {
+		t.Fatalf("successful exit mapping: %#v", exit)
+	}
+	if exit := driver.MapExit(1); exit.Successful || exit.Code == "" || exit.Message == "" {
+		t.Fatalf("failed exit mapping: %#v", exit)
+	}
 
 	for boundary := 0; boundary <= len(validRecord); boundary++ {
 		codec, codecErr := driver.NewCodec(context.Background(), spec)
@@ -52,13 +58,13 @@ func Run(t *testing.T, factory Factory, spec application.RunSpec, validRecord []
 		t.Fatalf("Encode: %#v, %v", frames, err)
 	}
 	secret := "do-not-log-this"
-	_, err = codec.Consume(application.OutputChunk{Data: []byte("{\"payload\":\"" + secret + "\"}\n")})
-	if err == nil || strings.Contains(err.Error(), secret) {
-		t.Fatalf("malformed diagnostic must be stable and content-safe: %v", err)
+	events, err := codec.Consume(application.OutputChunk{Data: []byte("{\"payload\":\"" + secret + "\"}\n")})
+	if err != nil || len(events) != 2 || events[0].Kind != "raw.output" || events[1].Kind != "diagnostic" || strings.Contains(string(events[1].Payload), secret) {
+		t.Fatalf("malformed output fallback must be lossless and content-safe: %#v, %v", events, err)
 	}
 	codec, _ = driver.NewCodec(context.Background(), spec)
 	_, _ = codec.Consume(application.OutputChunk{Data: []byte("{")})
-	if _, err = codec.Flush(); err == nil {
-		t.Fatal("Flush accepted a truncated record")
+	if events, err = codec.Flush(); err != nil || len(events) != 2 || events[0].Kind != "raw.output" || events[1].Kind != "diagnostic" {
+		t.Fatalf("Flush fallback: %#v, %v", events, err)
 	}
 }

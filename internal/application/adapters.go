@@ -24,6 +24,14 @@ type LaunchSpec struct {
 	Args    []string
 	Env     map[string]string
 }
+
+// HarnessExit is the provider-neutral interpretation of a harness process
+// exit. Message is a stable, content-free operator diagnostic.
+type HarnessExit struct {
+	Successful bool
+	Code       string
+	Message    string
+}
 type OutputChunk struct{ Data []byte }
 type InputMessage struct {
 	ID   string
@@ -35,6 +43,7 @@ type HarnessDriver interface {
 	Describe(context.Context) (HarnessDescriptor, error)
 	BuildLaunch(context.Context, RunSpec, ResolvedCredentials) (LaunchSpec, error)
 	NewCodec(context.Context, RunSpec) (HarnessCodec, error)
+	MapExit(int) HarnessExit
 }
 
 type HarnessCodec interface {
