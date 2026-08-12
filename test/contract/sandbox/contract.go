@@ -41,6 +41,11 @@ func Validate(driver application.SandboxDriver) error {
 	if err != nil || !observed.Running {
 		return fmt.Errorf("inspect running: %#v: %v", observed, err)
 	}
+	if caps.Resize {
+		if err = driver.Resize(ctx, handle, application.TerminalSize{Rows: 31, Cols: 97}); err != nil {
+			return fmt.Errorf("advertised resize is not usable: %w", err)
+		}
+	}
 	for i := 0; i < 2; i++ {
 		if err = driver.Stop(ctx, handle, application.StopPolicy{}); err != nil {
 			return fmt.Errorf("stop #%d: %w", i+1, err)

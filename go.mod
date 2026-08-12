@@ -3,6 +3,7 @@ module github.com/shaielc/code-winch
 go 1.24.0
 
 require (
+	github.com/creack/pty v1.1.24
 	github.com/getkin/kin-openapi v0.133.0
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.7.6
