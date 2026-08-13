@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -42,13 +43,17 @@ type Backend interface {
 
 type Config struct {
 	// Token is a deployment-local secret used for both bearer and cookie auth.
-	Token         string
-	CSRFToken     string
-	AllowedOrigin string
-	Actor         string
-	BodyLimit     int64
-	Logger        *slog.Logger
-	RequestID     func() string
+	Token               string
+	CSRFToken           string
+	AllowedOrigin       string
+	Actor               string
+	BodyLimit           int64
+	Logger              *slog.Logger
+	RequestID           func() string
+	EventStream         *EventStream
+	HeartbeatInterval   time.Duration
+	ReauthorizeInterval time.Duration
+	StreamWriteTimeout  time.Duration
 }
 
 type server struct {
@@ -78,7 +83,18 @@ func NewHandler(cfg Config, backend Backend) (http.Handler, error) {
 			s.problem(w, r, http.StatusBadRequest, "bad_request", "Bad request", "The request parameters are invalid.")
 		},
 	})
-	return s.security(generated), nil
+	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		const prefix, suffix = "/api/v1/runs/", "/events/stream"
+		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, prefix) && strings.HasSuffix(r.URL.Path, suffix) {
+			runID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, prefix), suffix)
+			if runID != "" && !strings.Contains(runID, "/") {
+				s.streamEvents(w, r, RunId(runID))
+				return
+			}
+		}
+		generated.ServeHTTP(w, r)
+	})
+	return s.security(root), nil
 }
 
 // SetSessionCookie establishes the secure local browser session. The CSRF
@@ -219,6 +235,10 @@ func (s *server) ListRunEvents(w http.ResponseWriter, r *http.Request, id RunId,
 		return
 	}
 	s.writeJSON(w, http.StatusOK, result)
+}
+
+func (s *server) StreamRunEvents(w http.ResponseWriter, r *http.Request, id RunId, _ StreamRunEventsParams) {
+	s.streamEvents(w, r, id)
 }
 
 func (s *server) SendRunInput(w http.ResponseWriter, r *http.Request, id RunId, p SendRunInputParams) {

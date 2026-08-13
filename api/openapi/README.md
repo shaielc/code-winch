@@ -34,3 +34,18 @@ Oversized requests receive a stable `payload_too_large` problem. Audit logs
 contain operation, request, actor, and run identifiers only: input text,
 terminal bytes, stop reasons, workspace content, event payloads, credentials,
 and authorization tokens are excluded.
+
+## Resumable event stream
+
+`GET /api/v1/runs/{runId}/events/stream?after_sequence=N` upgrades to a
+WebSocket. Authentication stays in the `Authorization` header or secure session
+cookie; credentials are never accepted in the URL. The browser must send the
+configured exact `Origin`. The server first replays durable events after `N`,
+sends `caught_up`, then sends live deltas and periodic heartbeats. Consumers
+must persist `lastSequence` and reconnect after it. A `disconnect` message (or
+close reason `slow_consumer`) is resumable from that sequence. Authorization is
+checked again periodically; `authorization_revoked` requires a fresh session.
+
+Composition roots publish each event to `EventStream.Publish` only after the
+event's durable transaction commits. The broadcaster is notification-only and
+has a bounded queue per browser, so browser backpressure cannot delay a run.

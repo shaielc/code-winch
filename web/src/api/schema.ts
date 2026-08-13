@@ -117,6 +117,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/runs/{runId}/events/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Resume an ordered run event WebSocket stream
+         * @description Upgrades to WebSocket after header or secure-cookie authentication and
+         *     exact Origin validation. Messages are event, caught_up, heartbeat, or a
+         *     resumable disconnect carrying lastSequence. Authorization is refreshed
+         *     while the connection remains open.
+         *
+         */
+        get: operations["streamRunEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runs/{runId}/input": {
         parameters: {
             query?: never;
@@ -574,6 +600,39 @@ export interface operations {
             };
             400: components["responses"]["ProblemBadRequest"];
             401: components["responses"]["ProblemUnauthorized"];
+            404: components["responses"]["ProblemRunNotFound"];
+        };
+    };
+    streamRunEvents: {
+        parameters: {
+            query?: {
+                /** @description Resume strictly after this durable sequence. */
+                after_sequence?: number;
+            };
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description WebSocket protocol switch. */
+            101: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ProblemBadRequest"];
+            401: components["responses"]["ProblemUnauthorized"];
+            /** @description The WebSocket Origin is not allowed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             404: components["responses"]["ProblemRunNotFound"];
         };
     };

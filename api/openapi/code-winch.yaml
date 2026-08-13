@@ -131,6 +131,28 @@ paths:
         "400": { $ref: "#/components/responses/ProblemBadRequest" }
         "401": { $ref: "#/components/responses/ProblemUnauthorized" }
         "404": { $ref: "#/components/responses/ProblemRunNotFound" }
+  /runs/{runId}/events/stream:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      operationId: streamRunEvents
+      summary: Resume an ordered run event WebSocket stream
+      description: |
+        Upgrades to WebSocket after header or secure-cookie authentication and
+        exact Origin validation. Messages are event, caught_up, heartbeat, or a
+        resumable disconnect carrying lastSequence. Authorization is refreshed
+        while the connection remains open.
+      parameters:
+        - name: after_sequence
+          in: query
+          description: Resume strictly after this durable sequence.
+          schema: { type: integer, format: int64, minimum: 0, default: 0 }
+      responses:
+        "101": { description: WebSocket protocol switch. }
+        "400": { $ref: "#/components/responses/ProblemBadRequest" }
+        "401": { $ref: "#/components/responses/ProblemUnauthorized" }
+        "403": { description: The WebSocket Origin is not allowed. }
+        "404": { $ref: "#/components/responses/ProblemRunNotFound" }
   /runs/{runId}/input:
     parameters:
       - $ref: "#/components/parameters/RunId"
