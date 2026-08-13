@@ -117,6 +117,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/runs/{runId}/input": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send idempotent input to a running run */
+        post: operations["sendRunInput"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -137,6 +156,22 @@ export interface components {
         };
         StopRunRequest: {
             reason?: string;
+        };
+        RunInputRequest: {
+            /** @enum {string} */
+            kind: "text" | "interrupt" | "terminal_bytes" | "resize";
+            text?: string;
+            /** Format: byte */
+            bytes?: string;
+            rows?: number;
+            columns?: number;
+        };
+        InputAccepted: {
+            commandId: string;
+            runId: components["schemas"]["RunId"];
+            /** @enum {string} */
+            kind: "text" | "interrupt" | "terminal_bytes" | "resize";
+            accepted: boolean;
         };
         Run: {
             id: components["schemas"]["RunId"];
@@ -540,6 +575,43 @@ export interface operations {
             400: components["responses"]["ProblemBadRequest"];
             401: components["responses"]["ProblemUnauthorized"];
             404: components["responses"]["ProblemRunNotFound"];
+        };
+    };
+    sendRunInput: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Client-generated key. Reuse with a different request returns an idempotency conflict. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Strong ETag from the most recently read run representation. */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunInputRequest"];
+            };
+        };
+        responses: {
+            /** @description Input was durably accepted or safely replayed. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InputAccepted"];
+                };
+            };
+            400: components["responses"]["ProblemBadRequest"];
+            401: components["responses"]["ProblemUnauthorized"];
+            404: components["responses"]["ProblemRunNotFound"];
+            409: components["responses"]["ProblemStateConflict"];
+            412: components["responses"]["ProblemPreconditionFailed"];
+            428: components["responses"]["ProblemPreconditionRequired"];
         };
     };
 }
