@@ -18,3 +18,15 @@ worker IDs and UUID lease tokens. Claims use expiring, fenced leases and
 message/event ID. Failed publishes use bounded exponential backoff and become
 poison records after the configured attempt limit. Worker metrics expose the
 ready backlog, retry count, and poison count without payload content.
+
+Workflow definitions, pinned instances, step-attempt history, lineage, signals,
+timers, and workflow publish intents are installed by migration 005. Coordinator
+workers claim ready attempts with `ClaimReadyWorkflowSteps`, using a unique UUID
+token for every claim call and a bounded expiry. An expired attempt is reclaimed
+with a higher fencing epoch; completion checks the token, epoch, and expiry in
+the same transaction that writes workflow outbox intents. A stale worker receives
+`application.ErrConflict` with workflow and step identifiers only. Operators
+should investigate repeated expiry/reclaim cycles as worker-health failures;
+lease tokens, definition/input documents, signal payloads, and outputs must not
+be logged. Terminal attempt rows are database-protected and retries append a new
+attempt number rather than changing history.
