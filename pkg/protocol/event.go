@@ -198,9 +198,7 @@ func (e Event) ValidateEnvelope() error {
 	if e.Source.Type == "" {
 		return fail("EVENT_REQUIRED_FIELD", "source.type")
 	}
-	switch e.Sensitivity {
-	case SensitivityPublic, SensitivityOperational, SensitivityUserContent, SensitivityConfidential, SensitivitySecret:
-	default:
+	if !e.Sensitivity.Valid() {
 		return fail("EVENT_INVALID_SENSITIVITY", "sensitivity")
 	}
 	if len(e.Payload) == 0 || !json.Valid(e.Payload) {

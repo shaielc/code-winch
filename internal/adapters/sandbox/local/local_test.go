@@ -115,5 +115,19 @@ func waitForPID(t *testing.T, path string) int {
 
 func processExists(pid int) bool {
 	err := syscall.Kill(pid, 0)
-	return err == nil || !errors.Is(err, syscall.ESRCH)
+	if errors.Is(err, syscall.ESRCH) {
+		return false
+	}
+	// kill(pid, 0) also succeeds for a zombie that has already exited but has
+	// not yet been reaped by the container's PID 1. Treat that state as dead:
+	// cleanup is responsible for terminating descendants, not for reaping a
+	// grandchild that was adopted after its shell exited.
+	stat, readErr := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
+	if readErr == nil {
+		fields := strings.Fields(string(stat))
+		if len(fields) >= 3 && fields[2] == "Z" {
+			return false
+		}
+	}
+	return true
 }
