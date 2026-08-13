@@ -21,6 +21,9 @@ var migration003 string
 //go:embed migrations/004_input_delivery.sql
 var migration004 string
 
+//go:embed migrations/005_workflow_runtime.sql
+var migration005 string
+
 func migrationParts(migration string) (string, string) {
 	parts := strings.Split(migration, "-- migrate:down")
 	return strings.TrimPrefix(parts[0], "-- migrate:up"), parts[1]
@@ -33,16 +36,18 @@ func MigrateUp(ctx context.Context, pool *pgxpool.Pool) error {
 	up2, _ := migrationParts(migration002)
 	up3, _ := migrationParts(migration003)
 	up4, _ := migrationParts(migration004)
-	_, err := pool.Exec(ctx, up1+"\n"+up2+"\n"+up3+"\n"+up4)
+	up5, _ := migrationParts(migration005)
+	_, err := pool.Exec(ctx, up1+"\n"+up2+"\n"+up3+"\n"+up4+"\n"+up5)
 	return err
 }
 
 func MigrateDown(ctx context.Context, pool *pgxpool.Pool) error {
+	_, down5 := migrationParts(migration005)
 	_, down4 := migrationParts(migration004)
 	_, down3 := migrationParts(migration003)
 	_, down2 := migrationParts(migration002)
 	_, down1 := migrationParts(migration001)
-	_, err := pool.Exec(ctx, down4+"\n"+down3+"\n"+down2+"\n"+down1)
+	_, err := pool.Exec(ctx, down5+"\n"+down4+"\n"+down3+"\n"+down2+"\n"+down1)
 	return err
 }
 

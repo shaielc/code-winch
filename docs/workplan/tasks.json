@@ -486,7 +486,7 @@
       "title": "Persist workflow instances and step leases",
       "phase": 4,
       "phase_name": "Top-level workflows",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P1-012",
         "P4-034"
