@@ -32,6 +32,33 @@ type RunLease struct {
 	ExpiresAt    domain.Timestamp
 }
 
+// RunnerExecutionObservation is the runner's content-free view of a persisted handle.
+// OwnershipToken is capability evidence and must never be logged or emitted.
+type RunnerExecutionObservation struct {
+	ExecutionID    string
+	OwnershipToken string
+	State          ExecutionState
+	ExitSuccessful bool
+}
+
+type ExecutionState string
+
+const (
+	ExecutionPreparing ExecutionState = "preparing"
+	ExecutionRunning   ExecutionState = "running"
+	ExecutionExited    ExecutionState = "exited"
+	ExecutionUnknown   ExecutionState = "unknown"
+)
+
+// ReconciliationRunner atomically transfers a live execution before it is
+// supervised by a restarted daemon. Implementations must compare oldToken and
+// must not adopt on an identity mismatch.
+type ReconciliationRunner interface {
+	Inspect(context.Context, string) (RunnerExecutionObservation, error)
+	Takeover(context.Context, string, string, string) error
+	Cleanup(context.Context, string) error
+}
+
 // SupervisorStore makes lease checks and durable changes atomic. In particular,
 // implementations must fence every mutation by both epoch and token.
 type SupervisorStore interface {

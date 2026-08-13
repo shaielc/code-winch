@@ -26,6 +26,7 @@ type Supervisor struct {
 	runner        application.RunnerGateway
 	redactor      application.EventRedactor
 	clock         application.Clock
+	ids           application.IDSource
 	owner         string
 	leaseDuration time.Duration
 	locks         sync.Map
@@ -33,6 +34,83 @@ type Supervisor struct {
 
 func New(store application.SupervisorStore, runner application.RunnerGateway, redactor application.EventRedactor, clock application.Clock, owner string, leaseDuration time.Duration) *Supervisor {
 	return &Supervisor{store: store, runner: runner, redactor: redactor, clock: clock, owner: owner, leaseDuration: leaseDuration}
+}
+
+// WithReconciliationIDs enables durable reconciliation events. It is separate
+// from New to preserve the small supervisor construction surface for callers
+// that do not run restart recovery.
+func (s *Supervisor) WithReconciliationIDs(ids application.IDSource) *Supervisor {
+	s.ids = ids
+	return s
+}
+
+const (
+	ErrCodeExecutionLost    = "EXECUTION_LOST"
+	ErrCodeIdentityMismatch = "EXECUTION_IDENTITY_MISMATCH"
+	ErrCodeCleanupFailed    = "ORPHAN_CLEANUP_FAILED"
+)
+
+// Reconcile compares one nonterminal checkpoint with the runner and takes a
+// new fenced lease. The old runner token is used only as takeover evidence and
+// is never included in diagnostics.
+func (s *Supervisor) Reconcile(ctx context.Context, id domain.RunID, token string, runner application.ReconciliationRunner) (application.RunControl, error) {
+	before, err := s.store.LoadControl(ctx, id)
+	if err != nil || before.DesiredState.IsTerminal() {
+		return before, err
+	}
+	lease, err := s.Acquire(ctx, id, token)
+	if err != nil {
+		return before, err
+	}
+	code, state := "EXECUTION_RESUMED", before.DesiredState
+	obs := application.RunnerExecutionObservation{State: application.ExecutionUnknown}
+	if before.ExecutionID != "" {
+		obs, err = runner.Inspect(ctx, before.ExecutionID)
+	}
+	if err != nil || obs.State == application.ExecutionUnknown || obs.ExecutionID != before.ExecutionID {
+		// Runner errors can contain adapter details. Persist the stable,
+		// content-free outcome instead of propagating them.
+		err = nil
+		code, state = ErrCodeExecutionLost, domain.RunStateFailed
+	} else if obs.State == application.ExecutionPreparing {
+		code, state = ErrCodeExecutionLost, domain.RunStateFailed
+	} else if obs.State == application.ExecutionExited {
+		if obs.ExitSuccessful && before.DesiredState != domain.RunStateStopping {
+			state = domain.RunStateCompleted
+		} else if before.DesiredState == domain.RunStateStopping {
+			state = domain.RunStateCancelled
+		} else {
+			state = domain.RunStateFailed
+		}
+		code = "EXECUTION_EXIT_RECONCILED"
+	} else if obs.OwnershipToken != before.LeaseToken || runner.Takeover(ctx, before.ExecutionID, before.LeaseToken, lease.Token) != nil {
+		code, state = ErrCodeIdentityMismatch, domain.RunStateFailed
+	} else if before.DesiredState == domain.RunStateStopping {
+		code = "STOP_RECONCILIATION_CONTINUED"
+		msg := protocol.RunnerMessage{Version: protocol.RunnerVersion{Major: protocol.RunnerProtocolMajor}, Kind: "stop", CommandID: "reconcile-stop-" + id.String(), ExecutionID: before.ExecutionID, LeaseToken: lease.Token, Payload: []byte(`{"graceMilliseconds":0}`)}
+		if err = s.runner.Send(ctx, msg); err != nil {
+			return before, fmt.Errorf("run supervisor: stop reconciliation failed: run=%s: %w", id, err)
+		}
+	}
+	updated, saveErr := s.store.SaveDesiredState(ctx, lease, state, before.HarnessDriver, before.SandboxDriver, before.ExecutionID)
+	if saveErr != nil {
+		return updated, fence(saveErr, id)
+	}
+	if state.IsTerminal() && before.ExecutionID != "" {
+		if cleanupErr := runner.Cleanup(ctx, before.ExecutionID); cleanupErr != nil {
+			code = ErrCodeCleanupFailed
+			err = fmt.Errorf("run supervisor: %s: run=%s execution=%s", code, id, before.ExecutionID)
+		}
+	}
+	if s.ids == nil {
+		return updated, errors.New("run supervisor: reconciliation event ID source is required")
+	}
+	payload := []byte(fmt.Sprintf(`{"code":%q,"executionId":%q,"state":%q}`, code, before.ExecutionID, state))
+	_, eventErr := s.Observe(ctx, lease, before.LastOrdinal+1, []application.UnsequencedEvent{{EventID: s.ids.NewEventID(), OccurredAt: s.clock.Now(), Kind: "run.reconciled", SchemaVersion: 1, Source: protocol.Source{Type: "supervisor"}, Sensitivity: protocol.SensitivityPublic, Payload: payload}})
+	if eventErr != nil {
+		return updated, eventErr
+	}
+	return updated, err
 }
 
 func (s *Supervisor) lock(id domain.RunID) func() {
