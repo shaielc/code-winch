@@ -38,6 +38,22 @@ const (
 	Ok HealthResponseStatus = "ok"
 )
 
+// Defines values for InputAcceptedKind.
+const (
+	InputAcceptedKindInterrupt     InputAcceptedKind = "interrupt"
+	InputAcceptedKindResize        InputAcceptedKind = "resize"
+	InputAcceptedKindTerminalBytes InputAcceptedKind = "terminal_bytes"
+	InputAcceptedKindText          InputAcceptedKind = "text"
+)
+
+// Defines values for RunInputRequestKind.
+const (
+	RunInputRequestKindInterrupt     RunInputRequestKind = "interrupt"
+	RunInputRequestKindResize        RunInputRequestKind = "resize"
+	RunInputRequestKindTerminalBytes RunInputRequestKind = "terminal_bytes"
+	RunInputRequestKindText          RunInputRequestKind = "text"
+)
+
 // Defines values for RunState.
 const (
 	Cancelled RunState = "cancelled"
@@ -98,6 +114,17 @@ type HealthResponse struct {
 // HealthResponseStatus defines model for HealthResponse.Status.
 type HealthResponseStatus string
 
+// InputAccepted defines model for InputAccepted.
+type InputAccepted struct {
+	Accepted  bool              `json:"accepted"`
+	CommandId string            `json:"commandId"`
+	Kind      InputAcceptedKind `json:"kind"`
+	RunId     RunId             `json:"runId"`
+}
+
+// InputAcceptedKind defines model for InputAccepted.Kind.
+type InputAcceptedKind string
+
 // Problem defines model for Problem.
 type Problem struct {
 	// Code Stable machine-readable error code.
@@ -131,6 +158,18 @@ type Run struct {
 
 // RunId defines model for RunId.
 type RunId = string
+
+// RunInputRequest defines model for RunInputRequest.
+type RunInputRequest struct {
+	Bytes   *[]byte             `json:"bytes,omitempty"`
+	Columns *int                `json:"columns,omitempty"`
+	Kind    RunInputRequestKind `json:"kind"`
+	Rows    *int                `json:"rows,omitempty"`
+	Text    *string             `json:"text,omitempty"`
+}
+
+// RunInputRequestKind defines model for RunInputRequest.Kind.
+type RunInputRequestKind string
 
 // RunState defines model for RunState.
 type RunState string
@@ -186,6 +225,15 @@ type ListRunEventsParams struct {
 	Limit         *int   `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// SendRunInputParams defines parameters for SendRunInput.
+type SendRunInputParams struct {
+	// IdempotencyKey Client-generated key. Reuse with a different request returns an idempotency conflict.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+
+	// IfMatch Strong ETag from the most recently read run representation.
+	IfMatch IfMatch `json:"If-Match"`
+}
+
 // StartRunParams defines parameters for StartRun.
 type StartRunParams struct {
 	// IdempotencyKey Client-generated key. Reuse with a different request returns an idempotency conflict.
@@ -207,6 +255,9 @@ type StopRunParams struct {
 // CreateRunJSONRequestBody defines body for CreateRun for application/json ContentType.
 type CreateRunJSONRequestBody = CreateRunRequest
 
+// SendRunInputJSONRequestBody defines body for SendRunInput for application/json ContentType.
+type SendRunInputJSONRequestBody = RunInputRequest
+
 // StopRunJSONRequestBody defines body for StopRun for application/json ContentType.
 type StopRunJSONRequestBody = StopRunRequest
 
@@ -224,6 +275,9 @@ type ServerInterface interface {
 	// Read a page of durable run events
 	// (GET /runs/{runId}/events)
 	ListRunEvents(w http.ResponseWriter, r *http.Request, runId RunId, params ListRunEventsParams)
+	// Send idempotent input to a running run
+	// (POST /runs/{runId}/input)
+	SendRunInput(w http.ResponseWriter, r *http.Request, runId RunId, params SendRunInputParams)
 	// Start a created run
 	// (POST /runs/{runId}/start)
 	StartRun(w http.ResponseWriter, r *http.Request, runId RunId, params StartRunParams)
@@ -257,6 +311,12 @@ func (_ Unimplemented) GetRun(w http.ResponseWriter, r *http.Request, runId RunI
 // Read a page of durable run events
 // (GET /runs/{runId}/events)
 func (_ Unimplemented) ListRunEvents(w http.ResponseWriter, r *http.Request, runId RunId, params ListRunEventsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Send idempotent input to a running run
+// (POST /runs/{runId}/input)
+func (_ Unimplemented) SendRunInput(w http.ResponseWriter, r *http.Request, runId RunId, params SendRunInputParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -417,6 +477,88 @@ func (siw *ServerInterfaceWrapper) ListRunEvents(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListRunEvents(w, r, runId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SendRunInput operation middleware
+func (siw *ServerInterfaceWrapper) SendRunInput(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "runId" -------------
+	var runId RunId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "runId", chi.URLParam(r, "runId"), &runId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "runId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SendRunInputParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SendRunInput(w, r, runId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -716,6 +858,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/runs/{runId}/events", wrapper.ListRunEvents)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/runs/{runId}/input", wrapper.SendRunInput)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/runs/{runId}/start", wrapper.StartRun)
 	})
 	r.Group(func(r chi.Router) {
@@ -728,51 +873,55 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"cM45IzYAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
