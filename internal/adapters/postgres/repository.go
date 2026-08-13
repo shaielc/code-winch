@@ -141,17 +141,14 @@ func (s *Store) Append(ctx context.Context, runID domain.RunID, expected uint64,
 		if v.Sensitivity == protocol.SensitivitySecret {
 			return nil, fmt.Errorf("postgres repository: secret event rejected: run=%s event=%s", runID, v.EventID)
 		}
-		source, _ := json.Marshal(v.Source)
-		ext, _ := json.Marshal(v.Extensions)
-		if !json.Valid(v.Payload) {
-			return nil, errInvalidJSON
-		}
 		seq := expected + uint64(i) + 1
-		_, err = tx.Exec(ctx, `INSERT INTO run_events(run_id,sequence,event_id,occurred_at,kind,schema_version,source,sensitivity,payload,extensions) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, runID.String(), seq, v.EventID.String(), v.OccurredAt.Time(), v.Kind, v.SchemaVersion, source, v.Sensitivity, v.Payload, ext)
+		out[i] = application.NormalizeEvent(runID, seq, v, protocol.NormalizationPolicy{}).Event
+		source, _ := json.Marshal(out[i].Source)
+		ext, _ := json.Marshal(out[i].Extensions)
+		_, err = tx.Exec(ctx, `INSERT INTO run_events(run_id,sequence,event_id,occurred_at,kind,schema_version,source,sensitivity,payload,extensions) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, runID.String(), seq, out[i].EventID, out[i].OccurredAt, out[i].Kind, out[i].SchemaVersion, source, out[i].Sensitivity, out[i].Payload, ext)
 		if err != nil {
 			return nil, conflict(err, "run="+runID.String())
 		}
-		out[i] = protocol.Event{EventID: v.EventID.String(), RunID: runID.String(), Sequence: seq, OccurredAt: v.OccurredAt.Time(), Kind: v.Kind, SchemaVersion: v.SchemaVersion, Source: v.Source, Sensitivity: v.Sensitivity, Payload: v.Payload, Extensions: rawMap(v.Extensions)}
 		envelope, marshalErr := json.Marshal(out[i])
 		if marshalErr != nil {
 			return nil, marshalErr
@@ -223,13 +220,6 @@ func (s *Store) OutboxBacklog(ctx context.Context, now domain.Timestamp) (uint64
 	return count, err
 }
 
-func rawMap(in map[string][]byte) map[string]json.RawMessage {
-	out := make(map[string]json.RawMessage, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
-}
 func (s *Store) Read(ctx context.Context, runID domain.RunID, after uint64, limit int) ([]protocol.Event, error) {
 	if limit <= 0 {
 		return []protocol.Event{}, nil

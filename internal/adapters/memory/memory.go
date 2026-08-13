@@ -213,11 +213,8 @@ func (s *EventStore) Append(_ context.Context, runID domain.RunID, expected uint
 			return nil, fmt.Errorf("%w: run=%s event_id=%s", application.ErrConflict, runID, id)
 		}
 		seen[id] = struct{}{}
-		ext := make(map[string]json.RawMessage, len(value.Extensions))
-		for k, v := range value.Extensions {
-			ext[k] = cloneBytes(v)
-		}
-		added[i] = protocol.Event{EventID: id, RunID: runID.String(), Sequence: expected + uint64(i) + 1, OccurredAt: value.OccurredAt.Time(), Kind: value.Kind, SchemaVersion: value.SchemaVersion, Source: value.Source, Sensitivity: value.Sensitivity, Payload: cloneBytes(value.Payload), Extensions: ext}
+		result := application.NormalizeEvent(runID, expected+uint64(i)+1, value, protocol.NormalizationPolicy{})
+		added[i] = result.Event
 	}
 	s.events[runID] = append(current, cloneEvents(added)...)
 	return cloneEvents(added), nil

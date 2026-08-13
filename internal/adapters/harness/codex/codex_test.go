@@ -115,3 +115,30 @@ func TestFakeCLIIntegration(t *testing.T) {
 		t.Fatalf("events=%d err=%v", len(events), err)
 	}
 }
+
+func FuzzCodecChunkBoundaries(f *testing.F) {
+	f.Add([]byte(`{"type":"item.completed","item":{"type":"agent_message","text":"hello"}}`), uint8(7))
+	f.Add([]byte("not-json"), uint8(1))
+	f.Fuzz(func(t *testing.T, record []byte, width uint8) {
+		if len(record) > 4096 {
+			t.Skip()
+		}
+		codec, err := driver(t).NewCodec(context.Background(), spec(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		step := int(width) + 1
+		for start := 0; start < len(record); start += step {
+			end := min(start+step, len(record))
+			if _, err := codec.Consume(application.OutputChunk{Data: record[start:end]}); err != nil {
+				t.Fatalf("consume arbitrary bytes: %v", err)
+			}
+		}
+		if _, err := codec.Consume(application.OutputChunk{Data: []byte{'\n'}}); err != nil {
+			t.Fatalf("finish record: %v", err)
+		}
+		if _, err := codec.Flush(); err != nil {
+			t.Fatalf("flush: %v", err)
+		}
+	})
+}

@@ -73,6 +73,32 @@ func TestSchemaAndFixtures(t *testing.T) {
 	}
 }
 
+func TestSchemaRejectsInvalidFamilyFixtures(t *testing.T) {
+	schema := eventSchema(t)
+	files, err := filepath.Glob(filepath.Join("..", "..", "schemas", "events", "v1", "fixtures-invalid", "*.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 12 {
+		t.Fatalf("found %d invalid family fixtures, want 12", len(files))
+	}
+	for _, file := range files {
+		t.Run(filepath.Base(file), func(t *testing.T) {
+			data, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var document any
+			if err := json.Unmarshal(data, &document); err != nil {
+				t.Fatalf("fixture is not JSON: %v", err)
+			}
+			if err := schema.Validate(document); err == nil {
+				t.Fatal("invalid family fixture unexpectedly validated")
+			}
+		})
+	}
+}
+
 func TestCompatibilityRoundTrip(t *testing.T) {
 	for _, name := range []string{"compat-v1-minimal.json", "compat-unknown.json"} {
 		t.Run(name, func(t *testing.T) {
