@@ -23,7 +23,121 @@ var (
 	_ application.RunRepository = (*pgstore.Store)(nil)
 	_ application.EventStore    = (*pgstore.Store)(nil)
 	_ application.OutboxStore   = (*pgstore.Store)(nil)
+	_ application.WorkflowStore = (*pgstore.Store)(nil)
 )
+
+func TestWorkflowLeaseContentionExpiryAndFencing(t *testing.T) {
+	pool, store := database(t)
+	ctx := context.Background()
+	nowTime := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
+	now, _ := domain.NewTimestamp(nowTime)
+	instanceID := id(t, domain.ParseWorkflowID, 800)
+	step := application.WorkflowStepRecord{InstanceID: instanceID, StepID: "start", Attempt: 1, AttemptID: id(t, domain.ParseAttemptID, 801), State: "ready", AvailableAt: now}
+	definition := application.WorkflowDefinitionRecord{DefinitionID: "lease-test", Version: "1", Definition: []byte(`{"schemaVersion":1}`)}
+	if _, err := store.PutWorkflowDefinition(ctx, definition); err != nil {
+		t.Fatal(err)
+	}
+	instance := application.WorkflowInstanceRecord{ID: instanceID, DefinitionID: definition.DefinitionID, DefinitionVersion: definition.Version, Status: "running", Inputs: []byte(`{}`), CreatedAt: now}
+	if err := store.CreateWorkflowInstance(ctx, instance, []application.WorkflowStepRecord{step}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	type claimResult struct {
+		leases []application.StepLease
+		err    error
+	}
+	results := make(chan claimResult, 2)
+	until, _ := domain.NewTimestamp(nowTime.Add(time.Minute))
+	for worker := 1; worker <= 2; worker++ {
+		go func(worker int) {
+			token := fmt.Sprintf("00000000-0000-0000-0000-%012d", 810+worker)
+			leases, err := store.ClaimReadySteps(ctx, fmt.Sprintf("worker-%d", worker), token, now, until, 1)
+			results <- claimResult{leases, err}
+		}(worker)
+	}
+	var first application.StepLease
+	claimed := 0
+	for range 2 {
+		result := <-results
+		if result.err != nil {
+			t.Fatal(result.err)
+		}
+		claimed += len(result.leases)
+		if len(result.leases) == 1 {
+			first = result.leases[0]
+		}
+	}
+	if claimed != 1 {
+		t.Fatalf("workers claimed %d attempts, want 1", claimed)
+	}
+
+	reclaimAt, _ := domain.NewTimestamp(nowTime.Add(2 * time.Minute))
+	reclaimUntil, _ := domain.NewTimestamp(nowTime.Add(3 * time.Minute))
+	newToken := "00000000-0000-0000-0000-000000000899"
+	reclaimed, err := store.ClaimReadySteps(ctx, "replacement", newToken, reclaimAt, reclaimUntil, 1)
+	if err != nil || len(reclaimed) != 1 {
+		t.Fatalf("reclaim=%#v err=%v", reclaimed, err)
+	}
+	if err = store.CompleteStep(ctx, instanceID, step.StepID, 1, first.LeaseToken, "completed", reclaimAt, []byte(`{"safe":true}`)); !errors.Is(err, application.ErrConflict) {
+		t.Fatalf("stale worker completion: %v", err)
+	}
+	if err = store.CompleteStep(ctx, instanceID, step.StepID, 1, newToken, "completed", reclaimAt, []byte(`{"safe":true}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `UPDATE workflow_step_attempts SET output='{"changed":true}' WHERE instance_id=$1`, instanceID.String()); err == nil {
+		t.Fatal("database allowed completed attempt history mutation")
+	}
+	var intents int
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM workflow_outbox WHERE instance_id=$1`, instanceID.String()).Scan(&intents); err != nil || intents != 1 {
+		t.Fatalf("outbox intents=%d err=%v", intents, err)
+	}
+}
+
+func TestWorkflowDurableSignalsTimersHistoryAndCreateRollback(t *testing.T) {
+	pool, store := database(t)
+	ctx := context.Background()
+	nowTime := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
+	now, _ := domain.NewTimestamp(nowTime)
+	definition := application.WorkflowDefinitionRecord{DefinitionID: "durability-test", Version: "1", Definition: []byte(`{"steps":[]}`)}
+	if _, err := store.PutWorkflowDefinition(ctx, definition); err != nil {
+		t.Fatal(err)
+	}
+	instanceID := id(t, domain.ParseWorkflowID, 900)
+	instance := application.WorkflowInstanceRecord{ID: instanceID, DefinitionID: definition.DefinitionID, DefinitionVersion: definition.Version, Status: "running", Inputs: []byte(`{"safe":true}`), CreatedAt: now}
+	step := application.WorkflowStepRecord{InstanceID: instanceID, StepID: "wait", Attempt: 1, AttemptID: id(t, domain.ParseAttemptID, 901), State: "ready", AvailableAt: now}
+	if err := store.CreateWorkflowInstance(ctx, instance, []application.WorkflowStepRecord{step}, nil); err != nil {
+		t.Fatal(err)
+	}
+	signal := application.WorkflowSignalRecord{ID: id(t, domain.ParseCommandID, 902), InstanceID: instanceID, IdempotencyKey: "signal-1", Kind: "approval", Payload: []byte(`{"approved":true}`), ReceivedAt: now}
+	if created, err := store.PutWorkflowSignal(ctx, signal); err != nil || !created {
+		t.Fatalf("signal created=%v err=%v", created, err)
+	}
+	if created, err := store.PutWorkflowSignal(ctx, signal); err != nil || created {
+		t.Fatalf("signal replay created=%v err=%v", created, err)
+	}
+	timer := application.WorkflowTimerRecord{ID: id(t, domain.ParseCommandID, 903), InstanceID: instanceID, StepID: "wait", FireAt: now}
+	if created, err := store.PutWorkflowTimer(ctx, timer); err != nil || !created {
+		t.Fatalf("timer created=%v err=%v", created, err)
+	}
+	if fired, err := store.FireWorkflowTimers(ctx, now, 10); err != nil || len(fired) != 1 {
+		t.Fatalf("fired=%#v err=%v", fired, err)
+	}
+	if fired, err := store.FireWorkflowTimers(ctx, now, 10); err != nil || len(fired) != 0 {
+		t.Fatalf("timer replay=%#v err=%v", fired, err)
+	}
+
+	badID := id(t, domain.ParseWorkflowID, 910)
+	bad := application.WorkflowInstanceRecord{ID: badID, DefinitionID: definition.DefinitionID, DefinitionVersion: definition.Version, Status: "running", Inputs: []byte(`{}`), CreatedAt: now}
+	badStep := application.WorkflowStepRecord{InstanceID: badID, StepID: "bad", Attempt: 1, AttemptID: id(t, domain.ParseAttemptID, 911), State: "ready", AvailableAt: now}
+	lineage := application.WorkflowLineageRecord{InstanceID: badID, ParentInstanceID: id(t, domain.ParseWorkflowID, 999), ParentStepID: "missing"}
+	if err := store.CreateWorkflowInstance(ctx, bad, []application.WorkflowStepRecord{badStep}, &lineage); err == nil {
+		t.Fatal("create with missing parent succeeded")
+	}
+	var count int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM workflow_instances WHERE id=$1`, badID.String()).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("crash-point rollback count=%d err=%v", count, err)
+	}
+}
 
 func id[T any](t *testing.T, parse func(string) (T, error), n int) T {
 	t.Helper()

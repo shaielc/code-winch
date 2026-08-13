@@ -18,3 +18,14 @@ worker IDs and UUID lease tokens. Claims use expiring, fenced leases and
 message/event ID. Failed publishes use bounded exponential backoff and become
 poison records after the configured attempt limit. Worker metrics expose the
 ready backlog, retry count, and poison count without payload content.
+
+Workflow definitions and their versioned instances are stored alongside
+append-only step attempts, durable signals, timers, lineage, and transactional
+workflow outbox intents. `ClaimReadySteps` uses `SKIP LOCKED` so concurrent
+workers cannot claim the same attempt. An expired claim may be reclaimed with a
+new UUID token; workers must pass the returned token to `CompleteStep`, which
+rejects stale owners with `application.ErrConflict`. Operators should size the
+lease longer than normal database round trips and monitor retries: lease expiry
+permits duplicate execution, while the fencing token prevents a stale result
+from changing durable history. Logs should include workflow, step, and attempt
+identifiers, but not stored inputs, outputs, signals, or definition content.

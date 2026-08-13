@@ -103,3 +103,76 @@ type SecretReferenceStore interface {
 type RunnerGateway interface {
 	Send(context.Context, protocol.RunnerMessage) error
 }
+
+// Workflow persistence records contain only coordinator metadata and opaque
+// JSON documents. Callers must never place credentials or message content in
+// the operational fields used for claims and diagnostics.
+type WorkflowDefinitionRecord struct {
+	DefinitionID string
+	Version      string
+	Definition   []byte
+}
+
+type WorkflowInstanceRecord struct {
+	ID                domain.WorkflowID
+	DefinitionID      string
+	DefinitionVersion string
+	Status            string
+	Inputs            []byte
+	CreatedAt         domain.Timestamp
+}
+
+type WorkflowStepRecord struct {
+	InstanceID  domain.WorkflowID
+	StepID      string
+	Attempt     uint
+	AttemptID   domain.AttemptID
+	State       string
+	AvailableAt domain.Timestamp
+}
+
+// StepLease is an exclusive, expiring claim. LeaseToken is a fencing token:
+// every mutation made by a worker must present the currently persisted token.
+type StepLease struct {
+	WorkflowStepRecord
+	LeaseOwner     string
+	LeaseToken     string
+	LeaseExpiresAt domain.Timestamp
+}
+
+type WorkflowSignalRecord struct {
+	ID             domain.CommandID
+	InstanceID     domain.WorkflowID
+	IdempotencyKey string
+	Kind           string
+	Payload        []byte
+	ReceivedAt     domain.Timestamp
+}
+
+type WorkflowTimerRecord struct {
+	ID         domain.CommandID
+	InstanceID domain.WorkflowID
+	StepID     string
+	FireAt     domain.Timestamp
+}
+
+type WorkflowLineageRecord struct {
+	InstanceID       domain.WorkflowID
+	ParentInstanceID domain.WorkflowID
+	ParentStepID     string
+}
+
+// WorkflowStore is the durable coordinator boundary. Attempts are appended,
+// never replaced; implementations atomically claim ready attempts and fence
+// all subsequent worker updates with the lease token.
+type WorkflowStore interface {
+	PutWorkflowDefinition(context.Context, WorkflowDefinitionRecord) (bool, error)
+	CreateWorkflowInstance(context.Context, WorkflowInstanceRecord, []WorkflowStepRecord, *WorkflowLineageRecord) error
+	GetWorkflowInstance(context.Context, domain.WorkflowID) (WorkflowInstanceRecord, []WorkflowStepRecord, error)
+	AppendWorkflowAttempt(context.Context, WorkflowStepRecord) error
+	ClaimReadySteps(context.Context, string, string, domain.Timestamp, domain.Timestamp, int) ([]StepLease, error)
+	CompleteStep(context.Context, domain.WorkflowID, string, uint, string, string, domain.Timestamp, []byte) error
+	PutWorkflowSignal(context.Context, WorkflowSignalRecord) (bool, error)
+	PutWorkflowTimer(context.Context, WorkflowTimerRecord) (bool, error)
+	FireWorkflowTimers(context.Context, domain.Timestamp, int) ([]WorkflowTimerRecord, error)
+}
