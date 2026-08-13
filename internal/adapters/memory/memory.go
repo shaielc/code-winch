@@ -454,3 +454,116 @@ func (s *IDSource) NewWorkflowID() domain.WorkflowID {
 	defer s.mu.Unlock()
 	return pop(&s.WorkflowIDs, "workflow")
 }
+
+// SupervisorStore is a durable-in-process model of lease fencing used by the
+// daemon's local mode and supervisor contract tests.
+type SupervisorStore struct {
+	mu       sync.Mutex
+	controls map[domain.RunID]application.RunControl
+	events   map[domain.RunID][]protocol.Event
+}
+
+func (s *SupervisorStore) LoadControl(_ context.Context, id domain.RunID) (application.RunControl, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	value, ok := s.controls[id]
+	if !ok {
+		return application.RunControl{}, application.ErrNotFound
+	}
+	return value, nil
+}
+func (s *SupervisorStore) AcquireRunLease(_ context.Context, id domain.RunID, owner, token string, now, until domain.Timestamp) (application.RunLease, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if token == "" || owner == "" {
+		return application.RunLease{}, application.ErrConflict
+	}
+	if s.controls == nil {
+		s.controls = make(map[domain.RunID]application.RunControl)
+	}
+	c := s.controls[id]
+	if c.LeaseToken != "" && now.Time().Before(c.LeaseExpiresAt.Time()) {
+		return application.RunLease{}, application.ErrConflict
+	}
+	c.RunID = id
+	c.LeaseOwner = owner
+	c.LeaseToken = token
+	c.LeaseEpoch++
+	c.LeaseExpiresAt = until
+	c.Version++
+	s.controls[id] = c
+	return application.RunLease{RunID: id, Owner: owner, Token: token, Epoch: c.LeaseEpoch, ExpiresAt: until}, nil
+}
+func (s *SupervisorStore) valid(c application.RunControl, lease application.RunLease) bool {
+	return c.LeaseEpoch == lease.Epoch && c.LeaseToken == lease.Token && c.LeaseOwner == lease.Owner
+}
+func (s *SupervisorStore) RenewRunLease(_ context.Context, lease application.RunLease, until domain.Timestamp) (application.RunLease, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.controls[lease.RunID]
+	if !ok || !s.valid(c, lease) {
+		return lease, application.ErrConflict
+	}
+	c.LeaseExpiresAt = until
+	c.Version++
+	s.controls[lease.RunID] = c
+	lease.ExpiresAt = until
+	return lease, nil
+}
+func (s *SupervisorStore) ReleaseRunLease(_ context.Context, lease application.RunLease) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.controls[lease.RunID]
+	if !ok || !s.valid(c, lease) {
+		return application.ErrConflict
+	}
+	c.LeaseOwner = ""
+	c.LeaseToken = ""
+	c.Version++
+	s.controls[lease.RunID] = c
+	return nil
+}
+func (s *SupervisorStore) SaveDesiredState(_ context.Context, lease application.RunLease, state domain.RunState, harness, sandbox, execution string) (application.RunControl, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.controls[lease.RunID]
+	if !ok || !s.valid(c, lease) {
+		return c, application.ErrConflict
+	}
+	c.DesiredState = state
+	c.HarnessDriver = harness
+	c.SandboxDriver = sandbox
+	c.ExecutionID = execution
+	c.Version++
+	s.controls[lease.RunID] = c
+	return c, nil
+}
+func (s *SupervisorStore) AppendObservation(_ context.Context, lease application.RunLease, ordinal uint64, values []application.UnsequencedEvent) ([]protocol.Event, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.controls[lease.RunID]
+	if !ok || !s.valid(c, lease) || ordinal <= c.LastOrdinal {
+		return nil, application.ErrConflict
+	}
+	if s.events == nil {
+		s.events = make(map[domain.RunID][]protocol.Event)
+	}
+	out := make([]protocol.Event, len(values))
+	for i, v := range values {
+		seq := c.LastSequence + uint64(i) + 1
+		out[i] = protocol.Event{EventID: v.EventID.String(), RunID: lease.RunID.String(), Sequence: seq, OccurredAt: v.OccurredAt.Time(), Kind: v.Kind, SchemaVersion: v.SchemaVersion, Source: v.Source, Sensitivity: v.Sensitivity, Payload: cloneBytes(v.Payload), Extensions: rawMapMemory(v.Extensions)}
+	}
+	s.events[lease.RunID] = append(s.events[lease.RunID], cloneEvents(out)...)
+	c.LastSequence += uint64(len(values))
+	c.LastOrdinal = ordinal
+	c.Version++
+	s.controls[lease.RunID] = c
+	return cloneEvents(out), nil
+}
+func rawMapMemory(in map[string][]byte) map[string]json.RawMessage {
+	out := make(map[string]json.RawMessage, len(in))
+	for k, v := range in {
+		out[k] = cloneBytes(v)
+	}
+	return out
+}
