@@ -257,7 +257,8 @@ PAGE = """<!doctype html>
 </style>
 <header>
   <h1>Code Winch scheduler</h1>
-  <form method="post" action="/run"><button type="submit">Run scheduler</button></form>
+  <form method="post"><input type="hidden" name="action" value="run">
+    <button type="submit">Run scheduler</button></form>
   <button type="button" id="swap" hidden>Tree view</button>
 </header>
 <div class="sub">{summary}</div>
@@ -316,8 +317,15 @@ ROW = """<tr id="{id}">
 
 
 def button(action: str, task_id: str, label: str) -> str:
+    """Render a form that posts to the page's own URL, naming the action in a field.
+
+    Omitting the action attribute keeps every link on the page relative, so the panel works
+    unchanged whether it is reached directly or through a reverse proxy that mounts it under a
+    path prefix. An absolute /expire would leave that prefix behind and miss the proxy's route.
+    """
     return (
-        f'<form method="post" action="{action}">'
+        f'<form method="post">'
+        f'<input type="hidden" name="action" value="{html.escape(action)}">'
         f'<input type="hidden" name="task_id" value="{html.escape(task_id)}">'
         f'<button type="submit">{label}</button></form>'
     )
@@ -326,9 +334,9 @@ def button(action: str, task_id: str, label: str) -> str:
 def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
     actions = ""
     if entry["id"] in runnable:
-        actions += button("/run", entry["id"], "Run")
+        actions += button("run", entry["id"], "Run")
     if entry["local"] and entry["status"] != "completed":
-        actions += button("/expire", entry["id"], "Expire")
+        actions += button("expire", entry["id"], "Expire")
     return actions
 
 
@@ -446,8 +454,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _redirect(self, message: str) -> None:
+        """Redirect back to the page itself, carrying the message in the query.
+
+        The location is a bare query so it resolves against whatever URL the browser is on,
+        which keeps any reverse proxy path prefix that an absolute /? would drop.
+        """
         self.send_response(HTTPStatus.SEE_OTHER)
-        self.send_header("Location", "/?" + urlencode({"msg": message}))
+        self.send_header("Location", "?" + urlencode({"msg": message}))
         self.end_headers()
 
     def do_GET(self) -> None:
@@ -470,14 +483,16 @@ class Handler(BaseHTTPRequestHandler):
         self._send(HTTPStatus.OK, page.encode())
 
     def do_POST(self) -> None:
-        if self.path not in ("/expire", "/run"):
+        path, _, _ = self.path.partition("?")
+        if path != "/":
             self._send(HTTPStatus.NOT_FOUND, b"not found")
             return
         length = int(self.headers.get("Content-Length") or 0)
         form = parse_qs(self.rfile.read(length).decode())
+        action = (form.get("action") or [""])[0]
         task_id = (form.get("task_id") or [""])[0].upper()
 
-        if self.path == "/run":
+        if action == "run":
             self._redirect(
                 run_scheduler(
                     self.repo_root,
@@ -488,7 +503,10 @@ class Handler(BaseHTTPRequestHandler):
                 )
             )
             return
-        self._redirect(expire(self.state_file, task_id) if task_id else "no task selected")
+        if action == "expire":
+            self._redirect(expire(self.state_file, task_id) if task_id else "no task selected")
+            return
+        self._send(HTTPStatus.NOT_FOUND, b"not found")
 
 
 def parse_args() -> argparse.Namespace:
