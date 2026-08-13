@@ -175,7 +175,7 @@ func (s *Store) ClaimOutbox(ctx context.Context, owner, token string, now, until
 	rows, err := s.pool.Query(ctx, `WITH candidates AS (
 		SELECT o.id FROM outbox o WHERE o.completed_at IS NULL AND o.poisoned_at IS NULL AND o.available_at <= $3
 		AND (o.lease_expires_at IS NULL OR o.lease_expires_at <= $3)
-		AND NOT EXISTS (SELECT 1 FROM outbox prior WHERE prior.run_id=o.run_id AND prior.sequence<o.sequence AND prior.completed_at IS NULL AND prior.poisoned_at IS NULL)
+		AND NOT EXISTS (SELECT 1 FROM outbox prior WHERE prior.run_id=o.run_id AND prior.topic=o.topic AND prior.sequence<o.sequence AND prior.completed_at IS NULL AND prior.poisoned_at IS NULL)
 		ORDER BY o.run_id, o.sequence FOR UPDATE OF o SKIP LOCKED LIMIT $4
 	) UPDATE outbox o SET lease_owner=$1,lease_token=$2,lease_expires_at=$5,attempts=attempts+1
 	FROM candidates c WHERE o.id=c.id RETURNING o.id,o.topic,o.payload,o.lease_token::text,o.attempts`, owner, token, now.Time(), limit, until.Time())
@@ -257,6 +257,58 @@ func (s *Store) PutCommand(ctx context.Context, command InputCommand) (bool, err
 	}
 	tag, err := s.pool.Exec(ctx, `INSERT INTO input_commands(id,run_id,idempotency_key,kind,payload) VALUES($1,$2,$3,$4,$5) ON CONFLICT(run_id,idempotency_key) DO NOTHING`, command.ID.String(), command.RunID.String(), command.IdempotencyKey, command.Kind, command.Payload)
 	return tag.RowsAffected() == 1, err
+}
+
+// AcceptInput locks the run row so the expected state/sequence check and both
+// durable writes cannot race a lifecycle observation or another command.
+func (s *Store) AcceptInput(ctx context.Context, acceptance application.InputAcceptance) (application.InputResult, error) {
+	r := acceptance.Request
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return application.InputResult{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var state string
+	var lastSequence, commandSequence uint64
+	err = tx.QueryRow(ctx, `SELECT a.state,r.last_sequence,r.input_command_sequence FROM runs r JOIN run_attempts a ON a.run_id=r.id WHERE r.id=$1 ORDER BY a.ordinal DESC LIMIT 1 FOR UPDATE OF r`, r.RunID.String()).Scan(&state, &lastSequence, &commandSequence)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return application.InputResult{}, &application.InputError{Code: application.InputErrorNotFound, RunID: r.RunID, Kind: r.Kind}
+	}
+	if err != nil {
+		return application.InputResult{}, err
+	}
+	var existingID, existingKind string
+	err = tx.QueryRow(ctx, `SELECT id::text,kind FROM input_commands WHERE run_id=$1 AND idempotency_key=$2`, r.RunID.String(), r.IdempotencyKey).Scan(&existingID, &existingKind)
+	if err == nil {
+		id, _ := domain.ParseCommandID(existingID)
+		return application.InputResult{CommandID: id, RunID: r.RunID, Kind: application.InputKind(existingKind), Accepted: true}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return application.InputResult{}, err
+	}
+	current := domain.RunState(state)
+	if current != acceptance.Capabilities.State || (r.ExpectedState != "" && current != r.ExpectedState) || (r.ExpectedSequence != nil && lastSequence != *r.ExpectedSequence) {
+		return application.InputResult{}, &application.InputError{Code: application.InputErrorStaleState, RunID: r.RunID, Kind: r.Kind}
+	}
+	if !acceptance.Capabilities.Modes[r.Kind] {
+		return application.InputResult{}, &application.InputError{Code: application.InputErrorUnsupported, RunID: r.RunID, Kind: r.Kind}
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO input_commands(id,run_id,idempotency_key,kind,payload,actor_id,expected_state,expected_sequence) VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,''),$8)`, r.CommandID.String(), r.RunID.String(), r.IdempotencyKey, r.Kind, acceptance.DeliveryPayload, r.ActorID, r.ExpectedState, r.ExpectedSequence)
+	if err != nil {
+		return application.InputResult{}, conflict(err, "run="+r.RunID.String())
+	}
+	commandSequence++
+	if _, err = tx.Exec(ctx, `UPDATE runs SET input_command_sequence=$2 WHERE id=$1`, r.RunID.String(), commandSequence); err != nil {
+		return application.InputResult{}, err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO outbox(id,topic,payload,run_id,sequence) VALUES($1,'run.input',$2,$3,$4)`, r.CommandID.String(), acceptance.DeliveryPayload, r.RunID.String(), commandSequence); err != nil {
+		return application.InputResult{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return application.InputResult{}, conflict(err, "run="+r.RunID.String())
+	}
+	return application.InputResult{CommandID: r.CommandID, RunID: r.RunID, Kind: r.Kind, Accepted: true}, nil
 }
 
 func (s *Store) GetCommand(ctx context.Context, id domain.CommandID) (InputCommand, error) {

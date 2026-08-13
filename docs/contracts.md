@@ -75,6 +75,18 @@ an outbox record before delivery. The resulting event cites the command ID.
 Raw terminal input is a separately authorized capability because it can bypass
 structured approval or redaction semantics.
 
+The first delivery slice accepts `text`, `interrupt`, `terminal_bytes`, and
+`resize`. Acceptance checks the adapter's explicit input modes and current
+input-capable state, plus the caller's expected state and optional last event
+sequence. A repeated `(run ID, idempotency key)` returns the command ID and kind
+recorded by the first request; callers must retry with the same key and must not
+invent a new command ID after an ambiguous response. Acceptance and the
+`run.input` outbox intent commit in one transaction, so a daemon restart can
+resume delivery. Stable rejection codes are `INPUT_INVALID`,
+`INPUT_UNAUTHORIZED`, `INPUT_UNSUPPORTED`, `INPUT_STALE_STATE`, and
+`INPUT_RUN_NOT_FOUND`. Diagnostics may include run ID, command ID, and input
+kind, but must not include payload content, actor credentials, or lease tokens.
+
 ## 4. Runner protocol
 
 The remote-capable protocol has four conceptual streams:

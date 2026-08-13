@@ -20,10 +20,53 @@ import (
 )
 
 var (
-	_ application.RunRepository = (*pgstore.Store)(nil)
-	_ application.EventStore    = (*pgstore.Store)(nil)
-	_ application.OutboxStore   = (*pgstore.Store)(nil)
+	_ application.RunRepository     = (*pgstore.Store)(nil)
+	_ application.EventStore        = (*pgstore.Store)(nil)
+	_ application.OutboxStore       = (*pgstore.Store)(nil)
+	_ application.InputCommandStore = (*pgstore.Store)(nil)
 )
+
+func TestInputAcceptanceIsAtomicConcurrentAndReplayable(t *testing.T) {
+	pool, store := database(t)
+	runID := id(t, domain.ParseRunID, 800)
+	attemptID := id(t, domain.ParseAttemptID, 801)
+	if _, err := store.Save(context.Background(), application.RunRecord{ID: runID, Attempts: []domain.Attempt{{ID: attemptID, State: domain.RunStateRunning}}}, 0); err != nil {
+		t.Fatal(err)
+	}
+	seq := uint64(0)
+	accept := application.InputAcceptance{Request: application.InputRequest{CommandID: id(t, domain.ParseCommandID, 802), RunID: runID, IdempotencyKey: "duplicate", ActorID: "actor", Kind: application.InputText, Payload: application.InputPayload{Text: "secret content"}, ExpectedState: domain.RunStateRunning, ExpectedSequence: &seq}, Capabilities: application.InputCapabilities{State: domain.RunStateRunning, Modes: map[application.InputKind]bool{application.InputText: true}}, DeliveryPayload: []byte(`{"commandId":"00000000-0000-0000-0000-000000000802","kind":"text","payload":{"text":"secret content"}}`)}
+	type result struct {
+		value application.InputResult
+		err   error
+	}
+	results := make(chan result, 16)
+	for range 16 {
+		go func() { value, err := store.AcceptInput(context.Background(), accept); results <- result{value, err} }()
+	}
+	for range 16 {
+		got := <-results
+		if got.err != nil {
+			t.Fatal(got.err)
+		}
+		if got.value.CommandID != accept.Request.CommandID {
+			t.Fatalf("command=%s", got.value.CommandID)
+		}
+	}
+	var commands, intents int
+	_ = pool.QueryRow(context.Background(), `SELECT count(*) FROM input_commands`).Scan(&commands)
+	_ = pool.QueryRow(context.Background(), `SELECT count(*) FROM outbox WHERE topic='run.input' AND completed_at IS NULL`).Scan(&intents)
+	if commands != 1 || intents != 1 {
+		t.Fatalf("commands=%d intents=%d", commands, intents)
+	}
+	// A daemon crash before delivery is represented by the still-uncompleted
+	// intent; a new worker can claim it after restart.
+	now, _ := domain.NewTimestamp(time.Now().UTC())
+	until, _ := domain.NewTimestamp(time.Now().UTC().Add(time.Minute))
+	claimed, err := store.ClaimOutbox(context.Background(), "restart-worker", "00000000-0000-0000-0000-000000000899", now, until, 10)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("restart claim=%d err=%v", len(claimed), err)
+	}
+}
 
 func id[T any](t *testing.T, parse func(string) (T, error), n int) T {
 	t.Helper()

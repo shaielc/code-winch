@@ -85,6 +85,12 @@ type OutboxStore interface {
 	OutboxBacklog(context.Context, domain.Timestamp) (uint64, error)
 }
 
+// InputCommandStore atomically records a command result and its delivery
+// intent. Implementations return the already-recorded result on replay.
+type InputCommandStore interface {
+	AcceptInput(context.Context, InputAcceptance) (InputResult, error)
+}
+
 type SecretReference struct {
 	CredentialID domain.CredentialID
 	Provider     string
