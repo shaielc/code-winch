@@ -131,6 +131,32 @@ paths:
         "400": { $ref: "#/components/responses/ProblemBadRequest" }
         "401": { $ref: "#/components/responses/ProblemUnauthorized" }
         "404": { $ref: "#/components/responses/ProblemRunNotFound" }
+  /runs/{runId}/input:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      operationId: sendRunInput
+      summary: Send idempotent input to a running run
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RunInputRequest" }
+      responses:
+        "202":
+          description: Input was durably accepted or safely replayed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InputAccepted" }
+        "400": { $ref: "#/components/responses/ProblemBadRequest" }
+        "401": { $ref: "#/components/responses/ProblemUnauthorized" }
+        "404": { $ref: "#/components/responses/ProblemRunNotFound" }
+        "409": { $ref: "#/components/responses/ProblemStateConflict" }
+        "412": { $ref: "#/components/responses/ProblemPreconditionFailed" }
+        "428": { $ref: "#/components/responses/ProblemPreconditionRequired" }
 components:
   securitySchemes:
     bearerAuth:
@@ -215,6 +241,25 @@ components:
       additionalProperties: false
       properties:
         reason: { type: string, maxLength: 500 }
+    RunInputRequest:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [text, interrupt, terminal_bytes, resize] }
+        text: { type: string, maxLength: 65536 }
+        bytes: { type: string, format: byte, maxLength: 87384 }
+        rows: { type: integer, minimum: 1, maximum: 65535 }
+        columns: { type: integer, minimum: 1, maximum: 65535 }
+    InputAccepted:
+      type: object
+      additionalProperties: false
+      required: [commandId, runId, kind, accepted]
+      properties:
+        commandId: { type: string }
+        runId: { $ref: "#/components/schemas/RunId" }
+        kind: { type: string, enum: [text, interrupt, terminal_bytes, resize] }
+        accepted: { type: boolean }
     Run:
       type: object
       additionalProperties: false
