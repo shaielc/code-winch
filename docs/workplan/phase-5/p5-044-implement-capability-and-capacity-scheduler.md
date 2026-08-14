@@ -1,52 +1,89 @@
 # P5-044: Implement capability and capacity scheduler
 
 **Phase:** 5 — Remote runners and hardening
-**Dependencies:** P5-041, P5-043
-**Can run in parallel with:** Any task whose dependency list is satisfied and which does not edit the same contract surface.
+**Shape:** capability
+**Dependencies:** P5-041 (compile: the runner registry supplying capabilities and load), P2-059 (compile: the admission decision point this extends from one host to many)
 
 ## Objective
 
-Assign queued runs only to healthy runners satisfying harness, sandbox, policy, and resource requirements.
-
-## Architectural context
-
-Implement this as a thin increment behind the ports and boundaries defined in `docs/architecture.md`, `docs/code-structure.md`, and `docs/contracts.md`. Apply the threat model and secure defaults from `docs/security.md`; the phase gate remains authoritative in `docs/roadmap.md`.
+A run lands on a runner that can actually execute it, and a deployment with no
+capable runner says so instead of failing at launch.
 
 ## Scope
 
-- Filter by versioned capabilities and security profile
-- Account for CPU/memory/run slots and locality constraints
-- Explain pending/unschedulable reasons and avoid starvation
+- Placement by declared capability: required sandbox driver, harness adapter,
+  isolation class, and any capability the profile demands.
+- Placement by capacity: per-runner concurrency and resource headroom, extending
+  P2-059's admission from one host to the fleet.
+- No capable runner produces a queued run with a stated reason, not a failure;
+  a run whose requirements no registered runner can ever satisfy is refused at
+  creation.
+- Draining: a runner marked draining accepts no new work and finishes what it
+  has.
+- Placement decisions are recorded with the run and visible, so an operator can
+  answer "why did it go there".
+- Fleet metrics: capacity, headroom, placement failures, and queue depth per
+  capability class.
 
 ## Non-goals
 
-- Do not silently downgrade a security requirement
-- Do not schedule based on stale heartbeat indefinitely
+- Preemption, bin-packing optimality, or cost-aware placement.
+- Autoscaling runner hosts.
 
-## Deliverables
+## Runtime reachability
 
-- Production code and configuration for the scoped behavior, placed according to `docs/code-structure.md`.
-- Focused automated tests and deterministic fixtures; use injected time, IDs, runner, publisher, and secrets where relevant.
-- Contract/schema/migration updates required by the scope, including generated outputs from their declared source of truth.
-- Brief operator or developer documentation for any new command, configuration, failure mode, or security posture.
+Any run on a multi-runner deployment; `winch runners ls --capacity` and
+`winch run get <id> --json | jq .placement`.
+
+## Owned surfaces
+
+`internal/application/scheduler.go`,
+`api/openapi/components/run.yaml` (placement fields),
+`deployments/compose.fleet.yml`.
+
+## Demonstration
+
+    $ docker compose -f deployments/compose.yml -f deployments/compose.fleet.yml up -d --scale runner=3
+    $ for i in $(seq 6); do winch run create --sandbox docker --harness fake --json | jq -r .id; done | xargs -n1 winch run start
+    $ winch runners ls --capacity
+    → expect: work spread across capable runners, none over its declared limit
+
+    $ winch run get $ID --json | jq -r '.placement.runnerId, .placement.reason'
+    → expect: the runner and why it was chosen
+
+    # with every docker-capable runner drained:
+    $ winch run create --sandbox docker --harness fake && winch run ls
+    → expect: queued with a stated reason, not failed
+
+    # requesting a capability no runner declares:
+    → expect: refused at creation with a stable code
+
+    $ winch runners drain <id> && winch run ls --runner <id>
+    → expect: existing runs finish; no new run is placed there
+
+## Verification
+
+- Standing scenario suite passes on a multi-runner deployment.
+- Placement table test across capability and capacity combinations.
+- Drain test asserting in-flight work completes and new work does not arrive.
+- Metric tests for bounded labels on capability classes.
 
 ## Acceptance criteria
 
-- [ ] No incompatible runner receives an assignment
-- [ ] Capacity is not overcommitted beyond policy
-- [ ] Unschedulable state is stable and observable
-- [ ] Errors are stable and actionable; logs/traces include resource IDs but exclude content and secrets by default.
-- [ ] The implementation does not introduce an outward dependency into the domain or a cross-adapter import.
+- [ ] A run is never placed on a runner lacking a required capability.
+- [ ] Per-runner limits are never exceeded.
+- [ ] No capable runner means queued with a reason; impossible means refused at
+      creation.
+- [ ] Placement decisions are recorded and explainable.
+- [ ] Draining is observable and complete.
 
-## Required verification
+## Deferrals
 
-- Run scheduling matrix/property tests.
-- Run stale-heartbeat and fairness tests.
-- Run multi-runner capacity simulation.
-- Run the repository format, lint, unit-test, and build checks affected by the change.
+| Deferred | Owning task |
+|---|---|
+| Alerting on capacity exhaustion | P5-047 |
 
-## Implementation notes
+## Traces to
 
-- Prefer the smallest end-to-end behavior that proves the contract; keep optional optimizations out of this task.
-- Test failure and replay/idempotency behavior at every durable or asynchronous boundary introduced here.
-- Update this brief only when architectural review changes its scope, dependencies, or acceptance criteria.
+`docs/architecture.md` §5 Phase C, §7; `docs/contracts.md` §4;
+`docs/roadmap.md` Phase 5

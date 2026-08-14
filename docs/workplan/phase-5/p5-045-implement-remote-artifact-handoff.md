@@ -1,52 +1,86 @@
 # P5-045: Implement remote artifact handoff
 
 **Phase:** 5 — Remote runners and hardening
-**Dependencies:** P2-023, P5-042
-**Can run in parallel with:** Any task whose dependency list is satisfied and which does not edit the same contract surface.
+**Shape:** capability
+**Dependencies:** P5-042 (compile: the runner channel this transfer path extends), P2-023 (compile: the artifact store and digest contract content lands in)
 
 ## Objective
 
-Transfer content-addressed artifacts without proxying unbounded bodies through control-plane event streams.
-
-## Architectural context
-
-Implement this as a thin increment behind the ports and boundaries defined in `docs/architecture.md`, `docs/code-structure.md`, and `docs/contracts.md`. Apply the threat model and secure defaults from `docs/security.md`; the phase gate remains authoritative in `docs/roadmap.md`.
+An artifact produced on a runner host arrives intact in the control plane's
+store, verified by digest, without passing through the event stream.
 
 ## Scope
 
-- Signed storage handoff or bounded chunk protocol
-- Digest verification, resume, expiry, authorization, quotas, and cleanup
-- Associate artifact only after verified completion
+- Content-addressed transfer: the runner announces digest, size, and media type;
+  the control plane accepts, or skips content it already holds.
+- Either direct upload or a signed-storage handoff, chosen by configuration, so
+  a deployment with object storage does not proxy bytes through the daemon.
+- Resumable transfer with bounded concurrency and bounded memory; a partial
+  transfer resumes rather than restarting.
+- Digest verification on arrival; a mismatch is rejected and recorded, never
+  stored.
+- Cleanup of runner-side staged content on success, on failure, and after a
+  crash, including deletion propagation when P2-027 deletes an artifact whose
+  copy still exists on a runner.
+- Size and count limits per run, refused with a stable code.
 
 ## Non-goals
 
-- Do not trust runner-provided digest or media type without verification
-- Do not include credentials in artifact events
+- Artifact rendering — P2-023 owns the changes view.
+- Cross-runner artifact sharing.
 
-## Deliverables
+## Runtime reachability
 
-- Production code and configuration for the scoped behavior, placed according to `docs/code-structure.md`.
-- Focused automated tests and deterministic fixtures; use injected time, IDs, runner, publisher, and secrets where relevant.
-- Contract/schema/migration updates required by the scope, including generated outputs from their declared source of truth.
-- Brief operator or developer documentation for any new command, configuration, failure mode, or security posture.
+Any remote run producing artifacts; `winch run artifacts --download` reads the
+transferred content.
+
+## Owned surfaces
+
+`internal/adapters/transport/runnerrpc/artifact.go`,
+`internal/application/artifact_transfer.go`, `test/integration/artifact/`.
+
+## Demonstration
+
+    $ ID=$(winch run create --harness fake --scenario writes-large-files --json | jq -r .id)
+    $ winch run start $ID   # placed on a remote runner
+    $ winch run artifacts $ID --download <artifact-id> | sha256sum
+    → expect: matches the digest the runner announced
+
+    $ docker network disconnect <net> <runner> && sleep 3 && docker network connect …
+    → expect: the transfer resumes from where it stopped, not from zero
+
+    # with a runner that corrupts a byte mid-transfer:
+    → expect: rejected on digest mismatch, recorded, and not stored
+
+    $ winch delete run $ID && docker compose exec runner ls <staging-dir>
+    → expect: empty; deletion propagated to the runner's copy
+
+    $ docker stats --no-stream <daemon-container>
+    → expect: bounded memory during a multi-gigabyte transfer
+
+## Verification
+
+- Standing scenario suite passes with artifacts produced remotely.
+- Resume tests interrupting at start, middle, and end of a transfer.
+- Corruption and digest-mismatch tests.
+- Memory-bound test under a large transfer.
+- Deletion propagation test including a runner offline at deletion time.
 
 ## Acceptance criteria
 
-- [ ] Interrupted uploads resume or fail cleanly
-- [ ] Digest mismatch never creates a published artifact
-- [ ] Expired grants cannot upload or download
-- [ ] Errors are stable and actionable; logs/traces include resource IDs but exclude content and secrets by default.
-- [ ] The implementation does not introduce an outward dependency into the domain or a cross-adapter import.
+- [ ] Transferred content matches its announced digest or is rejected.
+- [ ] Transfers resume rather than restart.
+- [ ] Bytes do not pass through the event stream.
+- [ ] Deletion reaches runner-side copies, including after a delay.
+- [ ] Memory stays bounded regardless of artifact size.
 
-## Required verification
+## Deferrals
 
-- Run interrupted/resumed transfer tests.
-- Run digest/quota/expiry tests.
-- Run unauthorized handoff tests.
-- Run the repository format, lint, unit-test, and build checks affected by the change.
+| Deferred | Owning task |
+|---|---|
+| Backup and restore of transferred artifacts | P5-046 |
 
-## Implementation notes
+## Traces to
 
-- Prefer the smallest end-to-end behavior that proves the contract; keep optional optimizations out of this task.
-- Test failure and replay/idempotency behavior at every durable or asynchronous boundary introduced here.
-- Update this brief only when architectural review changes its scope, dependencies, or acceptance criteria.
+`docs/contracts.md` §4 (artifact transfer); `docs/architecture.md` §6;
+`docs/security.md` T14; `docs/roadmap.md` Phase 5

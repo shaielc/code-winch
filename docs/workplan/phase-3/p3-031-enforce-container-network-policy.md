@@ -1,53 +1,90 @@
 # P3-031: Enforce container network policy
 
 **Phase:** 3 — Docker isolation
-**Dependencies:** P3-029, P3-030
-**Can run in parallel with:** Any task whose dependency list is satisfied and which does not edit the same contract surface.
+**Shape:** hardening
+**Dependencies:** P3-029 (compile: the container network the policy is applied to), P3-030 (contract: the allowlist is a profile field, not a per-run flag)
 
 ## Objective
 
-Provide deny-by-default egress with explicit administrator allowlists and metadata endpoint protection.
-
-## Architectural context
-
-Implement this as a thin increment behind the ports and boundaries defined in `docs/architecture.md`, `docs/code-structure.md`, and `docs/contracts.md`. Apply the threat model and secure defaults from `docs/security.md`; the phase gate remains authoritative in `docs/roadmap.md`.
+A container denied egress cannot reach the network, and one with an allowlist
+can reach exactly the approved destinations and nothing else — including cloud
+metadata.
 
 ## Scope
 
-- Create per-run network identity
-- Enforce DNS/IP/port rules outside the container namespace where practical
-- Block link-local/cloud metadata and record safe network audit facts
-- Clean network resources idempotently
+- Deny-by-default egress on a dedicated per-run network, enforced outside the
+  container's own namespace so a root process inside cannot undo it.
+- Domain and port allowlists from the profile, with resolved-IP checks so a
+  permitted name that resolves to a denied address is still blocked.
+- Link-local, loopback-to-host, and cloud-metadata address ranges blocked
+  unconditionally, in every profile, including allowlisted ones.
+- DNS constrained to the approved resolver, with rebinding checks between
+  resolution and connection.
+- Content-free audit facts for blocked and allowed connections: destination
+  class, port, decision, and count — never a URL, query string, or header.
+- Record the acknowledged limit: without TLS interception, enforcement is based
+  on DNS, IP, and SNI, and cannot identify end-to-end TLS content.
 
 ## Non-goals
 
-- Do not claim TLS content inspection
-- Do not trust in-container firewall rules as the sole boundary
+- A communication or API proxy. That is an optional adapter capability and a
+  deferred decision in `docs/roadmap.md`.
+- TLS interception.
+- Ingress. Nothing dials into a sandbox.
 
-## Deliverables
+## Runtime reachability
 
-- Production code and configuration for the scoped behavior, placed according to `docs/code-structure.md`.
-- Focused automated tests and deterministic fixtures; use injected time, IDs, runner, publisher, and secrets where relevant.
-- Contract/schema/migration updates required by the scope, including generated outputs from their declared source of truth.
-- Brief operator or developer documentation for any new command, configuration, failure mode, or security posture.
+Any run on `container-standard` or `container-readonly`; blocked attempts appear
+as audit facts in `winch audit ls`.
+
+## Owned surfaces
+
+`internal/adapters/sandbox/docker/network.go`,
+`deployments/profiles/*.yaml` (network fields), `test/integration/network/`.
+
+## Demonstration
+
+    $ ID=$(winch run create --profile container-readonly --harness fake --scenario probes-network --json | jq -r .id)
+    $ winch run start $ID && winch run watch $ID | grep -c 'connection refused\|blocked'
+    → expect: every probe blocked
+
+    $ docker exec $(docker ps -q -f label=winch.run=$ID) curl -sS --max-time 3 http://169.254.169.254/
+    → expect: fails, on every profile, including one with an allowlist
+
+    # with an allowlist of example.com:443:
+    $ docker exec … curl -sS https://example.com >/dev/null && echo allowed
+    $ docker exec … curl -sS https://other.example >/dev/null || echo blocked
+    → expect: allowed, then blocked
+
+    # with a name in the allowlist resolving to a denied address:
+    → expect: blocked at connect time, not merely at resolution
+
+    $ winch audit ls --run $ID
+    → expect: decision facts with destination class and port; no URL or header
+
+## Verification
+
+- Standing scenario suite passes on both container profiles.
+- Egress test matrix: denied, allowlisted, metadata, link-local, loopback,
+  alternate resolver, and rebinding.
+- A test asserting a root process inside the container cannot remove the policy.
+- Audit field test rejecting any free-form value.
 
 ## Acceptance criteria
 
-- [ ] Deny profile has no egress including DNS and metadata
-- [ ] Allowlist permits only declared destinations/ports
-- [ ] Policy survives container attempts to alter its namespace
-- [ ] Errors are stable and actionable; logs/traces include resource IDs but exclude content and secrets by default.
-- [ ] The implementation does not introduce an outward dependency into the domain or a cross-adapter import.
+- [ ] Deny-by-default holds even for a root process inside the container.
+- [ ] Metadata and link-local ranges are unreachable on every profile.
+- [ ] An allowlisted name resolving to a denied address is blocked.
+- [ ] Blocked and allowed decisions are audited without content.
+- [ ] The DNS/IP/SNI limitation is documented alongside the control.
 
-## Required verification
+## Deferrals
 
-- Run adversarial egress integration tests.
-- Run DNS rebinding/metadata endpoint tests.
-- Run network cleanup reconciliation tests.
-- Run the repository format, lint, unit-test, and build checks affected by the change.
+| Deferred | Owning task |
+|---|---|
+| Communication/API proxy with credential attachment | `docs/roadmap.md` deferred decision |
+| Showing network posture to the user before launch | P3-033 |
 
-## Implementation notes
+## Traces to
 
-- Prefer the smallest end-to-end behavior that proves the contract; keep optional optimizations out of this task.
-- Test failure and replay/idempotency behavior at every durable or asynchronous boundary introduced here.
-- Update this brief only when architectural review changes its scope, dependencies, or acceptance criteria.
+`docs/security.md` §6, §8, T09, LB04; `docs/roadmap.md` Phase 3

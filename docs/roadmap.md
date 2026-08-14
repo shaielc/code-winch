@@ -84,6 +84,14 @@ observable.
 | Third-party adapter plugins | two built-in adapters validate contract | external ecosystem demand |
 | MicroVM sandbox | container risk is quantified | hostile multi-tenant workloads |
 | CRDT/shared terminal input | single-controller semantics proven | true simultaneous collaboration demand |
+| Out-of-process renderer isolation | a renderer runs server-side or is not built in | any renderer that is experimental, third-party, or executes outside the browser |
+| Interactive harness login proxying | non-interactive login patterns cover the shipped adapters | an adapter offers no OAuth, device flow, or token entry |
+| Renderer output caching | projection cost is measured against real event volumes | renderer latency or CPU becomes a visible cost |
+| Communication/API proxy | egress policy by DNS/IP/SNI is in place and measured | credential non-disclosure, billing, or redaction requires a local endpoint |
+| SQLite single-process developer profile | the PostgreSQL compose stack is a friction point | contributors cannot or will not run a database |
+
+Each row is a decision no task owns by design. A brief may cite one instead of
+naming an owning task ID; anything not in this table needs an owner.
 
 ## Initial acceptance metrics
 

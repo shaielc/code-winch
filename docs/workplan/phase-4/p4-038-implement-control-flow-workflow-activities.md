@@ -1,53 +1,85 @@
 # P4-038: Implement control-flow workflow activities
 
 **Phase:** 4 — Top-level workflows
-**Dependencies:** P2-023, P4-036
-**Can run in parallel with:** Any task whose dependency list is satisfied and which does not edit the same contract surface.
+**Shape:** capability
+**Dependencies:** P4-036 (compile: the activity registry), P2-024 (semantic: `approval.wait` needs bound, expiring approvals), P2-023 (semantic: `artifact.publish` needs an artifact store)
 
 ## Objective
 
-Implement condition, bounded parallel, bounded foreach, artifact.publish, and declared compensation behavior.
-
-## Architectural context
-
-Implement this as a thin increment behind the ports and boundaries defined in `docs/architecture.md`, `docs/code-structure.md`, and `docs/contracts.md`. Apply the threat model and secure defaults from `docs/security.md`; the phase gate remains authoritative in `docs/roadmap.md`.
+A workflow branches on a condition, fans out with bounded concurrency, waits for
+a human approval, and publishes an artifact.
 
 ## Scope
 
-- Deterministic branch IDs and joins
-- Configurable fail-fast/collect behavior
-- Concurrency limits across replay and worker restarts
-- Authorized artifact publication
+- `condition` with typed predicates over prior step outputs, no embedded code.
+- `parallel` and `foreach` with bounded concurrency declared in the definition
+  and enforced by the coordinator, not by the host's goroutine count.
+- `approval.wait`: binds to an approval record from P2-024, honours its expiry,
+  and resolves through the same input path a user uses.
+- `artifact.publish` writing through the artifact store with its sensitivity
+  class, so retention and export treat it identically to a run's artifacts.
+- Compensation where a definition declares it, invoked on branch failure.
+- A cancelled or failed branch leaves siblings in a defined state rather than
+  orphaned.
 
 ## Non-goals
 
-- Do not allow unbounded fan-out
-- Do not infer compensation for undeclared side effects
+- Arbitrary user code in a definition. Custom behavior uses a registered,
+  policy-controlled activity per `docs/contracts.md` §7.
+- Unbounded fan-out.
 
-## Deliverables
+## Runtime reachability
 
-- Production code and configuration for the scoped behavior, placed according to `docs/code-structure.md`.
-- Focused automated tests and deterministic fixtures; use injected time, IDs, runner, publisher, and secrets where relevant.
-- Contract/schema/migration updates required by the scope, including generated outputs from their declared source of truth.
-- Brief operator or developer documentation for any new command, configuration, failure mode, or security posture.
+`winch workflow start` with definitions exercising each step type; approvals
+answered through `winch run approve` or the browser.
+
+## Owned surfaces
+
+`internal/workflow/activities/control.go`,
+`internal/workflow/activities/approval.go`,
+`internal/workflow/activities/artifact.go`,
+`test/scenarios/workflow-control-*.json`.
+
+## Demonstration
+
+    $ winch workflow start --definition test/scenarios/workflow-foreach.json
+    $ winch workflow get $WID --json | jq '[.steps[] | select(.state=="running")] | length'
+    → expect: never more than the declared concurrency, sampled repeatedly
+
+    $ winch workflow start --definition test/scenarios/workflow-approval.json
+    $ winch workflow get $WID --json | jq -r '.steps[] | select(.type=="approval.wait") | .state'
+    → expect: waiting, with an approval ID
+    $ winch run approve $RID --approval $A --decision allow
+    → expect: the step completes and the instance advances
+
+    # the same instance, left unanswered past the approval's expiry:
+    → expect: the step fails on expiry, and compensation runs if declared
+
+    $ winch workflow get $WID --json | jq -r '.steps[] | select(.type=="artifact.publish") | .output.artifactId'
+    $ winch run artifacts --artifact $AID
+    → expect: the artifact exists with its declared sensitivity class
+
+## Verification
+
+- Standing scenario suite passes with a control-flow workflow in the path.
+- Concurrency bound test under a fast-completing `foreach`.
+- Approval expiry and double-resolution tests with a fake clock.
+- Compensation test on branch failure, including compensation itself failing.
 
 ## Acceptance criteria
 
-- [ ] Fan-out never exceeds declared bounds
-- [ ] Branch results join deterministically
-- [ ] Restart preserves branch status and capacity accounting
-- [ ] Errors are stable and actionable; logs/traces include resource IDs but exclude content and secrets by default.
-- [ ] The implementation does not introduce an outward dependency into the domain or a cross-adapter import.
+- [ ] Declared concurrency is never exceeded.
+- [ ] `approval.wait` uses the same approval records and input path a user does.
+- [ ] Published artifacts carry a sensitivity class and are subject to retention.
+- [ ] A failed branch leaves siblings in a defined, inspectable state.
+- [ ] No definition can execute arbitrary code.
 
-## Required verification
+## Deferrals
 
-- Run branch ordering/property tests.
-- Run concurrency-limit stress test.
-- Run restart and compensation tests.
-- Run the repository format, lint, unit-test, and build checks affected by the change.
+| Deferred | Owning task |
+|---|---|
+| Exposing these steps over HTTP and in the UI | P4-039, P4-040 |
 
-## Implementation notes
+## Traces to
 
-- Prefer the smallest end-to-end behavior that proves the contract; keep optional optimizations out of this task.
-- Test failure and replay/idempotency behavior at every durable or asynchronous boundary introduced here.
-- Update this brief only when architectural review changes its scope, dependencies, or acceptance criteria.
+`docs/contracts.md` §7; `docs/security.md` §10; `docs/roadmap.md` Phase 4

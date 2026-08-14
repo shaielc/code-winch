@@ -1,52 +1,85 @@
 # P4-036: Implement workflow coordinator replay loop
 
 **Phase:** 4 — Top-level workflows
-**Dependencies:** P4-035
-**Can run in parallel with:** Any task whose dependency list is satisfied and which does not edit the same contract surface.
+**Shape:** seam
+**Dependencies:** P4-035 (compile: the repository, step leases, timers, and signals the loop claims and advances)
 
 ## Objective
 
-Drive ready steps from durable state and domain events so restart/replay is safe.
-
-## Architectural context
-
-Implement this as a thin increment behind the ports and boundaries defined in `docs/architecture.md`, `docs/code-structure.md`, and `docs/contracts.md`. Apply the threat model and secure defaults from `docs/security.md`; the phase gate remains authoritative in `docs/roadmap.md`.
+A workflow instance advances through its graph, survives a coordinator restart
+mid-step, and resumes without duplicating an effect.
 
 ## Scope
 
-- Claim, dispatch, wait, retry/backoff, timeout, complete/fail, cancel, and compensation orchestration
-- Use deterministic idempotency keys from instance, step, and attempt
-- Consume run events through application ports rather than process control
+- A worker loop claiming ready steps under lease, evaluating readiness from
+  persisted state only, and releasing or expiring leases without losing work.
+- Deterministic idempotency keys derived from workflow instance, step, and
+  attempt, so replay after a crash cannot issue an external effect twice.
+- Retry with the definition's policy, timeout handling, and durable timers.
+- Signal delivery: a waiting step wakes when its signal arrives, and a signal
+  arriving before the wait is not lost.
+- A no-op activity registry plus one trivial built-in step, so the loop is
+  runnable and observable before real activities exist.
+- Cancellation: cancelling an instance stops scheduling and marks every active
+  branch.
 
 ## Non-goals
 
-- Do not call sandbox or harness drivers directly
-- Do not use sleeps for durable timers
+- Real activities. `run.*`, `event.wait`, `approval.wait`, `condition`,
+  `parallel`, `foreach`, and `artifact.publish` are P4-037 and P4-038.
+- An HTTP surface — P4-039. This task is driven by the CLI.
+- Replacing the database coordinator with a dedicated engine; that stays a
+  deferred decision behind the `WorkflowRuntime` port.
 
-## Deliverables
+## Runtime reachability
 
-- Production code and configuration for the scoped behavior, placed according to `docs/code-structure.md`.
-- Focused automated tests and deterministic fixtures; use injected time, IDs, runner, publisher, and secrets where relevant.
-- Contract/schema/migration updates required by the scope, including generated outputs from their declared source of truth.
-- Brief operator or developer documentation for any new command, configuration, failure mode, or security posture.
+The workflow worker inside `winchd`; `winch workflow start|get` driving a
+definition composed only of built-in no-op steps.
+
+## Owned surfaces
+
+`internal/workflow/coordinator.go`, `internal/workflow/registry.go`,
+`cmd/winchd/main.go` (worker registration), `cmd/winch/workflow.go`,
+`test/scenarios/workflow-*.json`.
+
+## Demonstration
+
+    $ winch workflow start --definition test/scenarios/workflow-noop.json --json | jq -r .id
+    $ winch workflow get $WID --json | jq -r '.steps[] | "\(.id) \(.state)"'
+    → expect: every step reaching a terminal state in graph order
+
+    $ winch workflow start --definition test/scenarios/workflow-slow.json &
+    $ docker compose -f deployments/compose.yml kill winchd && docker compose up -d winchd
+    $ winch workflow get $WID --json | jq '[.steps[] | select(.attempts > 1)] | length'
+    → expect: the interrupted step resumes; no step records a duplicated effect
+
+    $ winch workflow cancel $WID
+    → expect: every active branch marked cancelled, and no further scheduling
+
+## Verification
+
+- Standing scenario suite passes with the worker running.
+- Multi-worker contention test: two coordinators, one instance, no double claim.
+- Crash-point tests at each durable boundary, asserting exactly-once effects.
+- Fake-clock tests for timers, retry backoff, and lease expiry.
 
 ## Acceptance criteria
 
-- [ ] Restart at every dispatch boundary duplicates no external effect
-- [ ] Retries create explicit attempts
-- [ ] Cancellation reaches every active branch and is observable
-- [ ] Errors are stable and actionable; logs/traces include resource IDs but exclude content and secrets by default.
-- [ ] The implementation does not introduce an outward dependency into the domain or a cross-adapter import.
+- [ ] Coordinator restart mid-step does not duplicate an effect.
+- [ ] A signal arriving before its wait step is not lost.
+- [ ] Two workers cannot own one step attempt.
+- [ ] Cancellation reaches every active branch.
+- [ ] Readiness is computed from persisted state alone.
 
-## Required verification
+## Deferrals
 
-- Run deterministic replay/crash matrix.
-- Run fake-time timeout/retry tests.
-- Run cancellation propagation tests.
-- Run the repository format, lint, unit-test, and build checks affected by the change.
+| Deferred | Owning task |
+|---|---|
+| Run-issuing activities | P4-037 |
+| Control-flow, approval, and artifact activities | P4-038 |
+| HTTP and UI surfaces | P4-039, P4-040 |
 
-## Implementation notes
+## Traces to
 
-- Prefer the smallest end-to-end behavior that proves the contract; keep optional optimizations out of this task.
-- Test failure and replay/idempotency behavior at every durable or asynchronous boundary introduced here.
-- Update this brief only when architectural review changes its scope, dependencies, or acceptance criteria.
+`docs/architecture.md` §4 (workflow coordinator); `docs/contracts.md` §7;
+`docs/roadmap.md` Phase 4 exit

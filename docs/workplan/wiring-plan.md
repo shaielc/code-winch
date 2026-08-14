@@ -1,5 +1,20 @@
 # Wiring plan: from components to a running daemon
 
+> **Superseded 2026-08-14.** The diagnosis below is accurate and worth reading;
+> the proposed task IDs are not. `P1-021` – `P1-025` collide with the existing
+> `P2-021` – `P2-025`, since task numbers are globally sequential. The work is
+> now owned by **P1-048 – P1-054** in [`README.md`](README.md), which also splits
+> the strict five-task chain proposed here into three independent roots, adds the
+> operator CLI and the standing scenario suite the chain omitted, and folds the
+> telemetry foundation this document recommends doing first into P1-048.
+>
+> | Proposed here | Now |
+> |---|---|
+> | P1-021 sandbox I/O + P1-022 local runner | P1-049 |
+> | P1-023 run use cases + P1-024 HTTP/outbox binding | P1-050 |
+> | P1-025 composition root and deployment profile | P1-048 |
+> | — | P1-051 operator CLI, P1-052 controllable fake, P1-053 scenario suite, P1-054 credentials |
+
 Phase 1 has produced every component a minimal deployment needs, but nothing
 that connects them. `cmd/winchd/main.go` is still `func main() {}`, and the two
 seams that would join the pieces — the runner that owns process I/O, and the

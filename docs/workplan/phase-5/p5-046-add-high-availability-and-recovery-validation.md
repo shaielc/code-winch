@@ -1,53 +1,93 @@
 # P5-046: Add high-availability and recovery validation
 
 **Phase:** 5 — Remote runners and hardening
-**Dependencies:** P4-036, P5-043, P5-045
-**Can run in parallel with:** Any task whose dependency list is satisfied and which does not edit the same contract surface.
+**Shape:** hardening
+**Dependencies:** P5-043 (semantic: ownership must be fenced before multiple API and worker replicas are safe), P5-045 (semantic: recovery must account for artifacts held remotely), P4-036 (semantic: coordinator restart is part of what recovery must prove)
 
 ## Objective
 
-Prove stateless API replicas and leased workers recover through process, database, and runner failures.
-
-## Architectural context
-
-Implement this as a thin increment behind the ports and boundaries defined in `docs/architecture.md`, `docs/code-structure.md`, and `docs/contracts.md`. Apply the threat model and secure defaults from `docs/security.md`; the phase gate remains authoritative in `docs/roadmap.md`.
+Losing an API replica, a worker, a runner, or the database does not lose a run's
+history — and a restore is exercised rather than assumed.
 
 ## Scope
 
-- Multi-replica supervisor/workflow tests
-- Backup/restore procedure and restoration verification
-- Graceful shutdown/drain and rolling-upgrade compatibility
-- Fault-injection scenarios
+- Multiple stateless API replicas behind one entry point, with sticky-free
+  WebSocket handling so a browser reconnects to any replica.
+- Multiple supervisor and workflow workers claiming leases, with a documented
+  and tested failover time.
+- Backup and restore: scheduled backups, a documented restore procedure, and a
+  drill that restores into a clean environment and replays the standing
+  scenarios against it.
+- Backup expiry that does not exceed any sensitivity class maximum, verified
+  rather than configured.
+- Failure-injection drills covering replica loss, worker loss, runner loss,
+  database failover, and a partial-storage outage.
+- An incident-response record naming on-call contacts and exercising credential
+  revocation, runner revocation, audit preservation, containment, and user
+  notification.
 
 ## Non-goals
 
-- Do not claim HA without measured recovery tests
-- Do not make PostgreSQL non-authoritative
+- Multi-region topology.
+- Zero-downtime schema migration as a general framework; this task documents the
+  procedure that the current migrations require.
 
-## Deliverables
+## Runtime reachability
 
-- Production code and configuration for the scoped behavior, placed according to `docs/code-structure.md`.
-- Focused automated tests and deterministic fixtures; use injected time, IDs, runner, publisher, and secrets where relevant.
-- Contract/schema/migration updates required by the scope, including generated outputs from their declared source of truth.
-- Brief operator or developer documentation for any new command, configuration, failure mode, or security posture.
+`deployments/compose.ha.yml`; `make ha-drill` runs the injection suite against
+it.
+
+## Owned surfaces
+
+`deployments/compose.ha.yml`, `Makefile` (`ha-drill`, `restore-drill`),
+`test/resilience/`, `docs/operations/recovery.md`.
+
+## Demonstration
+
+    $ docker compose -f deployments/compose.ha.yml up -d --scale winchd=3
+    $ make ha-drill
+    → expect: every injected failure recovers within its documented budget
+
+    # with a live run streaming to a browser:
+    $ docker compose kill winchd-2
+    → expect: the browser reconnects to another replica and resumes with no gap
+      and no duplicate
+
+    $ make restore-drill
+    → expect: a backup restored into a clean environment, then the standing
+      scenarios pass against it
+
+    $ winch backup verify --expiry
+    → expect: no backup retained longer than its highest included sensitivity
+      class allows
+
+    # incident drill:
+    $ winch credential revoke <id> && winch runners revoke <id>
+    → expect: both effective immediately; audit records preserved and readable
+
+## Verification
+
+- Standing scenario suite passes against the HA deployment and against the
+  restored environment.
+- Failover timing tests with a documented budget per component.
+- Backup expiry verification test.
+- An audit-preservation test asserting records survive every drill.
 
 ## Acceptance criteria
 
-- [ ] Replica loss duplicates no ownership/effect
-- [ ] Restore recovers runs, events, workflows, and artifact references consistently
-- [ ] Supported rolling versions interoperate
-- [ ] Errors are stable and actionable; logs/traces include resource IDs but exclude content and secrets by default.
-- [ ] The implementation does not introduce an outward dependency into the domain or a cross-adapter import.
+- [ ] No drill loses or duplicates a persisted event.
+- [ ] Failover completes within its documented budget for each component.
+- [ ] A restore is demonstrated, not described.
+- [ ] Backup expiry respects every sensitivity class maximum.
+- [ ] Credential and runner revocation are exercised end to end.
 
-## Required verification
+## Deferrals
 
-- Run multi-replica failover suite.
-- Run backup/restore drill.
-- Run rolling-version compatibility test.
-- Run the repository format, lint, unit-test, and build checks affected by the change.
+| Deferred | Owning task |
+|---|---|
+| Alert thresholds over these failure modes | P5-047 |
 
-## Implementation notes
+## Traces to
 
-- Prefer the smallest end-to-end behavior that proves the contract; keep optional optimizations out of this task.
-- Test failure and replay/idempotency behavior at every durable or asynchronous boundary introduced here.
-- Update this brief only when architectural review changes its scope, dependencies, or acceptance criteria.
+`docs/architecture.md` §5 Phase C; `docs/security.md` §5, T14, LB09, LB10;
+`docs/roadmap.md` Phase 5 exit

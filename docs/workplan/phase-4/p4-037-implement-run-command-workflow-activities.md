@@ -1,52 +1,85 @@
 # P4-037: Implement run command workflow activities
 
 **Phase:** 4 — Top-level workflows
-**Dependencies:** P2-024, P4-036
-**Can run in parallel with:** Any task whose dependency list is satisfied and which does not edit the same contract surface.
+**Shape:** capability
+**Dependencies:** P4-036 (compile: the activity registry and step lease this registers into), P1-050 (compile: the run use cases these activities call)
 
 ## Objective
 
-Implement run.start, run.send, run.stop, event.wait, and approval.wait through normal application commands/events.
-
-## Architectural context
-
-Implement this as a thin increment behind the ports and boundaries defined in `docs/architecture.md`, `docs/code-structure.md`, and `docs/contracts.md`. Apply the threat model and secure defaults from `docs/security.md`; the phase gate remains authoritative in `docs/roadmap.md`.
+A workflow starts a run, sends it a message, waits for an event, and stops it —
+issuing ordinary application commands rather than touching a process.
 
 ## Scope
 
-- Resolve typed step inputs and outputs
-- Register waits before/atomically with conditions that could satisfy them
-- Propagate lineage events between workflow and runs
+- `run.start`, `run.send`, `run.stop`, and `event.wait` with a typed predicate
+  and deadline, as `docs/contracts.md` §7 specifies.
+- Every command carries the coordinator's deterministic idempotency key, so a
+  replayed step reuses the original run and input rather than creating a second.
+- Run lineage: a run started by a workflow records the instance and step that
+  started it, and the run detail shows that link.
+- Instances pin harness and sandbox profiles at start; a step cannot select a
+  different profile mid-instance.
+- A workflow cannot broaden a run's permissions: the effective policy is the
+  intersection of deployment, workspace, workflow, and profile.
+- Retry with backoff at the step level, distinct from a user-initiated run retry.
 
 ## Non-goals
 
-- Do not bypass input idempotency, authorization, or policy
-- Do not poll runner process state directly
+- Branching, parallelism, approvals, and artifacts — P4-038.
+- Direct process or supervisor access. Activities call the same use cases the
+  API calls.
 
-## Deliverables
+## Runtime reachability
 
-- Production code and configuration for the scoped behavior, placed according to `docs/code-structure.md`.
-- Focused automated tests and deterministic fixtures; use injected time, IDs, runner, publisher, and secrets where relevant.
-- Contract/schema/migration updates required by the scope, including generated outputs from their declared source of truth.
-- Brief operator or developer documentation for any new command, configuration, failure mode, or security posture.
+`winch workflow start` with a definition containing `run.*` steps, on the
+compose stack with the fake harness.
+
+## Owned surfaces
+
+`internal/workflow/activities/run.go`, `internal/workflow/activities/wait.go`,
+`schemas/workflow/v1/` (step payload schemas),
+`test/scenarios/workflow-run-*.json`.
+
+## Demonstration
+
+    $ winch workflow start --definition test/scenarios/workflow-run-echo.json --json | jq -r .id
+    $ winch workflow get $WID --json | jq -r '.steps[] | select(.type=="run.start") | .output.runId'
+    $ winch run get $RID --json | jq -r '.lineage.workflowId'
+    → expect: the run exists and points back at the instance and step
+
+    $ winch run watch $RID
+    → expect: the message the `run.send` step supplied, and the harness reply
+
+    $ docker compose kill winchd && docker compose up -d winchd
+    $ winch run ls --workflow $WID | wc -l
+    → expect: still one run; replay reused the idempotency key
+
+    # a definition whose step requests a profile the workspace prohibits:
+    → expect: refused at start, naming the policy, before any run is created
+
+## Verification
+
+- Standing scenario suite passes with a workflow-driven run in the path.
+- Crash-replay test asserting one run and one input per step attempt.
+- `event.wait` tests: predicate match, deadline expiry, and an event arriving
+  before the wait begins.
+- Policy intersection test proving a workflow cannot widen permissions.
 
 ## Acceptance criteria
 
-- [ ] Replay cannot duplicate a run or input
-- [ ] Wait registration cannot miss a concurrent matching event
-- [ ] Approvals retain exact-operation binding
-- [ ] Errors are stable and actionable; logs/traces include resource IDs but exclude content and secrets by default.
-- [ ] The implementation does not introduce an outward dependency into the domain or a cross-adapter import.
+- [ ] Replay creates no duplicate run or input.
+- [ ] Run lineage is recorded and visible.
+- [ ] `event.wait` honours its deadline and cannot hang an instance forever.
+- [ ] A workflow never obtains permissions its workspace denies.
 
-## Required verification
+## Deferrals
 
-- Run activity idempotency tests.
-- Run wait-registration race test.
-- Run workflow/run lineage integration test.
-- Run the repository format, lint, unit-test, and build checks affected by the change.
+| Deferred | Owning task |
+|---|---|
+| Waiting on an approval | P4-038 |
+| Exposing these steps over HTTP | P4-039 |
 
-## Implementation notes
+## Traces to
 
-- Prefer the smallest end-to-end behavior that proves the contract; keep optional optimizations out of this task.
-- Test failure and replay/idempotency behavior at every durable or asynchronous boundary introduced here.
-- Update this brief only when architectural review changes its scope, dependencies, or acceptance criteria.
+`docs/contracts.md` §7; `docs/security.md` §10 (workflows cannot broaden
+permissions); `docs/architecture.md` §4; `docs/roadmap.md` Phase 4

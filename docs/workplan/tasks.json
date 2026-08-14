@@ -283,14 +283,116 @@
       "brief": "phase-1/p1-020-reconcile-runs-after-daemon-restart.md"
     },
     {
+      "id": "P1-048",
+      "title": "Boot the daemon",
+      "phase": 1,
+      "phase_name": "Local single-user vertical slice",
+      "status": "pending",
+      "depends_on": [
+        "P1-011",
+        "P1-017"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/p1-048-boot-the-daemon.md"
+    },
+    {
+      "id": "P1-049",
+      "title": "Implement the local runner",
+      "phase": 1,
+      "phase_name": "Local single-user vertical slice",
+      "status": "pending",
+      "depends_on": [
+        "P0-006",
+        "P0-008",
+        "P1-013",
+        "P1-014"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/p1-049-implement-the-local-runner.md"
+    },
+    {
+      "id": "P1-050",
+      "title": "Implement run use cases and HTTP binding",
+      "phase": 1,
+      "phase_name": "Local single-user vertical slice",
+      "status": "pending",
+      "depends_on": [
+        "P1-015",
+        "P1-016",
+        "P1-017",
+        "P1-048",
+        "P1-049"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/p1-050-implement-run-use-cases-and-http-binding.md"
+    },
+    {
+      "id": "P1-051",
+      "title": "Add run commands to the operator CLI",
+      "phase": 1,
+      "phase_name": "Local single-user vertical slice",
+      "status": "pending",
+      "depends_on": [
+        "P1-049",
+        "P1-050"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/p1-051-add-run-commands-to-the-operator-cli.md"
+    },
+    {
+      "id": "P1-052",
+      "title": "Make the fake harness controllable",
+      "phase": 1,
+      "phase_name": "Local single-user vertical slice",
+      "status": "pending",
+      "depends_on": [
+        "P0-008"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/p1-052-make-the-fake-harness-controllable.md"
+    },
+    {
+      "id": "P1-053",
+      "title": "Establish the standing scenario suite",
+      "phase": 1,
+      "phase_name": "Local single-user vertical slice",
+      "status": "pending",
+      "depends_on": [
+        "P1-050",
+        "P1-052"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/p1-053-establish-the-standing-scenario-suite.md"
+    },
+    {
+      "id": "P1-054",
+      "title": "Store credential references",
+      "phase": 1,
+      "phase_name": "Local single-user vertical slice",
+      "status": "pending",
+      "depends_on": [
+        "P1-011",
+        "P1-050"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/p1-054-store-credential-references.md"
+    },
+    {
       "id": "P2-021",
       "title": "Implement structured event normalization",
       "phase": 2,
       "phase_name": "Structured experience and second harness",
       "status": "pending",
       "depends_on": [
-        "P0-005",
-        "P1-014"
+        "P1-050",
+        "P1-052"
       ],
       "owner": null,
       "blocked_reason": null,
@@ -303,7 +405,6 @@
       "phase_name": "Structured experience and second harness",
       "status": "pending",
       "depends_on": [
-        "P1-019",
         "P2-021"
       ],
       "owner": null,
@@ -317,8 +418,7 @@
       "phase_name": "Structured experience and second harness",
       "status": "pending",
       "depends_on": [
-        "P1-011",
-        "P1-017",
+        "P1-050",
         "P2-021"
       ],
       "owner": null,
@@ -332,7 +432,6 @@
       "phase_name": "Structured experience and second harness",
       "status": "pending",
       "depends_on": [
-        "P1-016",
         "P2-021"
       ],
       "owner": null,
@@ -346,8 +445,8 @@
       "phase_name": "Structured experience and second harness",
       "status": "pending",
       "depends_on": [
-        "P2-021",
-        "P2-024"
+        "P1-049",
+        "P2-021"
       ],
       "owner": null,
       "blocked_reason": null,
@@ -360,9 +459,8 @@
       "phase_name": "Structured experience and second harness",
       "status": "pending",
       "depends_on": [
-        "P1-017",
-        "P1-018",
-        "P2-023"
+        "P1-050",
+        "P2-055"
       ],
       "owner": null,
       "blocked_reason": null,
@@ -383,13 +481,81 @@
       "brief": "phase-2/p2-027-implement-retention-export-and-deletion.md"
     },
     {
+      "id": "P2-055",
+      "title": "Register workspaces and approved roots",
+      "phase": 2,
+      "phase_name": "Structured experience and second harness",
+      "status": "pending",
+      "depends_on": [
+        "P1-050"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-2/p2-055-register-workspaces-and-approved-roots.md"
+    },
+    {
+      "id": "P2-056",
+      "title": "Action approvals and structured answers",
+      "phase": 2,
+      "phase_name": "Structured experience and second harness",
+      "status": "pending",
+      "depends_on": [
+        "P2-022",
+        "P2-024"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-2/p2-056-action-approvals-and-structured-answers.md"
+    },
+    {
+      "id": "P2-057",
+      "title": "Retry a failed run",
+      "phase": 2,
+      "phase_name": "Structured experience and second harness",
+      "status": "pending",
+      "depends_on": [
+        "P1-050"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-2/p2-057-retry-a-failed-run.md"
+    },
+    {
+      "id": "P2-058",
+      "title": "Acquire harness credentials",
+      "phase": 2,
+      "phase_name": "Structured experience and second harness",
+      "status": "pending",
+      "depends_on": [
+        "P1-054",
+        "P2-055"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-2/p2-058-acquire-harness-credentials.md"
+    },
+    {
+      "id": "P2-059",
+      "title": "Bound queued and concurrent runs",
+      "phase": 2,
+      "phase_name": "Structured experience and second harness",
+      "status": "pending",
+      "depends_on": [
+        "P1-050"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-2/p2-059-bound-queued-and-concurrent-runs.md"
+    },
+    {
       "id": "P3-028",
       "title": "Implement disposable workspace preparation",
       "phase": 3,
       "phase_name": "Docker isolation",
       "status": "pending",
       "depends_on": [
-        "P2-023"
+        "P2-023",
+        "P2-055"
       ],
       "owner": null,
       "blocked_reason": null,
@@ -403,6 +569,7 @@
       "status": "pending",
       "depends_on": [
         "P0-008",
+        "P1-049",
         "P3-028"
       ],
       "owner": null,
@@ -416,7 +583,7 @@
       "phase_name": "Docker isolation",
       "status": "pending",
       "depends_on": [
-        "P1-015",
+        "P1-050",
         "P3-029"
       ],
       "owner": null,
@@ -444,9 +611,8 @@
       "phase_name": "Docker isolation",
       "status": "pending",
       "depends_on": [
-        "P2-026",
-        "P3-029",
-        "P3-030"
+        "P1-054",
+        "P3-029"
       ],
       "owner": null,
       "blocked_reason": null,
@@ -466,6 +632,17 @@
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-3/p3-033-display-and-test-effective-security-posture.md"
+    },
+    {
+      "id": "P3-060",
+      "title": "Scan dependencies and publish an SBOM",
+      "phase": 3,
+      "phase_name": "Docker isolation",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-3/p3-060-scan-dependencies-and-publish-an-sbom.md"
     },
     {
       "id": "P4-034",
@@ -515,7 +692,7 @@
       "phase_name": "Top-level workflows",
       "status": "pending",
       "depends_on": [
-        "P2-024",
+        "P1-050",
         "P4-036"
       ],
       "owner": null,
@@ -530,6 +707,7 @@
       "status": "pending",
       "depends_on": [
         "P2-023",
+        "P2-024",
         "P4-036"
       ],
       "owner": null,
@@ -571,8 +749,7 @@
       "phase_name": "Remote runners and hardening",
       "status": "pending",
       "depends_on": [
-        "P0-006",
-        "P3-030"
+        "P1-049"
       ],
       "owner": null,
       "blocked_reason": null,
@@ -585,7 +762,7 @@
       "phase_name": "Remote runners and hardening",
       "status": "pending",
       "depends_on": [
-        "P1-015",
+        "P1-050",
         "P5-041"
       ],
       "owner": null,
@@ -612,8 +789,8 @@
       "phase_name": "Remote runners and hardening",
       "status": "pending",
       "depends_on": [
-        "P5-041",
-        "P5-043"
+        "P2-059",
+        "P5-041"
       ],
       "owner": null,
       "blocked_reason": null,
@@ -655,6 +832,7 @@
       "phase_name": "Remote runners and hardening",
       "status": "pending",
       "depends_on": [
+        "P1-048",
         "P5-044",
         "P5-046"
       ],

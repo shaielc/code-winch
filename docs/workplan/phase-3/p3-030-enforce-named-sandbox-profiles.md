@@ -1,52 +1,91 @@
 # P3-030: Enforce named sandbox profiles
 
 **Phase:** 3 — Docker isolation
-**Dependencies:** P1-015, P3-029
-**Can run in parallel with:** Any task whose dependency list is satisfied and which does not edit the same contract surface.
+**Shape:** hardening
+**Dependencies:** P3-029 (semantic: there must be a container driver whose controls a profile can constrain), P1-050 (contract: profile resolution lives in the driver registry this extends)
 
 ## Objective
 
-Resolve administrator-approved profiles and allowed overrides into stored, reproducible non-secret configuration.
-
-## Architectural context
-
-Implement this as a thin increment behind the ports and boundaries defined in `docs/architecture.md`, `docs/code-structure.md`, and `docs/contracts.md`. Apply the threat model and secure defaults from `docs/security.md`; the phase gate remains authoritative in `docs/roadmap.md`.
+A run selects an administrator-approved profile by name, and no request path can
+assemble a weaker configuration out of low-level flags.
 
 ## Scope
 
-- Implement configuration precedence and policy-controlled overrides
-- Validate harness/sandbox capability combinations
-- Persist effective profile and security posture with the run
+- The three profiles in `docs/security.md` §4 — `local-trusted`,
+  `container-standard`, `container-readonly` — defined as data, validated at
+  startup, with the deployment refusing to start on an unknown or malformed
+  profile.
+- Profile resolution order per `docs/code-structure.md` §6: compiled defaults,
+  system config, workspace policy, named profile, then only those per-run
+  overrides the policy marks overridable.
+- Overrides can only narrow. An override that would widen filesystem, network,
+  credential, or resource permissions is refused, not clamped silently.
+- Workspace policy can prohibit `local-trusted` entirely, and a shared
+  deployment can prohibit it globally.
+- The resolved effective profile is stored with the run and returned by the API,
+  so the UI and the audit trail read the same value.
 
 ## Non-goals
 
-- Do not accept arbitrary low-level Docker flags
-- Do not silently downgrade requested controls
+- Displaying posture to a user — P3-033 renders what this resolves.
+- Network allowlist semantics — P3-031 defines the fields; this task carries
+  them through resolution.
 
-## Deliverables
+## Runtime reachability
 
-- Production code and configuration for the scoped behavior, placed according to `docs/code-structure.md`.
-- Focused automated tests and deterministic fixtures; use injected time, IDs, runner, publisher, and secrets where relevant.
-- Contract/schema/migration updates required by the scope, including generated outputs from their declared source of truth.
-- Brief operator or developer documentation for any new command, configuration, failure mode, or security posture.
+`winch profiles` and `winch run create --profile`; the resolved profile appears
+in `GET /api/v1/runs/{id}`.
+
+## Owned surfaces
+
+`internal/application/profile/`, `deployments/profiles/*.yaml`,
+`api/openapi/components/run.yaml` (resolved-profile fields),
+`internal/adapters/postgres/migrations/013_*.sql`.
+
+## Demonstration
+
+    $ winch profiles --json | jq -r '.sandbox[].name'
+    → expect: local-trusted, container-standard, container-readonly
+
+    $ winch run create --profile container-readonly --harness fake --json | jq -r '.resolvedProfile.filesystem'
+    → expect: read-only, with a scratch mount, matching the documented table
+
+    $ winch run create --profile container-standard --override network=host
+    → expect: refused with a stable code; widening is not expressible
+
+    $ winch run create --profile container-standard --override memory=256m
+    → expect: accepted; narrowing is allowed and recorded
+
+    $ WINCH_ALLOW_LOCAL_TRUSTED=false winch run create --profile local-trusted
+    → expect: refused, naming the policy that prohibits it
+
+    $ winch run create --profile does-not-exist
+    → expect: refused before launch
+
+## Verification
+
+- Standing scenario suite passes with profiles enforced for every substrate.
+- Resolution table test across the five configuration layers.
+- Negative test per widening dimension: filesystem, network, credentials, CPU,
+  memory, process count, wall clock.
+- Startup validation test rejecting a malformed profile definition.
 
 ## Acceptance criteria
 
-- [ ] Forbidden override fields cannot reach the driver
-- [ ] Unsupported combinations fail before launch with stable errors
-- [ ] Stored configuration contains no resolved secrets
-- [ ] Errors are stable and actionable; logs/traces include resource IDs but exclude content and secrets by default.
-- [ ] The implementation does not introduce an outward dependency into the domain or a cross-adapter import.
+- [ ] Every run records a resolved, named profile.
+- [ ] No per-run override can widen any permission.
+- [ ] `local-trusted` is prohibitable by workspace and by deployment policy.
+- [ ] An unknown profile fails before any process or container starts.
+- [ ] The stored resolved profile is the value the API returns.
 
-## Required verification
+## Deferrals
 
-- Run precedence/override property tests.
-- Run capability-combination matrix.
-- Run secret-canary persistence test.
-- Run the repository format, lint, unit-test, and build checks affected by the change.
+| Deferred | Owning task |
+|---|---|
+| Rendering the effective posture to the user | P3-033 |
+| Enforcing the network fields these profiles declare | P3-031 |
 
-## Implementation notes
+## Traces to
 
-- Prefer the smallest end-to-end behavior that proves the contract; keep optional optimizations out of this task.
-- Test failure and replay/idempotency behavior at every durable or asynchronous boundary introduced here.
-- Update this brief only when architectural review changes its scope, dependencies, or acceptance criteria.
+`docs/security.md` §4, T02, LB02; `docs/code-structure.md` §6;
+`docs/roadmap.md` Phase 3 exit

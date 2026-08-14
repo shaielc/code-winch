@@ -1,52 +1,92 @@
 # P5-041: Implement authenticated runner registration
 
 **Phase:** 5 — Remote runners and hardening
-**Dependencies:** P0-006, P3-030
-**Can run in parallel with:** Any task whose dependency list is satisfied and which does not edit the same contract surface.
+**Shape:** seam
+**Dependencies:** P1-049 (compile: `internal/runner/local` is what the standalone binary hosts)
 
 ## Objective
 
-Move the proven runner wire contract onto an authenticated transport with version/capability negotiation.
-
-## Architectural context
-
-Implement this as a thin increment behind the ports and boundaries defined in `docs/architecture.md`, `docs/code-structure.md`, and `docs/contracts.md`. Apply the threat model and secure defaults from `docs/security.md`; the phase gate remains authoritative in `docs/roadmap.md`.
+A separate `winch-runner` process registers with the control plane over an
+authenticated channel, publishes its capabilities, and heartbeats — appearing in
+`winch runners ls` as a real, revocable identity.
 
 ## Scope
 
-- Separate runner identity from browser identity
-- Mutual authentication, credential rotation hooks, supported protocol range, capability/load registration, and heartbeats
-- Bound messages, commands, and buffers
+- `cmd/winch-runner`: the standalone runner composition root
+  `docs/code-structure.md` §1 reserves and no task has ever named. It hosts the
+  same `internal/runner/local` the daemon embeds.
+- Machine identity separate from browser identity: mutually authenticated
+  transport, credential rotation, and immediate revocation.
+- Registration reporting runner ID, supported protocol range, harness and
+  sandbox capabilities, load, and lease epoch.
+- Protocol negotiation selecting the highest mutually supported major/minor
+  version; a major mismatch refuses assignment rather than degrading.
+- Heartbeats with a miss budget, after which the runner is marked unavailable
+  and its runs become reconcilable.
+- A registry of runners readable through the API, with capability and health.
 
 ## Non-goals
 
-- Do not assign work across a major-version mismatch
-- Do not trust self-declared identity without transport authentication
+- Dispatching commands to a remote runner — P5-042. This task registers and
+  heartbeats; the embedded runner still executes.
+- Scheduling by capability — P5-044.
+- Sandbox profile enforcement, which is independent of where a runner lives.
 
-## Deliverables
+## Runtime reachability
 
-- Production code and configuration for the scoped behavior, placed according to `docs/code-structure.md`.
-- Focused automated tests and deterministic fixtures; use injected time, IDs, runner, publisher, and secrets where relevant.
-- Contract/schema/migration updates required by the scope, including generated outputs from their declared source of truth.
-- Brief operator or developer documentation for any new command, configuration, failure mode, or security posture.
+`winch-runner --endpoint … --identity …` against the compose stack;
+`winch runners ls` and `winch runners revoke`.
+
+## Owned surfaces
+
+`cmd/winch-runner/`, `internal/application/runner_registry.go`,
+`internal/adapters/transport/runnerrpc/`,
+`api/openapi/paths/runners.yaml`,
+`internal/adapters/postgres/migrations/014_*.sql`.
+
+## Demonstration
+
+    $ winch-runner --endpoint https://localhost:8080 --identity /etc/winch/runner.pem &
+    $ winch runners ls
+    → expect: one runner, its capabilities, and a recent heartbeat
+
+    $ winch-runner --identity /etc/winch/wrong.pem
+    → expect: registration refused; nothing appears in the registry
+
+    $ winch runners revoke <id>
+    → expect: the runner's next heartbeat is rejected and it stops being
+      assignable, without restarting the control plane
+
+    $ kill -STOP %1 && sleep <miss-budget>; winch runners ls
+    → expect: marked unavailable, with the miss count and no content
+
+    # a runner advertising an unsupported major version:
+    → expect: assignment refused with a stable code naming the version range
+
+## Verification
+
+- Standing scenario suite passes with a registered runner present.
+- Negotiation table test across supported and unsupported version pairs.
+- Identity rotation and revocation tests, including a revoked runner retrying.
+- Heartbeat miss and recovery tests with a fake clock.
 
 ## Acceptance criteria
 
-- [ ] Highest compatible version is selected
-- [ ] Expired/revoked runner credentials cannot register
-- [ ] Heartbeat loss changes runner availability observably
-- [ ] Errors are stable and actionable; logs/traces include resource IDs but exclude content and secrets by default.
-- [ ] The implementation does not introduce an outward dependency into the domain or a cross-adapter import.
+- [ ] A runner cannot register without a valid machine identity.
+- [ ] Revocation takes effect without a control-plane restart.
+- [ ] Version negotiation refuses a major mismatch rather than degrading.
+- [ ] Registry entries contain identifiers, capabilities, and health only.
+- [ ] `cmd/winch-runner` builds and runs from the same runner code the daemon
+      embeds.
 
-## Required verification
+## Deferrals
 
-- Run protocol negotiation tests.
-- Run mTLS/rotation/revocation tests.
-- Run message-limit/backpressure tests.
-- Run the repository format, lint, unit-test, and build checks affected by the change.
+| Deferred | Owning task |
+|---|---|
+| Sending commands and receiving events remotely | P5-042 |
+| Choosing which runner gets a run | P5-044 |
 
-## Implementation notes
+## Traces to
 
-- Prefer the smallest end-to-end behavior that proves the contract; keep optional optimizations out of this task.
-- Test failure and replay/idempotency behavior at every durable or asynchronous boundary introduced here.
-- Update this brief only when architectural review changes its scope, dependencies, or acceptance criteria.
+`docs/architecture.md` §5 Phase B; `docs/contracts.md` §4;
+`docs/security.md` §9, T05, LB10; `docs/code-structure.md` §1
