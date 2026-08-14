@@ -274,7 +274,7 @@
       "title": "Reconcile runs after daemon restart",
       "phase": 1,
       "phase_name": "Local single-user vertical slice",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P1-015"
       ],
