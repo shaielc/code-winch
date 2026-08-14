@@ -78,6 +78,43 @@ class TaskSchedulerTests(unittest.TestCase):
         self.assertFalse(task_scheduler.record_completions(state, pulls, {"P0-001"}))
         self.assertEqual(state["tasks"]["P0-001"]["status"], "completed")
 
+    def test_record_completions_keeps_the_dispatched_task_url(self):
+        state = {
+            "schema_version": 1,
+            "tasks": {"P0-001": {"status": "in_progress", "task_url": "https://example/task"}},
+        }
+        pulls = [
+            {
+                "title": "P0-001",
+                "body": "",
+                "head": {"ref": "work"},
+                "html_url": "https://example/pr/1",
+                "merged_at": "2026-01-01T00:00:00Z",
+            }
+        ]
+        self.assertTrue(task_scheduler.record_completions(state, pulls, {"P0-001"}))
+        self.assertEqual(state["tasks"]["P0-001"]["task_url"], "https://example/task")
+        self.assertEqual(state["tasks"]["P0-001"]["pull_request"], "https://example/pr/1")
+
+    def test_retire_completed_keeps_the_entry_the_tracker_caught_up_with(self):
+        tracker = {"tasks": [{"id": "P0-001", "status": "completed"}]}
+        state = {
+            "schema_version": 1,
+            "tasks": {
+                "P0-001": {
+                    "status": "in_progress",
+                    "owner": "worker",
+                    "pull_request": "https://example/pr/1",
+                }
+            },
+        }
+        self.assertTrue(task_scheduler.retire_completed(tracker, state))
+        entry = state["tasks"]["P0-001"]
+        self.assertEqual(entry["status"], "completed")
+        self.assertIsNone(entry["owner"])
+        self.assertEqual(entry["pull_request"], "https://example/pr/1")
+        self.assertFalse(task_scheduler.retire_completed(tracker, state))
+
     def test_task_url_survives_noise_on_the_dispatch_output(self):
         url = "https://chatgpt.com/codex/tasks/task_e_6a7c22f3f85c83209a1c137b454a5ed9"
         self.assertEqual(task_scheduler.task_url_from(url), url)

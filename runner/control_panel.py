@@ -65,22 +65,28 @@ def scheduler_lock(state_file: Path) -> Iterator[bool]:
 
 
 def refresh(state_file: Path, tracker: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """Read the state without the overrides the tracker superseded, and report scheduler activity.
+    """Read the state with the overrides the tracker superseded retired, and report scheduler activity.
 
-    Mirrors the pruning the scheduler does on every run so a tracker that caught up with an
-    override does not leave the override sitting in the state volume until the next dispatch.
+    Mirrors the retirement the scheduler does on every run so a tracker that caught up with an
+    override does not leave the override sitting in the state volume until the next dispatch. The
+    entry stays behind as a record of the pull request and Codex task the work went through.
     """
     completed = {task["id"] for task in tracker["tasks"] if task["status"] == "completed"}
     with scheduler_lock(state_file) as acquired:
         state = load_state(state_file)
-        superseded = sorted(completed & set(state["tasks"]))
+        superseded = sorted(
+            task_id
+            for task_id in completed & set(state["tasks"])
+            if state["tasks"][task_id]["status"] != "completed"
+        )
         for task_id in superseded:
-            del state["tasks"][task_id]
+            state["tasks"][task_id]["status"] = "completed"
+            state["tasks"][task_id]["owner"] = None
         if superseded:
             LOGGER.warning(
                 "tracker superseded the overrides for %s (%s)",
                 ", ".join(superseded),
-                "cleared" if acquired else "kept; the scheduler holds the state file",
+                "retired" if acquired else "kept; the scheduler holds the state file",
             )
         if superseded and acquired:
             save_state(state_file, state)
@@ -134,7 +140,9 @@ def rows(tracker: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]
     overrides = state["tasks"]
     result = []
     for task in tracker["tasks"]:
-        lease = overrides.get(task["id"]) if task["status"] != "completed" else None
+        # A retired entry no longer overrides the tracker, but it still carries the links.
+        record = overrides.get(task["id"], {})
+        lease = record if task["status"] != "completed" else None
         result.append(
             {
                 "id": task["id"],
@@ -142,8 +150,9 @@ def rows(tracker: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]
                 "depends_on": task["depends_on"],
                 "status": lease["status"] if lease else task["status"],
                 "owner": (lease or task).get("owner"),
-                "updated_at": (lease or {}).get("updated_at"),
-                "task_url": (lease or {}).get("task_url"),
+                "updated_at": record.get("updated_at"),
+                "task_url": record.get("task_url"),
+                "pull_request": record.get("pull_request"),
                 "local": bool(lease),
             }
         )
@@ -233,7 +242,9 @@ PAGE = """<!doctype html>
   td.title {{ white-space: normal; min-width: 15rem; line-height: 1.45; }}
   td.deps {{ white-space: normal; min-width: 15rem; max-width: 19rem; line-height: 1.9; }}
   td.owner {{ max-width: 11rem; overflow: hidden; text-overflow: ellipsis; }}
-  td.owner a {{ color: inherit; text-decoration: underline; text-underline-offset: 2px; }}
+  td.owner a, td.pr a {{ color: inherit; text-decoration: none; }}
+  .icon {{ width: 1.35rem; height: 1.35rem; vertical-align: -.4em; fill: currentColor; opacity: .6; }}
+  a:hover .icon {{ opacity: 1; }}
   td.deps code, .waits code {{ font-size: .78rem; padding: .1rem .4rem; border-radius: 4px; background: #8881; opacity: .55; }}
   td.deps code.unmet, .waits code.unmet {{ opacity: 1; background: #f9731633; font-weight: 600; }}
   td.deps a, .waits a {{ color: inherit; text-decoration: none; }}
@@ -265,7 +276,7 @@ PAGE = """<!doctype html>
 {message}
 <div class="wrap" id="table-view">
 <table>
-  <thead><tr><th>Task</th><th>Title</th><th>Depends on</th><th>Status</th><th>Source</th><th>Owner</th><th>Updated</th><th></th></tr></thead>
+  <thead><tr><th>Task</th><th>Title</th><th>Depends on</th><th>Status</th><th>Source</th><th>Owner</th><th>Pull request</th><th>Updated</th><th></th></tr></thead>
   <tbody>
   {rows}
   </tbody>
@@ -276,10 +287,10 @@ PAGE = """<!doctype html>
 </ul>
 <p class="note">Leases live in the scheduler state volume and apply only while the tracker has not
 recorded the task as completed. Expiring one releases the concurrency slot it holds, so only a lease
-that still holds one offers the option: a lease reading completed records a merged pull request the
-tracker has not caught up with, and it clears itself once the tracker does. The tree view nests each
-task under the dependency that unlocks it last, so a task waiting on several others appears once,
-under the deepest of them, and lists the rest beside its title.</p>
+that still holds one offers the option: a lease reading completed records a merged pull request, and
+once the tracker agrees it is retired in place, keeping its links on the row without overriding
+anything. The tree view nests each task under the dependency that unlocks it last, so a task waiting
+on several others appears once, under the deepest of them, and lists the rest beside its title.</p>
 <script>
   const swap = document.getElementById("swap");
   const table = document.getElementById("table-view");
@@ -311,9 +322,46 @@ ROW = """<tr id="{id}">
   <td><span class="tag {status}">{status}</span></td>
   <td>{source}</td>
   <td class="owner" title="{hint}">{owner}</td>
+  <td class="pr">{pull_request}</td>
   <td>{updated}</td>
   <td class="actions">{actions}</td>
 </tr>"""
+
+
+# The OpenAI mark, inlined so the panel keeps working without any outbound request.
+CODEX_ICON = (
+    '<svg class="icon" viewBox="0 0 24 24" role="img" aria-label="Codex conversation">'
+    '<path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.911 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0'
+    " 0 0 4.981 4.182a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0"
+    " .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0"
+    " 5.772-4.206 5.99 5.99 0 0 0 3.998-2.9 6.056 6.056 0 0 0-.748-7.073zm-9.022 12.608a4.476"
+    " 4.476 0 0 1-2.876-1.04l.142-.08 4.778-2.759a.795.795 0 0 0 .393-.681v-6.737l2.02"
+    " 1.169a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.495 4.494zm-9.66-4.126a4.471 4.471"
+    " 0 0 1-.535-3.014l.142.086 4.783 2.758a.771.771 0 0 0 .78 0l5.843-3.368v2.332a.08.08 0 0"
+    " 1-.033.062L9.74 19.95a4.499 4.499 0 0 1-6.14-1.647zM2.34 7.896a4.485 4.485 0 0 1"
+    " 2.366-1.973v5.677a.766.766 0 0 0 .388.677l5.815 3.354-2.02 1.169a.076.076 0 0"
+    " 1-.071 0l-4.83-2.787A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.856L13.104 8.364 15.119"
+    " 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0"
+    " 0-.407-.666zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.41"
+    " 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.499 4.499 0 0 1 6.68 4.66zM8.307"
+    " 12.863l-2.02-1.164a.08.08 0 0 1-.038-.057V6.074a4.499 4.499 0 0 1 7.376-3.454l-.142"
+    " .08-4.778 2.76a.795.795 0 0 0-.393.68zm1.097-2.366l2.602-1.5 2.607 1.5v2.999l-2.597"
+    ' 1.5-2.607-1.5z"/></svg>'
+)
+
+# The GitHub mark, inlined for the same reason.
+GITHUB_ICON = (
+    '<svg class="icon" viewBox="0 0 24 24" role="img" aria-label="Pull request">'
+    '<path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577'
+    " 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633"
+    " 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305"
+    " 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93"
+    " 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267"
+    " 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24"
+    " 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81"
+    " 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0"
+    '-6.627-5.373-12-12-12"/></svg>'
+)
 
 
 def button(action: str, task_id: str, label: str) -> str:
@@ -344,27 +392,42 @@ def source_of(entry: dict[str, Any]) -> str:
     return '<span class="local">lease</span>' if entry["local"] else "tracker"
 
 
-def task_link(entry: dict[str, Any]) -> str:
-    """Return the lease's Codex task URL, or an empty string when it is not one.
+def link_target(value: Any) -> str:
+    """Return the value as a link target, or an empty string when it is not one.
 
     The scheduler stores the raw dispatch output under task_url when no URL matched, so the value
     only becomes a link once it parses as http(s) — which also keeps a javascript: href out of the
     page if the state file is ever hand-edited.
     """
-    url = str(entry["task_url"] or "").strip()
+    url = str(value or "").strip()
     parsed = urlparse(url)
     return url if parsed.scheme in ("http", "https") and parsed.netloc else ""
 
 
 def owner_cell(entry: dict[str, Any]) -> tuple[str, str]:
-    """Render the owner cell and the tooltip that carries whatever the cell truncates."""
+    """Render the owner cell and the tooltip that carries whatever the cell leaves out."""
     owner = entry["owner"] or "—"
-    url = task_link(entry)
+    url = link_target(entry["task_url"])
     if not url:
         return html.escape(owner), owner
-    label = html.escape(entry["owner"] or "codex task")
-    link = f'<a href="{html.escape(url)}" target="_blank" rel="noopener">{label}</a>'
+    link = (
+        f'<a href="{html.escape(url)}" target="_blank" rel="noopener" '
+        f'title="open the Codex conversation">{CODEX_ICON}</a>'
+    )
     return link, f"{owner} — {url}" if entry["owner"] else url
+
+
+def pull_request_cell(entry: dict[str, Any]) -> str:
+    """Link the merged pull request the scheduler recorded, naming it in the tooltip."""
+    url = link_target(entry["pull_request"])
+    if not url:
+        return "—"
+    number = urlparse(url).path.rstrip("/").rpartition("/")[2]
+    hint = f"open pull request #{number}" if number.isdigit() else "open the pull request"
+    return (
+        f'<a href="{html.escape(url)}" target="_blank" rel="noopener" '
+        f'title="{hint}">{GITHUB_ICON}</a>'
+    )
 
 
 def chips(dependencies: list[str], done: set[str], anchor: str) -> str:
@@ -423,6 +486,7 @@ def render(tracker: dict[str, Any], state: dict[str, Any], message: str, busy: b
                 source=source_of(entry),
                 owner=owner,
                 hint=html.escape(hint),
+                pull_request=pull_request_cell(entry),
                 updated=html.escape((entry["updated_at"] or "—")[:16].replace("T", " ")),
                 actions=actions_for(entry, runnable),
             )
