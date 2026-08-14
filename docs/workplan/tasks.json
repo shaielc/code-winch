@@ -128,7 +128,7 @@
       "title": "Design initial OpenAPI run contract",
       "phase": 1,
       "phase_name": "Local single-user vertical slice",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P0-002",
         "P0-004",
@@ -230,7 +230,7 @@
       "title": "Expose run HTTP API and local authentication",
       "phase": 1,
       "phase_name": "Local single-user vertical slice",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P1-010",
         "P1-015",
