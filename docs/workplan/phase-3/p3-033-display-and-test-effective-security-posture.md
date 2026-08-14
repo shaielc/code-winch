@@ -1,52 +1,89 @@
 # P3-033: Display and test effective security posture
 
 **Phase:** 3 — Docker isolation
-**Dependencies:** P3-030, P3-031, P3-032
-**Can run in parallel with:** Any task whose dependency list is satisfied and which does not edit the same contract surface.
+**Shape:** capability
+**Dependencies:** P3-030 (semantic: there must be a resolved profile to show), P3-031 (semantic: the network decision is part of the posture), P3-032 (semantic: the credential binding is part of the posture)
 
 ## Objective
 
-Make the resolved filesystem, network, credential, image, and isolation posture visible and resistant to UI ambiguity.
-
-## Architectural context
-
-Implement this as a thin increment behind the ports and boundaries defined in `docs/architecture.md`, `docs/code-structure.md`, and `docs/contracts.md`. Apply the threat model and secure defaults from `docs/security.md`; the phase gate remains authoritative in `docs/roadmap.md`.
+Before starting a run, a user sees the isolation, filesystem, network, and
+credential posture that will actually apply — and `local-trusted` says plainly
+that it is not a sandbox.
 
 ## Scope
 
-- Expose safe effective-posture fields through API
-- Render warnings for local/unavailable controls and exact profile details for Docker
-- Add adversarial end-to-end scenarios for forbidden overrides and malicious output
+- A posture summary computed from the resolved profile and the driver's declared
+  capabilities, not from the requested configuration: isolation class,
+  filesystem access, network policy, bound credentials by name, and resource
+  limits.
+- Shown before launch and on the run detail afterwards, with the run's stored
+  posture used for a finished run so history stays truthful.
+- A prominent, non-dismissible warning wherever `local-trusted` is enabled,
+  stating it is a process-lifecycle boundary rather than a security boundary.
+- A driver whose declared capability and enforced behavior disagree fails a test
+  rather than being displayed optimistically.
+- Adversarial integration tests: the escape, exhaustion, egress, and credential
+  attempts from `docs/security.md` §12, each attempted and visibly refused, with
+  the refusal appearing in the audit trail.
 
 ## Non-goals
 
-- Do not imply Docker is a hard hostile multi-tenant boundary
-- Do not expose secret material or unsafe daemon details
+- Changing enforcement. This task displays and tests what P3-029 through P3-032
+  enforce; a disagreement is fixed in the owning task.
+- Security dashboards and alerting — P5-047.
 
-## Deliverables
+## Runtime reachability
 
-- Production code and configuration for the scoped behavior, placed according to `docs/code-structure.md`.
-- Focused automated tests and deterministic fixtures; use injected time, IDs, runner, publisher, and secrets where relevant.
-- Contract/schema/migration updates required by the scope, including generated outputs from their declared source of truth.
-- Brief operator or developer documentation for any new command, configuration, failure mode, or security posture.
+The run creation form and run detail in the web app; `winch run posture <id>`
+and `winch profiles --posture`.
+
+## Owned surfaces
+
+`web/src/features/runs/PosturePanel.tsx`, `cmd/winch/posture.go`,
+`api/openapi/components/run.yaml` (posture fields), `test/security/`.
+
+## Demonstration
+
+    $ winch profiles --posture
+    → expect: local-trusted reported as unisolated, in the same words the UI uses
+
+    # in the browser, creating a run on local-trusted:
+    → expect: a non-dismissible warning that this is not a sandbox
+
+    # creating a run on container-readonly:
+    → expect: read-only filesystem, egress denied, no credentials — before start
+
+    $ winch run posture $ID   # after the run finished
+    → expect: the posture that applied, from the stored resolved profile
+
+    $ make security-tests
+    → expect: every adversarial attempt refused, each with an audit entry
+
+## Verification
+
+- Standing scenario suite passes with the posture surface present.
+- A test asserting the displayed posture is derived from resolved configuration
+  and declared capabilities, never from the request.
+- Capability-honesty test per driver: declared equals enforced.
+- The adversarial suite from `docs/security.md` §12 runs in CI where an engine
+  is available.
 
 ## Acceptance criteria
 
-- [ ] Users can distinguish local-trusted, standard, and readonly posture before start
-- [ ] Rejected overrides are explained without leaking policy internals
-- [ ] UI labels match effective driver observations
-- [ ] Errors are stable and actionable; logs/traces include resource IDs but exclude content and secrets by default.
-- [ ] The implementation does not introduce an outward dependency into the domain or a cross-adapter import.
+- [ ] Posture is visible before launch and immutable in history afterwards.
+- [ ] `local-trusted` is labelled unisolated everywhere it appears.
+- [ ] A driver cannot advertise a capability it does not enforce and still pass.
+- [ ] Every adversarial attempt is refused and audited.
+- [ ] Phase 3's exit statement in `docs/roadmap.md` is demonstrated by this suite
+      together with the standing scenarios.
 
-## Required verification
+## Deferrals
 
-- Run API posture contract tests.
-- Run browser security-posture tests.
-- Run adversarial override end-to-end test.
-- Run the repository format, lint, unit-test, and build checks affected by the change.
+| Deferred | Owning task |
+|---|---|
+| Alerting on posture regressions | P5-047 |
 
-## Implementation notes
+## Traces to
 
-- Prefer the smallest end-to-end behavior that proves the contract; keep optional optimizations out of this task.
-- Test failure and replay/idempotency behavior at every durable or asynchronous boundary introduced here.
-- Update this brief only when architectural review changes its scope, dependencies, or acceptance criteria.
+`docs/security.md` §4, §12, T02, T12, LB02, LB03;
+`docs/architecture.md` §4 (web application); `docs/roadmap.md` Phase 3 exit

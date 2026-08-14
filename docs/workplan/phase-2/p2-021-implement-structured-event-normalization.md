@@ -1,52 +1,83 @@
 # P2-021: Implement structured event normalization
 
 **Phase:** 2 — Structured experience and second harness
-**Dependencies:** P0-005, P1-014
-**Can run in parallel with:** Any task whose dependency list is satisfied and which does not edit the same contract surface.
+**Shape:** capability
+**Dependencies:** P1-050 (semantic: normalized events are observable only once events reach the run API), P1-052 (semantic: the scenario file format is how structured provider output is produced on demand)
 
 ## Objective
 
-Complete typed messages, tools, approvals, artifacts, file changes, usage, and safe provider-extension handling.
-
-## Architectural context
-
-Implement this as a thin increment behind the ports and boundaries defined in `docs/architecture.md`, `docs/code-structure.md`, and `docs/contracts.md`. Apply the threat model and secure defaults from `docs/security.md`; the phase gate remains authoritative in `docs/roadmap.md`.
+A harness that emits a tool call, a message delta, or a usage record produces
+typed canonical events with explicit sensitivity, instead of raw stream bytes.
 
 ## Scope
 
-- Add domain validators and adapter mapping helpers
-- Enforce event-size and sensitivity policies
-- Preserve unknown kinds/extensions with diagnostic fallback
+- Domain validators for the remaining event families in `docs/contracts.md` §2:
+  user/assistant/system message and delta, tool call and result, approval
+  request and resolution, file change, artifact, usage, workflow link.
+- Adapter mapping helpers shared by harness packages, so a second adapter maps
+  rather than reimplements.
+- Event-size bounds and sensitivity assignment at the point of construction;
+  a producer that omits sensitivity yields `confidential`, never `public`.
+- Unknown kinds and unknown extension namespaces are preserved and surfaced as
+  a diagnostic event, never fatal to the run.
+- Extend the fake harness scenario steps to emit each structured family, so the
+  new behavior is driveable by hand.
 
 ## Non-goals
 
-- Do not make extensions authoritative for generic workflow behavior
-- Do not discard malformed raw evidence silently
+- Rendering. Projections are P2-022 and P2-023.
+- Making extensions authoritative for generic workflow or policy decisions.
+- Approval semantics beyond emitting the event — binding, expiry, and policy are
+  P2-024.
 
-## Deliverables
+## Runtime reachability
 
-- Production code and configuration for the scoped behavior, placed according to `docs/code-structure.md`.
-- Focused automated tests and deterministic fixtures; use injected time, IDs, runner, publisher, and secrets where relevant.
-- Contract/schema/migration updates required by the scope, including generated outputs from their declared source of truth.
-- Brief operator or developer documentation for any new command, configuration, failure mode, or security posture.
+`GET /api/v1/runs/{id}/events` and `winch run watch` on the compose stack with
+a structured scenario selected.
+
+## Owned surfaces
+
+`pkg/protocol/event.go`, `schemas/events/v1/` (payload schemas and fixtures),
+`internal/adapters/harness/normalize/`, `internal/adapters/harness/fake/`,
+`test/scenarios/structured-*.json`.
+
+## Demonstration
+
+    $ winch run create --harness fake --scenario structured-tools --json | jq -r .id
+    $ winch run start $ID && winch run watch $ID --json | jq -r '.kind'
+    → expect: message deltas, a tool call, a tool result, and a usage record —
+      typed kinds, not raw.stream
+
+    $ winch run watch $ID --json | jq -r 'select(.kind=="tool.call") | .sensitivity'
+    → expect: an explicit class, never null
+
+    $ winch run create --harness fake --scenario malformed --json
+    → expect: the run survives; a diagnostic event records the failure with a
+      stable code and no payload content
+
+## Verification
+
+- Standing scenario suite passes, extended with one scenario asserting typed
+  events rather than raw output.
+- Valid and invalid fixtures for every family; old fixtures still decode.
+- Fuzz the incremental parsers and extension decoding across chunk boundaries.
+- Event-size boundary tests at, just under, and just over the limit.
 
 ## Acceptance criteria
 
-- [ ] Every family has valid/invalid fixtures
-- [ ] Malformed provider data degrades without terminating the run
-- [ ] Sensitivity is explicit for all persisted events
-- [ ] Errors are stable and actionable; logs/traces include resource IDs but exclude content and secrets by default.
-- [ ] The implementation does not introduce an outward dependency into the domain or a cross-adapter import.
+- [ ] Every family in `docs/contracts.md` §2 has valid and invalid fixtures.
+- [ ] Malformed provider data degrades to a diagnostic without terminating a run.
+- [ ] Sensitivity is explicit on every persisted event.
+- [ ] An unknown extension namespace round-trips unchanged.
 
-## Required verification
+## Deferrals
 
-- Run schema and normalization tests.
-- Fuzz incremental parsers and extension decoding.
-- Run event-size boundary tests.
-- Run the repository format, lint, unit-test, and build checks affected by the change.
+| Deferred | Owning task |
+|---|---|
+| Rendering these families in the browser | P2-022, P2-023 |
+| Approval binding, expiry, and policy evaluation | P2-024 |
 
-## Implementation notes
+## Traces to
 
-- Prefer the smallest end-to-end behavior that proves the contract; keep optional optimizations out of this task.
-- Test failure and replay/idempotency behavior at every durable or asynchronous boundary introduced here.
-- Update this brief only when architectural review changes its scope, dependencies, or acceptance criteria.
+`docs/contracts.md` §2; `docs/architecture.md` §4 (event pipeline);
+`docs/security.md` §5, T11; `docs/decisions/0002-canonical-events-and-renderers.md`

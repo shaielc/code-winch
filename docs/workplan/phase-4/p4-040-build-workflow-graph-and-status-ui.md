@@ -1,52 +1,82 @@
 # P4-040: Build workflow graph and status UI
 
 **Phase:** 4 — Top-level workflows
-**Dependencies:** P4-039
-**Can run in parallel with:** Any task whose dependency list is satisfied and which does not edit the same contract surface.
+**Shape:** capability
+**Dependencies:** P4-039 (compile: the generated workflow client and stream this renders)
 
 ## Objective
 
-Let users start, inspect, and cancel workflows and every active branch.
-
-## Architectural context
-
-Implement this as a thin increment behind the ports and boundaries defined in `docs/architecture.md`, `docs/code-structure.md`, and `docs/contracts.md`. Apply the threat model and secure defaults from `docs/security.md`; the phase gate remains authoritative in `docs/roadmap.md`.
+A user sees a running workflow as a graph, opens any step's run, and cancels any
+active branch from the browser.
 
 ## Scope
 
-- Definition/version selection, input validation, graph/step attempt status, timers/retries, lineage links, approval surfaces, and cancellation
-- Reconnect through persisted snapshots/event deltas
-- Accessible status and error representations
+- A graph view of the pinned definition with live step states, updated from the
+  workflow stream and reconnecting the same way the run view does.
+- Step detail: inputs, outputs, attempts, timing, failure reason, and a link to
+  the run a `run.*` step created.
+- Run lineage in the other direction: a run started by a workflow links back to
+  its instance and step.
+- Cancel controls for the instance and for any active branch, disabled with a
+  stated reason when the state does not permit them.
+- An instance list with status, definition version, and duration.
+- Bounded rendering for a large graph, with the same fallback discipline the
+  event renderers use.
 
 ## Non-goals
 
-- Do not hide partial branch failures
-- Do not permit UI-only enforcement of policy
+- Editing or authoring definitions in the browser.
+- Live-editing a running instance.
 
-## Deliverables
+## Runtime reachability
 
-- Production code and configuration for the scoped behavior, placed according to `docs/code-structure.md`.
-- Focused automated tests and deterministic fixtures; use injected time, IDs, runner, publisher, and secrets where relevant.
-- Contract/schema/migration updates required by the scope, including generated outputs from their declared source of truth.
-- Brief operator or developer documentation for any new command, configuration, failure mode, or security posture.
+The workflow section of the web app served by `winchd`.
+
+## Owned surfaces
+
+`web/src/features/workflows/`, `web/src/renderers/graph/`,
+`web/src/app/App.tsx` (routes).
+
+## Demonstration
+
+    # start a foreach workflow, then in the browser:
+    → expect: the graph shows parallel branches advancing live, without a reload
+
+    # click a run.start step:
+    → expect: its run opens, and the run page links back to the instance
+
+    # cancel one branch:
+    → expect: that branch stops, siblings continue, and the graph reflects it
+      within the stream's latency
+
+    # drop the network for ten seconds:
+    → expect: the view reconnects and shows the transitions it missed, in order
+
+    # open a 200-step instance:
+    → expect: bounded rendering with an explicit indication, not a frozen tab
+
+## Verification
+
+- Standing scenario suite passes; the web workspace's own tests cover the views.
+- Component tests over recorded instance fixtures, including failed, cancelled,
+  and compensating branches.
+- Reconnect test asserting no missed or duplicated transition.
+- Accessibility checks on the graph and step detail.
 
 ## Acceptance criteria
 
-- [ ] A user can inspect and cancel every active branch
-- [ ] Reload/reconnect reconstructs the same graph state
-- [ ] Run links navigate to canonical run views
-- [ ] Errors are stable and actionable; logs/traces include resource IDs but exclude content and secrets by default.
-- [ ] The implementation does not introduce an outward dependency into the domain or a cross-adapter import.
+- [ ] Every active branch is inspectable and cancellable from the browser.
+- [ ] Lineage links work in both directions.
+- [ ] Reconnect loses no transition.
+- [ ] Phase 4's exit statement in `docs/roadmap.md` is demonstrated by the
+      standing scenarios plus this view.
+- [ ] No provider or step-type conditional leaks into a generic component.
 
-## Required verification
+## Deferrals
 
-- Run renderer/component tests.
-- Run browser workflow replay/reconnect test.
-- Run accessibility checks.
-- Run the repository format, lint, unit-test, and build checks affected by the change.
+`None.`
 
-## Implementation notes
+## Traces to
 
-- Prefer the smallest end-to-end behavior that proves the contract; keep optional optimizations out of this task.
-- Test failure and replay/idempotency behavior at every durable or asynchronous boundary introduced here.
-- Update this brief only when architectural review changes its scope, dependencies, or acceptance criteria.
+`docs/architecture.md` §4 (web application); `docs/contracts.md` §6;
+`docs/roadmap.md` Phase 4 exit

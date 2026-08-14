@@ -7,6 +7,36 @@ recommendations; it is not itself a task and does not change any contract.
 
 **Reviewed:** 2026-08-14, against 47 tasks (19 completed, 28 pending).
 
+**Resolved:** 2026-08-14 by the re-derivation recorded in
+[`README.md`](README.md#changelog). Every gap below now has an owner. The
+review stands as written — it is a point-in-time record, not a living document —
+and this table is the only thing added to it.
+
+| Gap | Owner |
+|---|---|
+| 1. Credential and login lifecycle | P1-054 (reference storage, secret-provider adapter), P2-058 (OAuth/device flow, token entry) |
+| 2. Workspace aggregate assumed, never built | P2-055; P1-050 records the implicit-workspace assumption until then |
+| 3. Approvals never actioned from the browser | P2-056 |
+| 4. Out-of-process renderer isolation | Deferred decision in `docs/roadmap.md` with a revisit trigger |
+| 5. Telemetry foundation arrives last | P1-048 (foundation, first available task); P5-047 keeps SLOs, dashboards, runbooks |
+| 6. Packaging and deployment unscoped | P1-048 (composition root, config, migration bootstrap, compose); P5-041 names `cmd/winch-runner` |
+| 7. Supply chain (T13 / LB08) | P3-060 |
+| 8. Run retry modelled but unreachable | P2-057 |
+| 9a. Renderer selection by kind and preference | P2-022 |
+| 9b. Renderer output caching | Deferred decision; P2-027 no longer claims to invalidate it |
+| 9c. Communication/API proxy | Deferred decision |
+| 9d. Local queue admission and concurrency limits | P2-059 |
+| 9e. SQLite developer profile | Deferred decision |
+
+The two tight edges the review flagged were both dropped: P5-041 no longer
+depends on P3-030, and P2-025 no longer depends on P2-024. P1-014 → P1-013 was
+left as-is because both tasks are complete.
+
+The review's own blind spot is worth recording: it audited the plan against the
+design documents and found 85–90% coverage, but it did not check whether the
+composition root existed. `cmd/winchd/main.go` was `func main() {}` at the time
+it was written. Coverage of a design is not evidence that anything runs.
+
 ## Summary
 
 Coverage of the architecture is high — roughly **85–90%** of documented

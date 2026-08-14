@@ -108,12 +108,23 @@ def effective_tracker(tracker: dict[str, Any], state: dict[str, Any]) -> dict[st
     return effective
 
 
-def prune_completed(tracker: dict[str, Any], state: dict[str, Any]) -> bool:
+def retire_completed(tracker: dict[str, Any], state: dict[str, Any]) -> bool:
+    """Mark the entries the tracker caught up with, keeping the record they carry.
+
+    A retired entry stops overriding anything, because the overlay skips a task the tracker
+    already calls completed, but it still holds the pull request and the Codex task the work
+    went through — the only trace of how the task finished once the tracker agrees.
+    """
     completed = {task["id"] for task in tracker["tasks"] if task["status"] == "completed"}
-    stale = [task_id for task_id in state["tasks"] if task_id in completed]
-    for task_id in stale:
-        del state["tasks"][task_id]
-    return bool(stale)
+    retired = [
+        task_id
+        for task_id, entry in state["tasks"].items()
+        if task_id in completed and entry["status"] != "completed"
+    ]
+    for task_id in retired:
+        state["tasks"][task_id]["status"] = "completed"
+        state["tasks"][task_id]["owner"] = None
+    return bool(retired)
 
 
 def merged_pull_request(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -144,6 +155,7 @@ def record_completions(
         if current.get("status") == "completed":
             continue
         state["tasks"][task_id] = {
+            **current,
             "status": "completed",
             "owner": None,
             "blocked_reason": None,
@@ -273,7 +285,7 @@ def schedule(
     state = load_state(state_file)
     known_ids = {task["id"] for task in tracker["tasks"]}
     changed = record_completions(state, pulls, known_ids)
-    if prune_completed(tracker, state) or changed:
+    if retire_completed(tracker, state) or changed:
         save_state(state_file, state)
     template = load_prompt_template(repo_root, args.prompt_template)
     available = available_tasks(repo_root, effective_tracker(tracker, state))

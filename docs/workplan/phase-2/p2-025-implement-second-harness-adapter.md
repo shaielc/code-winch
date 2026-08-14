@@ -1,52 +1,87 @@
 # P2-025: Implement second harness adapter
 
 **Phase:** 2 — Structured experience and second harness
-**Dependencies:** P2-021, P2-024
-**Can run in parallel with:** Any task whose dependency list is satisfied and which does not edit the same contract surface.
+**Shape:** swap
+**Dependencies:** P2-021 (contract: both adapters map onto the same normalization helpers), P1-049 (compile: the runner and sandbox attach the adapter is launched through)
 
 ## Objective
 
-Add a meaningfully different provider to validate structured and capability-based adapter boundaries.
-
-## Architectural context
-
-Implement this as a thin increment behind the ports and boundaries defined in `docs/architecture.md`, `docs/code-structure.md`, and `docs/contracts.md`. Apply the threat model and secure defaults from `docs/security.md`; the phase gate remains authoritative in `docs/roadmap.md`.
+The same web views and the same standing scenarios drive a second provider, with
+no provider conditional in a generic component. If a generic component needs a
+provider name to behave correctly, this task has failed even if the run works.
 
 ## Scope
 
-- Implement descriptor, launch, codec, input, exit, and namespaced extensions
-- Exercise at least one capability absent from the first adapter and one unsupported capability
-- Use deterministic sanitized fixtures
+- A second harness package: descriptor with stable ID, adapter version,
+  input/output modes, login modes, and capabilities; launch construction;
+  incremental codec; exit mapping; namespaced extension schema for
+  provider-only data.
+- Registration through P1-050's append-only registry — no edit to a central
+  switch.
+- A recorded, sanitized transcript fixture so CI exercises the codec without a
+  vendor account, plus the shared harness contract suite.
+- Capability-driven UI: controls the second provider does not support are
+  disabled with the reason, rather than hidden or silently inert.
+- A capability matrix in the docs comparing both adapters honestly.
 
 ## Non-goals
 
-- Do not add provider conditionals to generic UI, supervisor, or workflow code
-- Do not weaken shared contracts to fit the provider
+- A lowest-common-denominator UI. Provider-only data stays available through its
+  extension namespace.
+- Third-party or plugin adapters — deferred in `docs/roadmap.md`.
+- Login flows for the second provider — P2-058.
 
-## Deliverables
+## Runtime reachability
 
-- Production code and configuration for the scoped behavior, placed according to `docs/code-structure.md`.
-- Focused automated tests and deterministic fixtures; use injected time, IDs, runner, publisher, and secrets where relevant.
-- Contract/schema/migration updates required by the scope, including generated outputs from their declared source of truth.
-- Brief operator or developer documentation for any new command, configuration, failure mode, or security posture.
+`winch run create --harness <second>` on the compose stack; the same run page
+and the same standing scenarios.
+
+## Owned surfaces
+
+`internal/adapters/harness/<second>/`, its `testdata/`,
+`schemas/events/v1/extensions/<second>/`, `docs/harness-capabilities.md`.
+
+## Demonstration
+
+    $ winch profiles
+    → expect: two harnesses listed with differing capability sets
+
+    $ make e2e HARNESS=<second>
+    → expect: the same standing scenarios pass, unchanged, against the second
+      adapter
+
+    # in the browser, one run per provider, side by side:
+    → expect: identical conversation and activity components; a control the
+      second provider lacks is disabled and states why
+
+    $ grep -rn '<second>' web/src/renderers web/src/features/runs
+    → expect: no match outside a capability lookup
+
+## Verification
+
+- Standing scenario suite passes against the second adapter and still passes
+  against the first.
+- Shared harness contract suite passes for both adapters.
+- Codec tests over the sanitized transcript with adversarial chunk boundaries.
+- A test asserting the transcript fixture contains no credential-shaped value.
 
 ## Acceptance criteria
 
-- [ ] Both adapters pass the same shared suite
-- [ ] Generic views consume both without provider branches
-- [ ] Provider-only data remains available only through its extension renderer
-- [ ] Errors are stable and actionable; logs/traces include resource IDs but exclude content and secrets by default.
-- [ ] The implementation does not introduce an outward dependency into the domain or a cross-adapter import.
+- [ ] Both adapters pass one contract suite with no adapter-specific exemption.
+- [ ] Generic web components contain no provider conditional.
+- [ ] Unsupported controls are disabled with a stated reason.
+- [ ] Provider-only data survives in its extension namespace and is ignored by
+      generic consumers.
+- [ ] CI needs no vendor account.
 
-## Required verification
+## Deferrals
 
-- Run both harness contract suites.
-- Run cross-provider generic renderer tests.
-- Run second fake-CLI integration test.
-- Run the repository format, lint, unit-test, and build checks affected by the change.
+| Deferred | Owning task |
+|---|---|
+| Login for this provider | P2-058 |
+| Running this adapter under Docker isolation | P3-029 |
 
-## Implementation notes
+## Traces to
 
-- Prefer the smallest end-to-end behavior that proves the contract; keep optional optimizations out of this task.
-- Test failure and replay/idempotency behavior at every durable or asynchronous boundary introduced here.
-- Update this brief only when architectural review changes its scope, dependencies, or acceptance criteria.
+`docs/code-structure.md` §4; `docs/architecture.md` §4 (harness adapters);
+`docs/decisions/0003-capability-based-adapters.md`; `docs/roadmap.md` Phase 2 exit

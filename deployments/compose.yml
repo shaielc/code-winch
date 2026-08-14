@@ -1,0 +1,68 @@
+# Local single-user development stack: web -> winchd -> postgres.
+#
+#   docker compose -f deployments/compose.yml up --build
+#
+# The stack is local-trusted (docs/security.md): the local sandbox driver runs
+# harness processes without isolation, and the secrets below are development
+# defaults, not credentials. Override them in an untracked
+# deployments/compose.override.yml or deployments/.env before exposing this to
+# anything but a loopback interface.
+
+name: code-winch
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: winch
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-winch-local-development}
+      POSTGRES_DB: winch
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # The daemon migrates on start, so it must not connect before the
+      # database accepts queries on its own socket.
+      test: ["CMD-SHELL", "pg_isready -U winch -d winch -h 127.0.0.1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  winchd:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.winchd
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      WINCH_ADDR: ":8080"
+      WINCH_DATABASE_URL: postgres://winch:${POSTGRES_PASSWORD:-winch-local-development}@postgres:5432/winch?sslmode=disable
+      # Must match the origin the browser uses, or every mutating request is
+      # rejected as a CSRF failure.
+      WINCH_ALLOWED_ORIGIN: ${WINCH_ALLOWED_ORIGIN:-http://localhost:8080}
+      # Both secrets must be at least 32 bytes; the API refuses to start
+      # otherwise. These are deliberately not secret.
+      WINCH_TOKEN: ${WINCH_TOKEN:-local-development-session-token-0000000000}
+      WINCH_CSRF_TOKEN: ${WINCH_CSRF_TOKEN:-local-development-csrf-token-000000000000}
+      WINCH_ACTOR: ${WINCH_ACTOR:-local-user}
+      WINCH_HARNESS_PROFILE: ${WINCH_HARNESS_PROFILE:-fake}
+      WINCH_SANDBOX_PROFILE: ${WINCH_SANDBOX_PROFILE:-local}
+    # Not published: the browser reaches the API through the web service so
+    # that the UI and the API share one origin.
+    expose:
+      - "8080"
+
+  web:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.web
+    depends_on:
+      - winchd
+    ports:
+      # Loopback only. The session cookie is Secure, which browsers accept over
+      # plain HTTP for localhost but not for any other host.
+      - "127.0.0.1:${WINCH_WEB_PORT:-8080}:80"
+
+volumes:
+  postgres-data:

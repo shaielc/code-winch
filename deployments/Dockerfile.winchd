@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1
+#
+# Build context is the repository root:
+#   docker build -f deployments/Dockerfile.winchd .
+
+FROM golang:1.24-bookworm AS build
+WORKDIR /src
+
+# Dependencies resolve from the committed go.mod/go.sum only. -mod=readonly
+# fails the build rather than silently rewriting them.
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
+COPY cmd/ cmd/
+COPY internal/ internal/
+COPY pkg/ pkg/
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -mod=readonly -o /out/winchd ./cmd/winchd && \
+    CGO_ENABLED=0 go build -mod=readonly -o /out/fake-harness ./cmd/fake-harness
+
+FROM debian:bookworm-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 10001 winch
+
+COPY --from=build /out/winchd /usr/local/bin/winchd
+# The fake harness is launched by name from PATH by the harness adapter's
+# launch spec, so it must be installed rather than merely built.
+COPY --from=build /out/fake-harness /usr/local/bin/fake-harness
+
+USER winch
+WORKDIR /home/winch
+EXPOSE 8080
+ENTRYPOINT ["winchd"]
