@@ -259,7 +259,7 @@
       "title": "Build terminal run web slice",
       "phase": 1,
       "phase_name": "Local single-user vertical slice",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P0-002",
         "P1-017",
