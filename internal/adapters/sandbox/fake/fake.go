@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"sync"
 
 	"github.com/shaielc/code-winch/internal/application"
@@ -17,13 +19,19 @@ type Driver struct {
 	// tests to prove that an implementation lying about support is rejected.
 	RejectNetworkPolicy  bool
 	RejectResourceLimits bool
-	mu                   sync.Mutex
-	prepared             map[string]bool
-	executions           map[string]application.ObservedExecution
+	// LeakStreamAfterExit keeps the attached stream open past the process exit,
+	// so the contract can prove it still catches a stream that never terminates.
+	LeakStreamAfterExit bool
+	mu                  sync.Mutex
+	prepared            map[string]bool
+	executions          map[string]application.ObservedExecution
+	streams             map[string]io.ReadWriteCloser
+	peers               map[string]io.ReadWriteCloser
+	attached            map[string]bool
 }
 
 func New(capabilities application.SandboxCapabilities) *Driver {
-	return &Driver{CapabilitiesValue: capabilities, prepared: map[string]bool{}, executions: map[string]application.ObservedExecution{}}
+	return &Driver{CapabilitiesValue: capabilities, prepared: map[string]bool{}, executions: map[string]application.ObservedExecution{}, streams: map[string]io.ReadWriteCloser{}, peers: map[string]io.ReadWriteCloser{}, attached: map[string]bool{}}
 }
 func (d *Driver) Capabilities(context.Context) application.SandboxCapabilities {
 	return d.CapabilitiesValue
@@ -51,7 +59,28 @@ func (d *Driver) Start(_ context.Context, prepared application.PreparedSandbox, 
 	}
 	h := application.ExecutionHandle{ID: "execution-" + prepared.ID}
 	d.executions[h.ID] = application.ObservedExecution{Running: true}
+	if d.CapabilitiesValue.Attach {
+		client, process := net.Pipe()
+		d.streams[h.ID], d.peers[h.ID] = client, process
+		go func() { _, _ = io.Copy(process, process); _ = process.Close() }()
+	}
 	return h, nil
+}
+func (d *Driver) Attach(_ context.Context, handle application.ExecutionHandle) (io.ReadWriteCloser, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.CapabilitiesValue.Attach {
+		return nil, errors.New("fake sandbox: code=UNSUPPORTED_CAPABILITY capability=attach")
+	}
+	stream, ok := d.streams[handle.ID]
+	if !ok {
+		return nil, fmt.Errorf("fake sandbox: code=NOT_FOUND execution_id=%s", handle.ID)
+	}
+	if d.attached[handle.ID] && d.CapabilitiesValue.AttachSingleUse {
+		return nil, fmt.Errorf("fake sandbox: code=ALREADY_ATTACHED execution_id=%s", handle.ID)
+	}
+	d.attached[handle.ID] = true
+	return stream, nil
 }
 func (d *Driver) Inspect(_ context.Context, handle application.ExecutionHandle) (application.ObservedExecution, error) {
 	d.mu.Lock()
@@ -87,6 +116,9 @@ func (d *Driver) Stop(_ context.Context, handle application.ExecutionHandle, _ a
 	value.Running = false
 	value.ExitCode = &code
 	d.executions[handle.ID] = value
+	if peer := d.peers[handle.ID]; peer != nil && !d.LeakStreamAfterExit {
+		_ = peer.Close()
+	}
 	return nil
 }
 func (d *Driver) Cleanup(_ context.Context, prepared application.PreparedSandbox) error {
@@ -94,6 +126,9 @@ func (d *Driver) Cleanup(_ context.Context, prepared application.PreparedSandbox
 	defer d.mu.Unlock()
 	delete(d.prepared, prepared.ID)
 	delete(d.executions, "execution-"+prepared.ID)
+	if stream := d.streams["execution-"+prepared.ID]; stream != nil {
+		_ = stream.Close()
+	}
 	return nil
 }
 
