@@ -96,6 +96,7 @@ type RunRepository struct {
 
 func cloneRun(value application.RunRecord) application.RunRecord {
 	value.Attempts = append([]domain.Attempt(nil), value.Attempts...)
+	value.ResolvedConfiguration = cloneBytes(value.ResolvedConfiguration)
 	return value
 }
 func (r *RunRepository) Save(_ context.Context, value application.RunRecord, expected uint64) (uint64, error) {

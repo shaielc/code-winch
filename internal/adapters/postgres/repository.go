@@ -61,10 +61,10 @@ func (s *Store) Save(ctx context.Context, record application.RunRecord, expected
 	defer func() { _ = tx.Rollback(ctx) }()
 	next := expected + 1
 	if expected == 0 {
-		_, err = tx.Exec(ctx, `INSERT INTO runs(id,version) VALUES($1,1)`, record.ID.String())
+		_, err = tx.Exec(ctx, `INSERT INTO runs(id,version,workspace_path,harness_profile,sandbox_profile,resolved_configuration,created_at,updated_at) VALUES($1,1,$2,$3,$4,$5,$6,$7)`, record.ID.String(), record.WorkspacePath, record.HarnessProfile, record.SandboxProfile, record.ResolvedConfiguration, record.CreatedAt.Time(), record.UpdatedAt.Time())
 	} else {
 		var found uint64
-		err = tx.QueryRow(ctx, `UPDATE runs SET version=$2 WHERE id=$1 AND version=$3 RETURNING version`, record.ID.String(), next, expected).Scan(&found)
+		err = tx.QueryRow(ctx, `UPDATE runs SET version=$2,updated_at=$4 WHERE id=$1 AND version=$3 RETURNING version`, record.ID.String(), next, expected, record.UpdatedAt.Time()).Scan(&found)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, fmt.Errorf("%w: run=%s expected_version=%d", application.ErrConflict, record.ID, expected)
 		}
@@ -94,7 +94,9 @@ func zeroID(id domain.AttemptID) string {
 
 func (s *Store) Get(ctx context.Context, id domain.RunID) (application.RunRecord, uint64, error) {
 	var version uint64
-	if err := s.pool.QueryRow(ctx, `SELECT version FROM runs WHERE id=$1`, id.String()).Scan(&version); errors.Is(err, pgx.ErrNoRows) {
+	record := application.RunRecord{ID: id}
+	var created, updated time.Time
+	if err := s.pool.QueryRow(ctx, `SELECT version,workspace_path,harness_profile,sandbox_profile,resolved_configuration,created_at,updated_at FROM runs WHERE id=$1`, id.String()).Scan(&version, &record.WorkspacePath, &record.HarnessProfile, &record.SandboxProfile, &record.ResolvedConfiguration, &created, &updated); errors.Is(err, pgx.ErrNoRows) {
 		return application.RunRecord{}, 0, application.ErrNotFound
 	} else if err != nil {
 		return application.RunRecord{}, 0, err
@@ -104,7 +106,8 @@ func (s *Store) Get(ctx context.Context, id domain.RunID) (application.RunRecord
 		return application.RunRecord{}, 0, err
 	}
 	defer rows.Close()
-	record := application.RunRecord{ID: id}
+	record.CreatedAt, _ = domain.NewTimestamp(created)
+	record.UpdatedAt, _ = domain.NewTimestamp(updated)
 	for rows.Next() {
 		var aid, prev, state string
 		if err = rows.Scan(&aid, &prev, &state); err != nil {

@@ -17,8 +17,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/shaielc/code-winch/internal/adapters/harness/fake"
 	"github.com/shaielc/code-winch/internal/adapters/postgres"
+	_ "github.com/shaielc/code-winch/internal/adapters/sandbox/fake"
+	_ "github.com/shaielc/code-winch/internal/adapters/sandbox/local"
 	"github.com/shaielc/code-winch/internal/adapters/transport/httpapi"
+	"github.com/shaielc/code-winch/internal/application"
 	"github.com/shaielc/code-winch/internal/platform/config"
 	"github.com/shaielc/code-winch/internal/platform/telemetry"
 )
@@ -72,7 +76,11 @@ func run(ctx context.Context) error {
 	logger.Info("schema checked", "component", "database", "operation", "migrate", "sequence", migration.Version, "status", migrationStatus)
 	stream := httpapi.NewEventStream(64)
 	defer stream.Close()
-	api, err := httpapi.NewHandler(httpapi.Config{Token: cfg.Token, CSRFToken: cfg.CSRFToken, AllowedOrigin: cfg.AllowedOrigin, Actor: cfg.Actor, Logger: logger, RequestID: requestID, EventStream: stream}, unavailableBackend{})
+	store := postgres.New(pool)
+	ids := application.RandomIDs{}
+	runs := application.NewRunService(store, store, ids, application.SystemClock{}, application.DefaultDrivers, nil)
+	backend := httpapi.NewBackend(runs, nil, ids)
+	api, err := httpapi.NewHandler(httpapi.Config{Token: cfg.Token, CSRFToken: cfg.CSRFToken, AllowedOrigin: cfg.AllowedOrigin, Actor: cfg.Actor, Logger: logger, RequestID: requestID, EventStream: stream}, backend)
 	if err != nil {
 		return err
 	}
@@ -156,15 +164,12 @@ func staticHandler(dir, csrf string) (http.Handler, bool) {
 	return handler, true
 }
 
-// unavailableBackend keeps the run routes mounted but inert until P1-050 binds
-// the real use cases. Reads answer not-found truthfully — no run can exist yet;
-// creation reports an internal error rather than blaming the caller's body.
+// unavailableBackend remains a small test fixture for exercising middleware
+// without a database; production wiring above always uses ApplicationBackend.
 type unavailableBackend struct{}
 
-var errRunBackendUnbound = errors.New("run use cases are not bound")
-
 func (unavailableBackend) CreateRun(context.Context, string, string, httpapi.CreateRunRequest) (httpapi.Run, error) {
-	return httpapi.Run{}, errRunBackendUnbound
+	return httpapi.Run{}, errors.New("unavailable")
 }
 func (unavailableBackend) GetRun(context.Context, string, httpapi.RunId) (httpapi.Run, error) {
 	return httpapi.Run{}, httpapi.ErrRunNotFound

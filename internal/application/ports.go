@@ -23,8 +23,11 @@ type Workspace struct {
 }
 
 type RunRecord struct {
-	ID       domain.RunID
-	Attempts []domain.Attempt
+	ID                                            domain.RunID
+	Attempts                                      []domain.Attempt
+	WorkspacePath, HarnessProfile, SandboxProfile string
+	ResolvedConfiguration                         []byte
+	CreatedAt, UpdatedAt                          domain.Timestamp
 }
 
 type WorkspaceRepository interface {
