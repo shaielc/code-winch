@@ -1,7 +1,7 @@
 # Local deployment
 
-A three-service development stack: the web UI, the `winchd` daemon, and
-PostgreSQL.
+A two-service development stack: the `winchd` daemon (including the built web
+UI) and PostgreSQL.
 
 ```sh
 docker compose -f deployments/compose.yml up --build
@@ -10,28 +10,23 @@ docker compose -f deployments/compose.yml up --build
 The UI is then served on <http://localhost:8080>. Stop the stack with `down`,
 and add `-v` to discard the database volume.
 
-## Current state
-
-**The daemon is not wired yet.** `cmd/winchd/main.go` is still an empty
-`main()`, so the `winchd` container builds, starts, and exits immediately with
-status 0. Postgres and the web UI come up normally, but every `/api/v1` request
-returns a proxy error until the composition root exists. The images, the network
-topology, and the configuration contract below are what this stack establishes
-now; they need no changes when the daemon lands.
+At startup the daemon validates configuration, connects to PostgreSQL, applies
+all five migrations, and only then opens its listener. `GET /api/v1/health`
+returns `{"status":"ok"}`. Shutdown signals close live event subscribers and
+give HTTP requests the configured bounded drain period.
 
 ## Services
 
 | Service | Image | Published | Notes |
 |---|---|---|---|
-| `web` | nginx + built assets | `127.0.0.1:8080` | Serves the SPA and proxies `/api/v1` to the daemon |
-| `winchd` | Go daemon + fake harness | internal only | Reached through the web proxy so the UI and API share one origin |
+| `winchd` | Go daemon + web assets + fake harness | `127.0.0.1:8080` | Serves the SPA and `/api/v1` from one origin |
 | `postgres` | `postgres:17-alpine` | internal only | Data persists in the `postgres-data` volume |
 
-`winchd` is deliberately unpublished. The API rejects mutating requests whose
+`winchd` is published only on loopback. The API rejects mutating requests whose
 `Origin` does not match `WINCH_ALLOWED_ORIGIN`, and the session cookie is scoped
 to `/api/v1` with `Secure` set, so the browser must reach both the UI and the API
-through the same origin. Browsers accept `Secure` cookies over plain HTTP for
-`localhost` only, which is why the published port binds to loopback.
+through the same origin. The daemon injects the CSRF token into the served
+`index.html`; it never puts that token in a cookie or exposes a bootstrap API.
 
 ## Configuration
 
@@ -47,6 +42,12 @@ through the same origin. Browsers accept `Secure` cookies over plain HTTP for
 | `WINCH_SANDBOX_PROFILE` | `local` | Sandbox driver to launch under |
 | `WINCH_WEB_PORT` | `8080` | Host port for the UI |
 | `POSTGRES_PASSWORD` | development default | Database password |
+
+Set `WINCH_CONFIG_FILE` to load an optional YAML configuration file before
+environment overrides are applied. `WINCH_STATIC_DIR` selects the built asset
+directory, and `WINCH_SHUTDOWN_TIMEOUT` (default `10s`) bounds HTTP and stream
+draining. Authentication secrets deliberately have no compiled default and
+must contain at least 32 bytes.
 
 Override them in `deployments/.env` or `deployments/compose.override.yml`. Both
 are untracked; do not commit either, and do not add a template that invites

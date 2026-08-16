@@ -1,4 +1,4 @@
-# Local single-user development stack: web -> winchd -> postgres.
+# Local single-user development stack: browser -> winchd -> postgres.
 #
 #   docker compose -f deployments/compose.yml up --build
 #
@@ -48,21 +48,9 @@ services:
       WINCH_ACTOR: ${WINCH_ACTOR:-local-user}
       WINCH_HARNESS_PROFILE: ${WINCH_HARNESS_PROFILE:-fake}
       WINCH_SANDBOX_PROFILE: ${WINCH_SANDBOX_PROFILE:-local}
-    # Not published: the browser reaches the API through the web service so
-    # that the UI and the API share one origin.
-    expose:
-      - "8080"
-
-  web:
-    build:
-      context: ..
-      dockerfile: deployments/Dockerfile.web
-    depends_on:
-      - winchd
+      WINCH_STATIC_DIR: /usr/share/winch/web
     ports:
-      # Loopback only. The session cookie is Secure, which browsers accept over
-      # plain HTTP for localhost but not for any other host.
-      - "127.0.0.1:${WINCH_WEB_PORT:-8080}:80"
+      - "127.0.0.1:${WINCH_WEB_PORT:-8080}:8080"
 
 volumes:
   postgres-data:

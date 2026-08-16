@@ -24,6 +24,19 @@ type EventStream struct {
 	runs     map[RunId]map[uint64]*eventSubscriber
 }
 
+// Close disconnects all subscribers so daemon shutdown can drain boundedly.
+func (b *EventStream) Close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for runID, subscribers := range b.runs {
+		for id, sub := range subscribers {
+			sub.once.Do(func() { close(sub.done) })
+			delete(subscribers, id)
+		}
+		delete(b.runs, runID)
+	}
+}
+
 type eventSubscriber struct {
 	events chan Event
 	done   chan struct{}

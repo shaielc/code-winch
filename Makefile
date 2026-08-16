@@ -1,7 +1,7 @@
 GO ?= go
 GOLANGCI_LINT ?= golangci-lint
 
-.PHONY: all api-check api-compat api-generate api-validate build check format format-check lint test vet
+.PHONY: all api-check api-compat api-generate api-validate build check format format-check lint run test vet
 
 all: check
 
@@ -58,6 +58,10 @@ build:
 	@output="$$(mktemp)"; \
 	trap 'rm -f "$$output"' EXIT; \
 	$(GO) build -o "$$output" ./cmd/winchd
+
+## run: Start the daemon with configuration resolved from file and environment.
+run:
+	$(GO) run ./cmd/winchd
 
 ## check: Run every check required by CI.
 check: api-check format-check vet lint test build
