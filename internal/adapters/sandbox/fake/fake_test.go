@@ -11,7 +11,7 @@ import (
 
 func TestSandboxContract(t *testing.T) {
 	sandboxcontract.Run(t, func(*testing.T) application.SandboxDriver {
-		return fake.New(application.SandboxCapabilities{NetworkPolicy: true, ResourceLimits: true})
+		return fake.New(application.SandboxCapabilities{NetworkPolicy: true, ResourceLimits: true, Attach: true, AttachSingleUse: true})
 	})
 }
 

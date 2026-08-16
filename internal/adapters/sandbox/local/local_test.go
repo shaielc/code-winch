@@ -19,7 +19,7 @@ import (
 func TestSandboxContract(t *testing.T) {
 	dir := t.TempDir()
 	command := filepath.Join(dir, "contract-command")
-	if err := os.WriteFile(command, []byte("#!/bin/sh\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n"), 0o700); err != nil {
+	if err := os.WriteFile(command, []byte("#!/bin/sh\ntrap 'exit 0' TERM\ncat\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -29,7 +29,7 @@ func TestSandboxContract(t *testing.T) {
 func TestCapabilitiesAreTruthful(t *testing.T) {
 	d := New()
 	caps := d.Capabilities(context.Background())
-	if caps.Isolation != "unisolated" || !caps.Resize || caps.NetworkPolicy || caps.ResourceLimits {
+	if caps.Isolation != "unisolated" || !caps.Resize || !caps.Attach || !caps.AttachSingleUse || caps.NetworkPolicy || caps.ResourceLimits {
 		t.Fatalf("unexpected capabilities: %#v", caps)
 	}
 	for _, spec := range []application.SandboxSpec{

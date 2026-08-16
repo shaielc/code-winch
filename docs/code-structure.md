@@ -77,6 +77,7 @@ type SandboxDriver interface {
     Capabilities(ctx context.Context) SandboxCapabilities
     Prepare(ctx context.Context, SandboxSpec) (PreparedSandbox, error)
     Start(ctx context.Context, PreparedSandbox, LaunchSpec) (ExecutionHandle, error)
+    Attach(ctx context.Context, ExecutionHandle) (io.ReadWriteCloser, error)
     Inspect(ctx context.Context, ExecutionHandle) (ObservedExecution, error)
     Stop(ctx context.Context, ExecutionHandle, StopPolicy) error
     Cleanup(ctx context.Context, PreparedSandbox) error
@@ -93,6 +94,11 @@ type WorkflowRuntime interface {
     ClaimReadySteps(ctx context.Context, WorkerID, Limit) ([]StepLease, error)
 }
 ```
+
+Sandbox capabilities explicitly report whether attached I/O is available and
+whether attachment is single-use. The local runner is the sole owner of opaque
+execution handles and harness codecs; it pumps attached bytes into codecs and
+emits runner-local ordinals, never canonical event sequence numbers.
 
 `ResolvedCredentials` is short-lived and can be used only during sandbox
 preparation/launch. It must never appear in `RunSpec`, persisted events, or

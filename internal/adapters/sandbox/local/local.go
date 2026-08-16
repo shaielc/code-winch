@@ -8,11 +8,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/creack/pty"
 	"github.com/shaielc/code-winch/internal/application"
@@ -26,6 +28,7 @@ type execution struct {
 	pgid     int
 	done     chan struct{}
 	observed application.ObservedExecution
+	attached bool
 }
 
 // Driver owns all processes it starts. A Driver must not be copied after use.
@@ -48,7 +51,21 @@ func New() *Driver {
 }
 
 func (*Driver) Capabilities(context.Context) application.SandboxCapabilities {
-	return application.SandboxCapabilities{Isolation: "unisolated", Resize: true}
+	return application.SandboxCapabilities{Isolation: "unisolated", Resize: true, Attach: true, AttachSingleUse: true}
+}
+
+func (d *Driver) Attach(_ context.Context, handle application.ExecutionHandle) (io.ReadWriteCloser, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	e, ok := d.executions[handle.ID]
+	if !ok {
+		return nil, fmt.Errorf("local sandbox: code=NOT_FOUND execution_id=%s", handle.ID)
+	}
+	if e.attached {
+		return nil, fmt.Errorf("local sandbox: code=ALREADY_ATTACHED execution_id=%s", handle.ID)
+	}
+	e.attached = true
+	return e.pty, nil
 }
 
 func (d *Driver) Prepare(_ context.Context, spec application.SandboxSpec) (application.PreparedSandbox, error) {
@@ -95,6 +112,7 @@ func (d *Driver) Start(ctx context.Context, prepared application.PreparedSandbox
 	if err != nil {
 		return application.ExecutionHandle{}, fmt.Errorf("local sandbox: code=START_FAILED sandbox_id=%s: %w", prepared.ID, err)
 	}
+	disableEcho(terminal)
 	e := &execution{cmd: cmd, pty: terminal, pgid: cmd.Process.Pid, done: make(chan struct{}), observed: application.ObservedExecution{Running: true}}
 	d.mu.Lock()
 	// Cleanup may have raced with process creation; never publish an unowned process.
@@ -113,6 +131,15 @@ func (d *Driver) Start(ctx context.Context, prepared application.PreparedSandbox
 	d.mu.Unlock()
 	go d.wait(id, e)
 	return application.ExecutionHandle{ID: id}, nil
+}
+
+func disableEcho(terminal *os.File) {
+	var state syscall.Termios
+	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, terminal.Fd(), syscall.TCGETS, uintptr(unsafe.Pointer(&state))); errno != 0 {
+		return
+	}
+	state.Lflag &^= syscall.ECHO
+	_, _, _ = syscall.Syscall(syscall.SYS_IOCTL, terminal.Fd(), syscall.TCSETS, uintptr(unsafe.Pointer(&state)))
 }
 
 func (d *Driver) wait(id string, e *execution) {

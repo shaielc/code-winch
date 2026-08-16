@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/shaielc/code-winch/internal/domain"
@@ -59,6 +60,10 @@ type SandboxCapabilities struct {
 	Resize         bool
 	NetworkPolicy  bool
 	ResourceLimits bool
+	// Attach provides a bidirectional byte stream for the execution. Attach is
+	// single-use when AttachSingleUse is true.
+	Attach          bool
+	AttachSingleUse bool
 }
 type SandboxSpec struct {
 	ID             string
@@ -81,6 +86,7 @@ type SandboxDriver interface {
 	Capabilities(context.Context) SandboxCapabilities
 	Prepare(context.Context, SandboxSpec) (PreparedSandbox, error)
 	Start(context.Context, PreparedSandbox, LaunchSpec) (ExecutionHandle, error)
+	Attach(context.Context, ExecutionHandle) (io.ReadWriteCloser, error)
 	Inspect(context.Context, ExecutionHandle) (ObservedExecution, error)
 	Resize(context.Context, ExecutionHandle, TerminalSize) error
 	Stop(context.Context, ExecutionHandle, StopPolicy) error

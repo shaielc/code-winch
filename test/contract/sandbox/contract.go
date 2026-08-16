@@ -4,7 +4,10 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"io"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/shaielc/code-winch/internal/application"
 )
@@ -37,6 +40,28 @@ func Validate(driver application.SandboxDriver) error {
 	if err != nil {
 		return fmt.Errorf("start: %w", err)
 	}
+	var stream io.ReadWriteCloser
+	if caps.Attach {
+		stream, err = driver.Attach(ctx, handle)
+		if err != nil || stream == nil {
+			return fmt.Errorf("advertised attach is not usable: stream=%v: %w", stream, err)
+		}
+		if caps.AttachSingleUse {
+			if second, secondErr := driver.Attach(ctx, handle); secondErr == nil || second != nil {
+				return fmt.Errorf("single-use attach accepted a second attachment")
+			}
+		}
+		payload := []byte("contract read-after-write\n")
+		if _, err = stream.Write(payload); err != nil {
+			return fmt.Errorf("attached write: %w", err)
+		}
+		setReadDeadline(stream, time.Now().Add(time.Second))
+		got := make([]byte, len(payload)+1) // PTYs commonly translate LF to CRLF.
+		n, readErr := stream.Read(got)
+		if readErr != nil || strings.TrimSpace(string(got[:n])) != strings.TrimSpace(string(payload)) {
+			return fmt.Errorf("attached read-after-write: %q: %v", got, err)
+		}
+	}
 	observed, err := driver.Inspect(ctx, handle)
 	if err != nil || !observed.Running {
 		return fmt.Errorf("inspect running: %#v: %v", observed, err)
@@ -55,10 +80,30 @@ func Validate(driver application.SandboxDriver) error {
 	if err != nil || observed.Running || observed.ExitCode == nil {
 		return fmt.Errorf("inspect stopped: %#v: %v", observed, err)
 	}
+	if stream != nil {
+		setReadDeadline(stream, time.Now().Add(time.Second))
+		var one [1]byte
+		if _, readErr := stream.Read(one[:]); readErr == nil {
+			return fmt.Errorf("attached read after exit did not terminate")
+		}
+		if _, writeErr := stream.Write(one[:]); writeErr == nil {
+			return fmt.Errorf("attached write after exit succeeded")
+		}
+		if err = stream.Close(); err != nil {
+			return fmt.Errorf("attached close: %w", err)
+		}
+		_ = stream.Close() // repeated close must be safe, but may report closed
+	}
 	for i := 0; i < 2; i++ {
 		if err = driver.Cleanup(ctx, prepared); err != nil {
 			return fmt.Errorf("cleanup #%d: %w", i+1, err)
 		}
 	}
 	return nil
+}
+
+func setReadDeadline(stream io.ReadWriteCloser, deadline time.Time) {
+	if value, ok := stream.(interface{ SetReadDeadline(time.Time) error }); ok {
+		_ = value.SetReadDeadline(deadline)
+	}
 }
