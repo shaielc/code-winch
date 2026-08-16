@@ -111,7 +111,7 @@ that gap**, and the phase gate is not met until they land.
 | [P1-019](phase-1/p1-019-build-terminal-run-web-slice.md) | Build terminal run web slice | P0-002, P1-017, P1-018 | complete |
 | [P1-020](phase-1/p1-020-reconcile-runs-after-daemon-restart.md) | Reconcile runs after daemon restart | P1-015 | complete |
 | [P1-048](phase-1/p1-048-boot-the-daemon.md) | Boot the daemon | P1-011, P1-017 | complete |
-| [P1-049](phase-1/p1-049-implement-the-local-runner.md) | Implement the local runner | P0-006, P0-008, P1-013, P1-014 | pending |
+| [P1-049](phase-1/p1-049-implement-the-local-runner.md) | Implement the local runner | P0-006, P0-008, P1-013, P1-014 | complete |
 | [P1-050](phase-1/p1-050-implement-run-use-cases-and-http-binding.md) | Implement run use cases and HTTP binding | P1-015, P1-016, P1-017, P1-048, P1-049 | pending |
 | [P1-051](phase-1/p1-051-add-run-commands-to-the-operator-cli.md) | Add run commands to the operator CLI | P1-049, P1-050 | pending |
 | [P1-052](phase-1/p1-052-make-the-fake-harness-controllable.md) | Make the fake harness controllable | P0-008 | pending |

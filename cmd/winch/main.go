@@ -72,7 +72,9 @@ func main() {
 		case "exit":
 			fmt.Printf("[exit] successful=%t code=%s\n", observation.Exit.Successful, observation.Exit.Code)
 			_ = runner.Cleanup(ctx, executionID)
-			return
+			// Close ends the loop by closing the channel, so the range drains
+			// anything already queued instead of abandoning it.
+			runner.Close()
 		}
 	}
 }

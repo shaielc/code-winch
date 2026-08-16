@@ -19,12 +19,15 @@ type Driver struct {
 	// tests to prove that an implementation lying about support is rejected.
 	RejectNetworkPolicy  bool
 	RejectResourceLimits bool
-	mu                   sync.Mutex
-	prepared             map[string]bool
-	executions           map[string]application.ObservedExecution
-	streams              map[string]io.ReadWriteCloser
-	peers                map[string]io.ReadWriteCloser
-	attached             map[string]bool
+	// LeakStreamAfterExit keeps the attached stream open past the process exit,
+	// so the contract can prove it still catches a stream that never terminates.
+	LeakStreamAfterExit bool
+	mu                  sync.Mutex
+	prepared            map[string]bool
+	executions          map[string]application.ObservedExecution
+	streams             map[string]io.ReadWriteCloser
+	peers               map[string]io.ReadWriteCloser
+	attached            map[string]bool
 }
 
 func New(capabilities application.SandboxCapabilities) *Driver {
@@ -113,7 +116,7 @@ func (d *Driver) Stop(_ context.Context, handle application.ExecutionHandle, _ a
 	value.Running = false
 	value.ExitCode = &code
 	d.executions[handle.ID] = value
-	if peer := d.peers[handle.ID]; peer != nil {
+	if peer := d.peers[handle.ID]; peer != nil && !d.LeakStreamAfterExit {
 		_ = peer.Close()
 	}
 	return nil

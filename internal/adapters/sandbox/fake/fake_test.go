@@ -15,6 +15,15 @@ func TestSandboxContract(t *testing.T) {
 	})
 }
 
+func TestContractRejectsStreamThatOutlivesTheProcess(t *testing.T) {
+	driver := fake.New(application.SandboxCapabilities{Attach: true, AttachSingleUse: true})
+	driver.LeakStreamAfterExit = true
+	err := sandboxcontract.Validate(driver)
+	if err == nil || !strings.Contains(err.Error(), "blocked instead of terminating") {
+		t.Fatalf("stream outliving its process passed contract: %v", err)
+	}
+}
+
 func TestContractRejectsLyingCapability(t *testing.T) {
 	driver := fake.New(application.SandboxCapabilities{NetworkPolicy: true})
 	driver.RejectNetworkPolicy = true

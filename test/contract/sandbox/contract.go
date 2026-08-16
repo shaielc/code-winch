@@ -3,8 +3,10 @@ package sandbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -81,16 +83,21 @@ func Validate(driver application.SandboxDriver) error {
 		return fmt.Errorf("inspect stopped: %#v: %v", observed, err)
 	}
 	if stream != nil {
-		setReadDeadline(stream, time.Now().Add(time.Second))
-		var one [1]byte
-		if _, readErr := stream.Read(one[:]); readErr == nil {
-			return fmt.Errorf("attached read after exit did not terminate")
-		}
-		if _, writeErr := stream.Write(one[:]); writeErr == nil {
-			return fmt.Errorf("attached write after exit succeeded")
+		if err = drainUntilTerminated(stream); err != nil {
+			return err
 		}
 		if err = stream.Close(); err != nil {
 			return fmt.Errorf("attached close: %w", err)
+		}
+		// Close is where both directions must refuse. Whether an exited
+		// process's stream refuses a write beforehand is substrate-specific —
+		// a PTY master accepts one, a pipe does not — so it is not contractual.
+		var one [1]byte
+		if _, writeErr := stream.Write(one[:]); writeErr == nil {
+			return fmt.Errorf("attached write after close succeeded")
+		}
+		if _, readErr := stream.Read(one[:]); readErr == nil {
+			return fmt.Errorf("attached read after close succeeded")
 		}
 		_ = stream.Close() // repeated close must be safe, but may report closed
 	}
@@ -100,6 +107,28 @@ func Validate(driver application.SandboxDriver) error {
 		}
 	}
 	return nil
+}
+
+// drainUntilTerminated requires the stream to deliver whatever the process
+// wrote on its way out and only then report termination. Erroring while output
+// is still buffered would discard it, which is the opposite of the guarantee a
+// codec's flush-before-exit ordering depends on.
+func drainUntilTerminated(stream io.ReadWriteCloser) error {
+	buf := make([]byte, 4096)
+	for i := 0; i < 1024; i++ {
+		// The budget is per read, so a driver with a lot of trailing output is
+		// not penalised for delivering it.
+		setReadDeadline(stream, time.Now().Add(2*time.Second))
+		switch _, err := stream.Read(buf); {
+		case err == nil:
+			continue
+		case errors.Is(err, os.ErrDeadlineExceeded):
+			return fmt.Errorf("attached read after exit blocked instead of terminating")
+		default:
+			return nil
+		}
+	}
+	return fmt.Errorf("attached read after exit did not terminate")
 }
 
 func setReadDeadline(stream io.ReadWriteCloser, deadline time.Time) {
