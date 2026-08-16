@@ -162,6 +162,25 @@ func TestEventStreamDisconnectsSlowSubscriberWithoutBlockingPublisher(t *testing
 	}
 }
 
+// Daemon shutdown drains through Close, and the deferred Close in the
+// composition root runs it a second time.
+func TestEventStreamCloseDisconnectsSubscribersAndIsIdempotent(t *testing.T) {
+	stream := NewEventStream(4)
+	first, cancelFirst := stream.subscribe(sampleRun().Id)
+	defer cancelFirst()
+	second, cancelSecond := stream.subscribe(sampleRun().Id)
+	defer cancelSecond()
+	stream.Close()
+	for name, sub := range map[string]*eventSubscriber{"first": first, "second": second} {
+		select {
+		case <-sub.done:
+		case <-time.After(time.Second):
+			t.Fatalf("%s subscriber remained connected", name)
+		}
+	}
+	stream.Close()
+}
+
 func TestStreamRejectsOriginAndReauthorizes(t *testing.T) {
 	stream := NewEventStream(2)
 	b := &streamBackend{revokeAt: 2}

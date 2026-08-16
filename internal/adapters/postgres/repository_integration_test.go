@@ -83,11 +83,10 @@ func TestAppendCommitCreatesOutboxAndClaimsAreExclusive(t *testing.T) {
 	if _, err := store.Save(context.Background(), application.RunRecord{ID: runID}, 0); err != nil {
 		t.Fatal(err)
 	}
-	nowTime := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
-	now, _ := domain.NewTimestamp(nowTime)
+	occurredAt, _ := domain.NewTimestamp(time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC))
 	values := []application.UnsequencedEvent{
-		{EventID: id(t, domain.ParseEventID, 501), OccurredAt: now, Kind: "message", SchemaVersion: 1, Source: protocol.Source{Type: "test"}, Sensitivity: protocol.SensitivityUserContent, Payload: []byte(`{"n":1}`)},
-		{EventID: id(t, domain.ParseEventID, 502), OccurredAt: now, Kind: "message", SchemaVersion: 1, Source: protocol.Source{Type: "test"}, Sensitivity: protocol.SensitivityUserContent, Payload: []byte(`{"n":2}`)},
+		{EventID: id(t, domain.ParseEventID, 501), OccurredAt: occurredAt, Kind: "message", SchemaVersion: 1, Source: protocol.Source{Type: "test"}, Sensitivity: protocol.SensitivityUserContent, Payload: []byte(`{"n":1}`)},
+		{EventID: id(t, domain.ParseEventID, 502), OccurredAt: occurredAt, Kind: "message", SchemaVersion: 1, Source: protocol.Source{Type: "test"}, Sensitivity: protocol.SensitivityUserContent, Payload: []byte(`{"n":2}`)},
 	}
 	if _, err := store.Append(context.Background(), runID, 0, values); err != nil {
 		t.Fatal(err)
@@ -96,7 +95,10 @@ func TestAppendCommitCreatesOutboxAndClaimsAreExclusive(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM outbox`).Scan(&count); err != nil || count != 2 {
 		t.Fatalf("outbox count=%d err=%v", count, err)
 	}
-	until, _ := domain.NewTimestamp(nowTime.Add(time.Minute))
+	// Claims run on the wall clock, not the event clock: rows carry the
+	// inserting transaction's own available_at, so a fixed date is never due.
+	now, _ := domain.NewTimestamp(time.Now().UTC())
+	until, _ := domain.NewTimestamp(time.Now().UTC().Add(time.Minute))
 	type result struct {
 		records []application.OutboxRecord
 		err     error
@@ -153,7 +155,7 @@ func database(t *testing.T) (*pgxpool.Pool, *pgstore.Store) {
 	}
 	t.Cleanup(pool.Close)
 	_, _ = pool.Exec(context.Background(), `DROP SCHEMA public CASCADE; CREATE SCHEMA public`)
-	if err = pgstore.MigrateUp(context.Background(), pool); err != nil {
+	if _, err = pgstore.MigrateUp(context.Background(), pool); err != nil {
 		t.Fatal(err)
 	}
 	return pool, pgstore.New(pool)
@@ -164,8 +166,28 @@ func TestMigrationRoundTripOnCleanDatabase(t *testing.T) {
 	if err := pgstore.MigrateDown(context.Background(), pool); err != nil {
 		t.Fatal(err)
 	}
-	if err := pgstore.MigrateUp(context.Background(), pool); err != nil {
+	if _, err := pgstore.MigrateUp(context.Background(), pool); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The daemon migrates on every start, so a second start against an already
+// migrated database must change nothing rather than fail on an existing table.
+func TestMigrateUpOnMigratedDatabaseIsANoOp(t *testing.T) {
+	pool, _ := database(t)
+	result, err := pgstore.MigrateUp(context.Background(), pool)
+	if err != nil {
+		t.Fatalf("second migrate: %v", err)
+	}
+	if result.Applied != 0 {
+		t.Fatalf("second migrate applied %d migrations, want 0", result.Applied)
+	}
+	var applied int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM schema_migrations`).Scan(&applied); err != nil {
+		t.Fatal(err)
+	}
+	if applied != 5 {
+		t.Fatalf("ledger records %d migrations, want 5", applied)
 	}
 }
 

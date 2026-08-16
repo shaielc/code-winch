@@ -307,14 +307,16 @@ func (s *server) backendProblem(w http.ResponseWriter, r *http.Request, err erro
 
 func (s *server) problem(w http.ResponseWriter, r *http.Request, status int, code, title, detail string) {
 	id, _ := r.Context().Value(requestKey{}).(identity)
-	s.cfg.Logger.LogAttrs(r.Context(), slog.LevelWarn, "http request rejected", slog.String("operation", r.Method), slog.String("request_id", id.requestID), slog.String("code", code), slog.Int("status", status))
+	s.cfg.Logger.LogAttrs(r.Context(), slog.LevelWarn, "http request rejected", slog.String("operation", r.Method), slog.String("request_id", id.requestID), slog.String("error_code", code), slog.Int("status", status))
 	w.Header().Set("Content-Type", "application/problem+json")
 	s.writeJSON(w, status, Problem{Type: "https://code-winch.dev/problems/" + strings.ReplaceAll(code, "_", "-"), Title: title, Status: status, Code: code, Detail: detail, RequestId: id.requestID})
 }
 
+// Actors are free-form configuration and are content under docs/security.md §5;
+// the durable audit trail that records them is P2-026.
 func (s *server) audit(r *http.Request, operation string, runID RunId) {
 	id := r.Context().Value(requestKey{}).(identity)
-	s.cfg.Logger.LogAttrs(r.Context(), slog.LevelInfo, "run command accepted", slog.String("operation", operation), slog.String("request_id", id.requestID), slog.String("run_id", runID), slog.String("actor_id", id.actor))
+	s.cfg.Logger.LogAttrs(r.Context(), slog.LevelInfo, "run command accepted", slog.String("operation", operation), slog.String("request_id", id.requestID), slog.String("run_id", runID))
 }
 
 func (s *server) writeJSON(w http.ResponseWriter, status int, value any) {

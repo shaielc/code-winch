@@ -1,4 +1,4 @@
-# Local single-user development stack: web -> winchd -> postgres.
+# Local single-user development stack: browser -> winchd -> postgres.
 #
 #   docker compose -f deployments/compose.yml up --build
 #
@@ -32,6 +32,9 @@ services:
     build:
       context: ..
       dockerfile: deployments/Dockerfile.winchd
+    # Harness processes run in this container, so a killed harness can orphan
+    # children onto PID 1. The daemon is not an init and never reaps them.
+    init: true
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,23 +49,40 @@ services:
       WINCH_TOKEN: ${WINCH_TOKEN:-local-development-session-token-0000000000}
       WINCH_CSRF_TOKEN: ${WINCH_CSRF_TOKEN:-local-development-csrf-token-000000000000}
       WINCH_ACTOR: ${WINCH_ACTOR:-local-user}
-      WINCH_HARNESS_PROFILE: ${WINCH_HARNESS_PROFILE:-fake}
-      WINCH_SANDBOX_PROFILE: ${WINCH_SANDBOX_PROFILE:-local}
-    # Not published: the browser reaches the API through the web service so
-    # that the UI and the API share one origin.
-    expose:
-      - "8080"
+      WINCH_STATIC_DIR: /usr/share/winch/web
+    ports:
+      - "127.0.0.1:${WINCH_WEB_PORT:-8080}:8080"
 
-  web:
+  # A long-lived Go toolchain for running the suite without installing Go on the
+  # host. Dormant unless started with `--profile test`; see deployments/README.md.
+  runner:
+    profiles: [test]
     build:
       context: ..
-      dockerfile: deployments/Dockerfile.web
+      dockerfile: deployments/Dockerfile.winchd
+      # The build stage already carries the toolchain and the downloaded module
+      # graph; the bind mount below replaces its copy of the source with yours.
+      target: build
+    # Without an init, `sleep infinity` below is PID 1 and reaps nothing: every
+    # orphan the sandbox tests kill stays a zombie, and `kill(pid,0)` still
+    # finds it. Also lets `compose stop` terminate the runner promptly.
+    init: true
     depends_on:
-      - winchd
-    ports:
-      # Loopback only. The session cookie is Secure, which browsers accept over
-      # plain HTTP for localhost but not for any other host.
-      - "127.0.0.1:${WINCH_WEB_PORT:-8080}:80"
+      postgres:
+        condition: service_healthy
+    working_dir: /src
+    environment:
+      # A database of its own on the same server. The integration helper drops
+      # and recreates `public`, so it must never point at `winch`.
+      PG_TEST_DATABASE_URL: postgres://winch:${POSTGRES_PASSWORD:-winch-local-development}@postgres:5432/winch_test?sslmode=disable
+      GOFLAGS: -mod=readonly
+    volumes:
+      - ..:/src
+      - go-mod:/go/pkg/mod
+      - go-build:/root/.cache/go-build
+    command: ["sleep", "infinity"]
 
 volumes:
   postgres-data:
+  go-mod:
+  go-build:

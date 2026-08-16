@@ -29,10 +29,15 @@ engine, or a particular coding-agent provider.
 
 ## Go development
 
+Every target in the root `Makefile` is marked `[host]` or `[docker]`. `[host]`
+targets run directly on this machine; `[docker]` targets need Docker only and
+run inside the `runner` container.
+
+### On the host
+
 Go 1.24 or newer and golangci-lint 2.1.6 are required. Install the linter with
 `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6`.
-The repository exposes the same quality gates used in CI through the root
-`Makefile`:
+These are the same quality gates CI runs:
 
 ```sh
 make format        # format Go source files
@@ -48,3 +53,19 @@ CI installs the pinned linter before invoking these commands. Run `make format`
 when `make format-check` reports file names, then rerun `make check` before
 submitting a change. Set `GOLANGCI_LINT` to an alternate binary path when your
 linter is not on `PATH`.
+
+### In Docker
+
+With no Go toolchain installed, the containerised toolchain runs the Go gates
+and the integration suite instead:
+
+```sh
+make test-cycle      # build, start, verify, integration-test, tear down
+make runner-verify   # gofmt, vet, unit tests, and compile in the runner
+make runner-shell    # a shell in the runner
+```
+
+`runner-verify` is `check` minus `lint` and `api-check`, which need golangci-lint
+and npm that the image does not carry — so a host run is still required before
+submitting. See [deployments/README.md](deployments/README.md) for the step-by-step
+form and the database it uses.

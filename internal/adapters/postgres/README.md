@@ -2,8 +2,12 @@
 
 `Store` implements durable run, command, and event persistence. Connect with a
 least-privilege PostgreSQL role, construct a `pgxpool.Pool`, and call
-`MigrateUp` during deployment before serving traffic. Production migrations are
-forward-only; `MigrateDown` is intended for clean-database verification.
+`MigrateUp` on every start before serving traffic. A `schema_migrations` ledger
+records what a database already has, so each migration runs once and a start
+against an already-migrated database is a no-op; an advisory lock serializes
+concurrent migrators. Production migrations are forward-only; `MigrateDown`
+reverses what the ledger records and is intended for clean-database
+verification.
 
 Event appends atomically compare `expectedSequence`, reserve exactly the batch
 range, and insert the batch. A conflict returns `application.ErrConflict` with
