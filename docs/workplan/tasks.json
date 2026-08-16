@@ -839,6 +839,20 @@
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-5/p5-047-define-slos-dashboards-alerts-and-runbooks.md"
+    },
+    {
+      "id": "P1-061",
+      "title": "Harden integration-suite clocks and process-state checks",
+      "phase": 1,
+      "phase_name": "Local single-user vertical slice",
+      "status": "pending",
+      "depends_on": [
+        "P1-012",
+        "P1-049"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/p1-061-harden-integration-suite-clocks-and-process-state-checks.md"
     }
   ]
 }

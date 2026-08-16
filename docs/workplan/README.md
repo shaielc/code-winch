@@ -117,6 +117,7 @@ that gap**, and the phase gate is not met until they land.
 | [P1-052](phase-1/p1-052-make-the-fake-harness-controllable.md) | Make the fake harness controllable | P0-008 | pending |
 | [P1-053](phase-1/p1-053-establish-the-standing-scenario-suite.md) | Establish the standing scenario suite | P1-050, P1-052 | pending |
 | [P1-054](phase-1/p1-054-store-credential-references.md) | Store credential references | P1-011, P1-050 | pending |
+| [P1-061](phase-1/p1-061-harden-integration-suite-clocks-and-process-state-checks.md) | Harden integration-suite clocks and process-state checks | P1-012, P1-049 | pending |
 
 ### Phase 2 — Structured experience and second harness
 
@@ -179,7 +180,7 @@ divided by that path.
 
 | Phase | Pending | Critical path | Average width | Collisions |
 |---|---|---|---|---|
-| 1 | 7 | 3 | 2.3 | none |
+| 1 | 8 | 3 | 2.7 | none |
 | 2 | 12 | 3 | 4.0 | P2-055 / P2-059 on `api/openapi/components/run.yaml` |
 | 3 | 7 | 5 | 1.4 | none |
 | 4 | 5 | 4 | 1.2 | none |
@@ -262,6 +263,21 @@ installation, deployment overrides, and how scheduling and the control panel
 work.
 
 ## Changelog
+
+### 2026-08-16 — P1-061 added
+
+Two integration tests failed for reasons unrelated to the code they cover. The
+outbox claim test compared a database-supplied `available_at` against a
+hardcoded date, so it passed when written and began failing once the wall clock
+passed it. The sandbox cleanup test used `kill(pid, 0)`, which succeeds against
+a zombie, so an unreaped child read as a live one. Both were fixed in place;
+**P1-061** carries the hardening — a process-state classifier that names zombie,
+live, and absent separately, and the rule that a claim clock compared against a
+database timestamp must derive from wall time.
+
+It depends on P1-049 rather than running beside it. Quality work on a file
+another task is still moving gets rewritten, and this is not work to do ahead of
+time. Phase 1's critical path is unchanged at 3; average width rises to 2.7.
 
 ### 2026-08-14 — re-derivation of Phases 2–5 and a Phase 1 gap-closure wave
 
