@@ -21,6 +21,7 @@ give HTTP requests the configured bounded drain period.
 |---|---|---|---|
 | `winchd` | Go daemon + web assets + fake harness | `127.0.0.1:8080` | Serves the SPA and `/api/v1` from one origin |
 | `postgres` | `postgres:17-alpine` | internal only | Data persists in the `postgres-data` volume |
+| `runner` | Go toolchain, the daemon image's build stage | not published | `test` profile only; see [Running the tests](#running-the-tests) |
 
 `winchd` is published only on loopback. The API rejects mutating requests whose
 `Origin` does not match `WINCH_ALLOWED_ORIGIN`, and the session cookie is scoped
@@ -52,6 +53,29 @@ must contain at least 32 bytes.
 Override them in `deployments/.env` or `deployments/compose.override.yml`. Both
 are untracked; do not commit either, and do not add a template that invites
 copying secrets into the repository.
+
+## Running the tests
+
+The integration suite needs a Go toolchain and a PostgreSQL server. The `test`
+profile supplies the first and reuses the stack's own server for the second, so
+neither has to be installed on the host:
+
+```sh
+make test-env          # start the runner and create the winch_test database
+make test-integration  # go test -tags integration ./... inside the runner
+make test-env-down     # stop the runner; the daemon keeps running
+```
+
+The runner is the daemon image's build stage with the repository bind-mounted
+over its copy of the source, so it compiles what is in the working tree without
+a rebuild. Module and build caches persist in the `go-mod` and `go-build`
+volumes.
+
+Integration tests are behind the `integration` build tag and skip unless
+`PG_TEST_DATABASE_URL` is set; the profile sets it to a `winch_test` database
+alongside `winch` on the same server. That separation matters: the test helper
+runs `DROP SCHEMA public CASCADE` before each migration, so pointing this
+variable at `winch` would destroy the daemon's database.
 
 ## Security posture
 

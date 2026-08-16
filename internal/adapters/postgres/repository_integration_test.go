@@ -153,7 +153,7 @@ func database(t *testing.T) (*pgxpool.Pool, *pgstore.Store) {
 	}
 	t.Cleanup(pool.Close)
 	_, _ = pool.Exec(context.Background(), `DROP SCHEMA public CASCADE; CREATE SCHEMA public`)
-	if err = pgstore.MigrateUp(context.Background(), pool); err != nil {
+	if _, err = pgstore.MigrateUp(context.Background(), pool); err != nil {
 		t.Fatal(err)
 	}
 	return pool, pgstore.New(pool)
@@ -164,8 +164,28 @@ func TestMigrationRoundTripOnCleanDatabase(t *testing.T) {
 	if err := pgstore.MigrateDown(context.Background(), pool); err != nil {
 		t.Fatal(err)
 	}
-	if err := pgstore.MigrateUp(context.Background(), pool); err != nil {
+	if _, err := pgstore.MigrateUp(context.Background(), pool); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The daemon migrates on every start, so a second start against an already
+// migrated database must change nothing rather than fail on an existing table.
+func TestMigrateUpOnMigratedDatabaseIsANoOp(t *testing.T) {
+	pool, _ := database(t)
+	result, err := pgstore.MigrateUp(context.Background(), pool)
+	if err != nil {
+		t.Fatalf("second migrate: %v", err)
+	}
+	if result.Applied != 0 {
+		t.Fatalf("second migrate applied %d migrations, want 0", result.Applied)
+	}
+	var applied int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM schema_migrations`).Scan(&applied); err != nil {
+		t.Fatal(err)
+	}
+	if applied != 5 {
+		t.Fatalf("ledger records %d migrations, want 5", applied)
 	}
 }
 

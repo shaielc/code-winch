@@ -1,7 +1,10 @@
 GO ?= go
 GOLANGCI_LINT ?= golangci-lint
 
-.PHONY: all api-check api-compat api-generate api-validate build check format format-check lint run test vet
+COMPOSE ?= docker compose -f deployments/compose.yml
+TEST_DATABASE ?= winch_test
+
+.PHONY: all api-check api-compat api-generate api-validate build check format format-check lint run test test-env test-env-down test-integration vet
 
 all: check
 
@@ -62,6 +65,23 @@ build:
 ## run: Start the daemon with configuration resolved from file and environment.
 run:
 	$(GO) run ./cmd/winchd
+
+## test-env: Start the containerised Go toolchain and create its test database.
+test-env:
+	$(COMPOSE) --profile test up -d
+	@$(COMPOSE) exec -T postgres psql -U winch -d winch -tAc \
+		"SELECT 1 FROM pg_database WHERE datname = '$(TEST_DATABASE)'" \
+		| grep -q 1 \
+		|| $(COMPOSE) exec -T postgres createdb -U winch $(TEST_DATABASE)
+
+## test-integration: Run the build-tagged integration suite in the runner.
+test-integration: test-env
+	$(COMPOSE) exec -T runner go test -tags integration ./...
+
+## test-env-down: Stop the runner, leaving the daemon and its database running.
+test-env-down:
+	$(COMPOSE) --profile test stop runner
+	$(COMPOSE) --profile test rm -f runner
 
 ## check: Run every check required by CI.
 check: api-check format-check vet lint test build

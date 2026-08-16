@@ -51,10 +51,16 @@ func run(ctx context.Context) error {
 	if err = pool.Ping(ctx); err != nil {
 		return fmt.Errorf("database connection: %w", err)
 	}
-	if err = postgres.MigrateUp(ctx, pool); err != nil {
+	migration, err := postgres.MigrateUp(ctx, pool)
+	if err != nil {
 		return fmt.Errorf("database migration: %w", err)
 	}
-	logger.Info("migration applied", "component", "database", "operation", "migrate", "sequence", 5, "status", "ok")
+	// A start that applied nothing must not claim it migrated the database.
+	migrationStatus := "current"
+	if migration.Applied > 0 {
+		migrationStatus = "applied"
+	}
+	logger.Info("schema checked", "component", "database", "operation", "migrate", "sequence", migration.Version, "status", migrationStatus)
 	stream := httpapi.NewEventStream(64)
 	defer stream.Close()
 	api, err := httpapi.NewHandler(httpapi.Config{Token: cfg.Token, CSRFToken: cfg.CSRFToken, AllowedOrigin: cfg.AllowedOrigin, Actor: cfg.Actor, Logger: logger, RequestID: requestID, EventStream: stream}, unavailableBackend{})
