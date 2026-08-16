@@ -83,11 +83,10 @@ func TestAppendCommitCreatesOutboxAndClaimsAreExclusive(t *testing.T) {
 	if _, err := store.Save(context.Background(), application.RunRecord{ID: runID}, 0); err != nil {
 		t.Fatal(err)
 	}
-	nowTime := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
-	now, _ := domain.NewTimestamp(nowTime)
+	occurredAt, _ := domain.NewTimestamp(time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC))
 	values := []application.UnsequencedEvent{
-		{EventID: id(t, domain.ParseEventID, 501), OccurredAt: now, Kind: "message", SchemaVersion: 1, Source: protocol.Source{Type: "test"}, Sensitivity: protocol.SensitivityUserContent, Payload: []byte(`{"n":1}`)},
-		{EventID: id(t, domain.ParseEventID, 502), OccurredAt: now, Kind: "message", SchemaVersion: 1, Source: protocol.Source{Type: "test"}, Sensitivity: protocol.SensitivityUserContent, Payload: []byte(`{"n":2}`)},
+		{EventID: id(t, domain.ParseEventID, 501), OccurredAt: occurredAt, Kind: "message", SchemaVersion: 1, Source: protocol.Source{Type: "test"}, Sensitivity: protocol.SensitivityUserContent, Payload: []byte(`{"n":1}`)},
+		{EventID: id(t, domain.ParseEventID, 502), OccurredAt: occurredAt, Kind: "message", SchemaVersion: 1, Source: protocol.Source{Type: "test"}, Sensitivity: protocol.SensitivityUserContent, Payload: []byte(`{"n":2}`)},
 	}
 	if _, err := store.Append(context.Background(), runID, 0, values); err != nil {
 		t.Fatal(err)
@@ -96,7 +95,10 @@ func TestAppendCommitCreatesOutboxAndClaimsAreExclusive(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM outbox`).Scan(&count); err != nil || count != 2 {
 		t.Fatalf("outbox count=%d err=%v", count, err)
 	}
-	until, _ := domain.NewTimestamp(nowTime.Add(time.Minute))
+	// Claims run on the wall clock, not the event clock: rows carry the
+	// inserting transaction's own available_at, so a fixed date is never due.
+	now, _ := domain.NewTimestamp(time.Now().UTC())
+	until, _ := domain.NewTimestamp(time.Now().UTC().Add(time.Minute))
 	type result struct {
 		records []application.OutboxRecord
 		err     error

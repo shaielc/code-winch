@@ -32,6 +32,9 @@ services:
     build:
       context: ..
       dockerfile: deployments/Dockerfile.winchd
+    # Harness processes run in this container, so a killed harness can orphan
+    # children onto PID 1. The daemon is not an init and never reaps them.
+    init: true
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,6 +65,10 @@ services:
       # The build stage already carries the toolchain and the downloaded module
       # graph; the bind mount below replaces its copy of the source with yours.
       target: build
+    # Without an init, `sleep infinity` below is PID 1 and reaps nothing: every
+    # orphan the sandbox tests kill stays a zombie, and `kill(pid,0)` still
+    # finds it. Also lets `compose stop` terminate the runner promptly.
+    init: true
     depends_on:
       postgres:
         condition: service_healthy
