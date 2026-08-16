@@ -83,8 +83,8 @@ make test-cycle
 
 That builds the image, starts the runner and its database, formats/vets/unit-tests
 and compiles inside the container, runs the integration suite, and tears the
-runner down. It tears down even when a step fails, and exits with that step's
-status.
+runner and its database down. It tears down even when a step fails, and exits
+with that step's status.
 
 The same four steps, run by hand when you want the runner to stay up between
 edits:
@@ -93,8 +93,15 @@ edits:
 make runner-image      # build the toolchain image (needs registry access)
 make test-env          # start the runner and create the winch_test database
 make test-integration  # go test -tags integration ./... inside the runner
-make test-env-down     # stop the runner; the daemon keeps running
+make test-env-down     # stop the runner and drop winch_test; the daemon keeps running
 ```
+
+Teardown drops the test database rather than leaving it on the server between
+cycles. Nothing is lost: the integration helper drops and recreates `public`
+before each migration anyway, so the database carries no state worth keeping,
+and `test-env` recreates it on demand. Teardown refuses outright if
+`TEST_DATABASE` has been pointed at `winch`, and leaves the database alone
+rather than failing when postgres is already down.
 
 `make test-env` builds the image on demand if it is missing, so `runner-image` is
 only needed to pick up a Dockerfile change. Keeping it separate means repeated

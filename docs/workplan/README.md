@@ -110,7 +110,7 @@ that gap**, and the phase gate is not met until they land.
 | [P1-018](phase-1/p1-018-implement-resumable-websocket-event-stream.md) | Implement resumable WebSocket event stream | P1-012, P1-017 | complete |
 | [P1-019](phase-1/p1-019-build-terminal-run-web-slice.md) | Build terminal run web slice | P0-002, P1-017, P1-018 | complete |
 | [P1-020](phase-1/p1-020-reconcile-runs-after-daemon-restart.md) | Reconcile runs after daemon restart | P1-015 | complete |
-| [P1-048](phase-1/p1-048-boot-the-daemon.md) | Boot the daemon | P1-011, P1-017 | pending |
+| [P1-048](phase-1/p1-048-boot-the-daemon.md) | Boot the daemon | P1-011, P1-017 | complete |
 | [P1-049](phase-1/p1-049-implement-the-local-runner.md) | Implement the local runner | P0-006, P0-008, P1-013, P1-014 | pending |
 | [P1-050](phase-1/p1-050-implement-run-use-cases-and-http-binding.md) | Implement run use cases and HTTP binding | P1-015, P1-016, P1-017, P1-048, P1-049 | pending |
 | [P1-051](phase-1/p1-051-add-run-commands-to-the-operator-cli.md) | Add run commands to the operator CLI | P1-049, P1-050 | pending |
@@ -185,9 +185,6 @@ divided by that path.
 | 3 | 7 | 5 | 1.4 | none |
 | 4 | 5 | 4 | 1.2 | none |
 | 5 | 7 | 5 | 1.4 | none |
-
-Available immediately: **P1-048**, **P1-049**, **P1-052**, **P3-060**, and
-**P4-036** — five independent roots.
 
 Phases 3 and 5 are chains, and deliberately so. Phase 3's controls can only be
 demonstrated against the container the previous task creates: profiles need a

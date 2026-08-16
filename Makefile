@@ -116,10 +116,17 @@ runner-verify: test-env
 test-integration: test-env
 	$(IN_RUNNER) go test -tags integration ./...
 
-## test-env-down: [docker] Stop and remove the runner, leaving the daemon running.
+## test-env-down: [docker] Stop and remove the runner and drop the test database,
+## leaving the daemon and its own database running.
 test-env-down:
 	$(COMPOSE) --profile test stop runner
 	$(COMPOSE) --profile test rm -f runner
+	@if [ "$(TEST_DATABASE)" = "winch" ]; then \
+		echo "refusing to drop '$(TEST_DATABASE)': that is the daemon's database" >&2; \
+		exit 1; \
+	fi; \
+	$(COMPOSE) exec -T postgres dropdb -U winch --if-exists --force "$(TEST_DATABASE)" \
+		|| echo "note: kept '$(TEST_DATABASE)'; postgres is not running" >&2
 
 ## test-cycle: [docker] Build, start, verify, integration-test, and tear down.
 ## Tears down even when a step fails, and exits with that step's status.
