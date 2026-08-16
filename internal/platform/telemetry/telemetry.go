@@ -8,7 +8,8 @@ import (
 	"sync"
 )
 
-var AllowedAttributes = map[string]struct{}{"resource_id": {}, "run_id": {}, "workflow_id": {}, "error_code": {}, "component": {}, "operation": {}, "status": {}, "duration_ms": {}, "retry_count": {}, "size": {}, "sequence": {}}
+// Emitters must use these exact keys; a near miss like `code` is dropped, not translated.
+var AllowedAttributes = map[string]struct{}{"resource_id": {}, "run_id": {}, "workflow_id": {}, "request_id": {}, "error_code": {}, "component": {}, "operation": {}, "status": {}, "duration_ms": {}, "retry_count": {}, "size": {}, "sequence": {}}
 
 type Handler struct{ next slog.Handler }
 
@@ -25,7 +26,8 @@ func (h *Handler) Handle(c context.Context, r slog.Record) error {
 	return h.next.Handle(c, nr)
 }
 func (h *Handler) WithAttrs(as []slog.Attr) slog.Handler {
-	safe := as[:0]
+	// Not as[:0]: slog owns the argument and reuses its backing array.
+	safe := make([]slog.Attr, 0, len(as))
 	for _, a := range as {
 		if _, ok := AllowedAttributes[a.Key]; ok {
 			safe = append(safe, a)

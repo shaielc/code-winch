@@ -49,8 +49,6 @@ services:
       WINCH_TOKEN: ${WINCH_TOKEN:-local-development-session-token-0000000000}
       WINCH_CSRF_TOKEN: ${WINCH_CSRF_TOKEN:-local-development-csrf-token-000000000000}
       WINCH_ACTOR: ${WINCH_ACTOR:-local-user}
-      WINCH_HARNESS_PROFILE: ${WINCH_HARNESS_PROFILE:-fake}
-      WINCH_SANDBOX_PROFILE: ${WINCH_SANDBOX_PROFILE:-local}
       WINCH_STATIC_DIR: /usr/share/winch/web
     ports:
       - "127.0.0.1:${WINCH_WEB_PORT:-8080}:8080"

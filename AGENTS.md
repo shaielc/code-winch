@@ -87,7 +87,18 @@ make check
 ```
 
 That runs OpenAPI validation, compatibility, and generated-output determinism,
-plus Go formatting, vet, lint, tests, and the daemon build.
+plus Go formatting, vet, lint, tests, and the daemon build. It is a `[host]`
+target and needs go, npm, and golangci-lint installed.
+
+Without a host toolchain, `make test-cycle` runs the Go gates and the integration
+suite in Docker. It does not cover `lint` or `api-check`, so say so in the pull
+request rather than claiming `make check` passed.
+
+If your change touches storage, migrations, or process lifecycle:
+
+```sh
+make test-integration
+```
 
 If you touched `web/`:
 

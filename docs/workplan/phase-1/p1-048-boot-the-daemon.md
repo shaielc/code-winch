@@ -42,8 +42,13 @@ task extends this root rather than creating one.
 ## Owned surfaces
 
 `cmd/winchd/`, `internal/platform/config/`, `internal/platform/telemetry/`,
-`deployments/compose.yml`, `deployments/README.md`, `Makefile` (`run` target),
-`web/index.html`.
+`deployments/compose.yml`, `deployments/README.md`, `Makefile` (`run` and
+`web-build` targets), `web/index.html`.
+
+Also, because booting is what first exercises them: `internal/adapters/postgres/`
+migration re-runnability (see the 2026-08-16 post-mortem), and the log attribute
+keys in `internal/adapters/transport/httpapi/` — the redaction allowlist here and
+the keys emitted there have to agree or the fields are silently dropped.
 
 ## Demonstration
 

@@ -6,6 +6,10 @@
 FROM golang:1.24-bookworm AS build
 WORKDIR /src
 
+# The runner bind-mounts the host repo here under a different uid, and git then
+# refuses to report VCS status, which fails `go build`.
+RUN git config --global --add safe.directory /src
+
 # Dependencies resolve from the committed go.mod/go.sum only. -mod=readonly
 # fails the build rather than silently rewriting them.
 COPY go.mod go.sum ./
