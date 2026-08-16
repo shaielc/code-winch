@@ -1,0 +1,1 @@
+{"version":1,"steps":[{"kind":"emit","event_kind":"stream.raw","payload":{"stream":"stdout","encoding":"utf-8","data":"before\r\n"}},{"kind":"malformed","data":"{deliberately-not-json"},{"kind":"emit","event_kind":"stream.raw","payload":{"stream":"stdout","encoding":"utf-8","data":"after\r\n"}}]}

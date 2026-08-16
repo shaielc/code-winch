@@ -1,0 +1,1 @@
+{"version":1,"steps":[{"kind":"emit","event_kind":"diagnostic","payload":{"code":"SCRIPTED_FAILURE","message":"scripted non-zero exit"}},{"kind":"exit","code":7}]}

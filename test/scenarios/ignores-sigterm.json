@@ -1,0 +1,1 @@
+{"version":1,"ignore_sigterm_ms":3000,"steps":[{"kind":"sleep","duration_ms":60000},{"kind":"exit","code":0}]}

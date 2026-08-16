@@ -1,0 +1,1 @@
+{"version":1,"steps":[{"kind":"wait_input","pattern":"^hello$"},{"kind":"emit","event_kind":"stream.raw","payload":{"stream":"stdout","encoding":"utf-8","data":"scripted hello\r\n"}}]}

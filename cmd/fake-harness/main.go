@@ -1,156 +1,269 @@
-// Command fake-harness is a deterministic stand-in for a coding-agent CLI. It
-// speaks the newline-delimited JSON dialect that the fake harness adapter
-// encodes and decodes, so a run can be driven end to end without a vendor
-// account. It is a development and test fixture, not a production harness.
+// Command fake-harness is a controllable stand-in for a coding-agent CLI.
 package main
 
 import (
 	"bufio"
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
+	"io"
+	mathrand "math/rand"
 	"os"
 	"os/signal"
+	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
+
+	"github.com/shaielc/code-winch/internal/adapters/harness/fake"
 )
 
-// record mirrors the fake harness codec's wire format. The codec rejects
-// unknown fields, so this struct must stay a subset of its own.
 type record struct {
 	Kind        string `json:"kind"`
 	Payload     any    `json:"payload"`
 	Sensitivity string `json:"sensitivity,omitempty"`
 }
-
-// streamPayload matches schemas/events/v1/fixtures/raw-stream.json. Text is
-// carried as utf-8 rather than base64 so the terminal projection can render it
-// without decoding.
 type streamPayload struct {
 	Stream   string `json:"stream"`
 	Encoding string `json:"encoding"`
 	Data     string `json:"data"`
 }
-
-// command is one line encoded by the fake harness codec's Encode.
 type command struct {
 	ID   string `json:"id"`
 	Text string `json:"text"`
 }
 
-const usage = `fake-harness accepts one JSON command per line: {"id":"<id>","text":"<text>"}
-  help          print this message
-  echo <text>   emit <text> back as terminal output
-  fail          exit with a nonzero status
-  exit, quit    exit successfully
-Any other text is echoed.`
-
-func main() {
-	runID := flag.String("run-id", "", "run identifier supplied by the harness adapter")
-	flag.Parse()
-	if *runID == "" {
-		fmt.Fprintln(os.Stderr, "fake harness: code=INVALID_RUN field=run_id")
-		os.Exit(2)
-	}
-	os.Exit(run(*runID, os.Stdin, os.Stdout))
+type options struct {
+	latency                                     time.Duration
+	failOnInput, truncateRecord, oversizedBytes int
+	earlyExit                                   bool
+	ignoreSIGTERM                               time.Duration
+	rng                                         *mathrand.Rand
 }
 
-func run(runID string, in *os.File, out *os.File) int {
-	// A terminated harness must still produce a final observation, otherwise a
-	// stop looks identical to a crash from the run's event history.
+const usage = `fake-harness accepts JSON commands or bare text. Commands: help, echo <text>, fail, exit.`
+
+func main() {
+	runID := flag.String("run-id", "manual", "run identifier")
+	scenarioPath := flag.String("scenario", "", "scenario JSON file")
+	latency := flag.Duration("latency", 0, "latency added before every step")
+	failInput := flag.Int("fail-on-input", 0, "exit unsuccessfully on the Nth input")
+	truncate := flag.Int("truncate-record", 0, "truncate the Nth output record")
+	oversized := flag.Int("oversized-record-bytes", 0, "pad every emitted record to at least this size")
+	early := flag.Bool("early-exit", false, "exit without flushing after the first output")
+	ignoreTerm := flag.Duration("ignore-sigterm", 0, "ignore SIGTERM for this bounded interval")
+	seed := flag.String("seed", "1", "random seed, or off for nondeterministic seeding")
+	flag.Parse()
+	if *latency < 0 || *failInput < 0 || *truncate < 0 || *oversized < 0 || *ignoreTerm < 0 {
+		fmt.Fprintln(os.Stderr, "fake harness: fault values must be non-negative")
+		os.Exit(2)
+	}
+	rng, err := seeded(*seed)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	opt := options{*latency, *failInput, *truncate, *oversized, *early, *ignoreTerm, rng}
+	if *scenarioPath != "" {
+		scenario, err := fake.LoadScenario(*scenarioPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "fake harness:", err)
+			os.Exit(2)
+		}
+		if configured := time.Duration(scenario.IgnoreSIGTERMMS) * time.Millisecond; configured > opt.ignoreSIGTERM {
+			opt.ignoreSIGTERM = configured
+		}
+		installSignals(os.Stdout, opt.ignoreSIGTERM)
+		os.Exit(runScenario(scenario, os.Stdin, os.Stdout, opt))
+	}
+	installSignals(os.Stdout, opt.ignoreSIGTERM)
+	os.Exit(runBare(*runID, os.Stdin, os.Stdout, opt))
+}
+
+func seeded(value string) (*mathrand.Rand, error) {
+	var seed int64
+	if value == "off" {
+		if err := binary.Read(rand.Reader, binary.LittleEndian, &seed); err != nil {
+			return nil, fmt.Errorf("random seed: %w", err)
+		}
+	} else {
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid --seed: use an integer or off")
+		}
+		seed = parsed
+	}
+	return mathrand.New(mathrand.NewSource(seed)), nil
+}
+
+func installSignals(out io.Writer, ignore time.Duration) {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
-		<-signals
-		emit(out, operational("fake harness received a termination signal"))
+		sig := <-signals
+		if sig == syscall.SIGTERM && ignore > 0 {
+			time.Sleep(ignore)
+		}
+		writeRecord(out, operational("fake harness received a termination signal"), 0)
 		os.Exit(0)
 	}()
+}
 
-	emit(out, operational(fmt.Sprintf("fake harness ready: run_id=%s", runID)))
-	emit(out, operational(usage))
-
-	scanner := bufio.NewScanner(in)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
-	for scanner.Scan() {
-		text, ok := parse(scanner.Bytes())
-		if !ok {
-			emit(out, diagnostic("FAKE_HARNESS_MALFORMED_COMMAND"))
-			continue
+func runScenario(s fake.Scenario, in io.Reader, out io.Writer, opt options) int {
+	scanner := newScanner(in)
+	inputs := 0
+	records := 0
+	for _, step := range s.Steps {
+		if opt.latency > 0 {
+			time.Sleep(opt.latency)
 		}
-		code, done := respond(out, text)
-		if done {
-			return code
+		switch step.Kind {
+		case "wait_input":
+			re := regexp.MustCompile(step.Pattern)
+			for {
+				if !scanner.Scan() {
+					return 0
+				}
+				inputs++
+				if opt.failOnInput == inputs {
+					return 1
+				}
+				text, ok := parse(scanner.Bytes())
+				if ok && re.MatchString(text) {
+					break
+				}
+			}
+		case "sleep":
+			time.Sleep(step.Duration())
+		case "exit":
+			return step.Code
+		case "malformed":
+			records++
+			if writeBytes(out, []byte(expand(step.Data, opt.rng)), records, opt) {
+				return 0
+			}
+		case "emit":
+			var payload any
+			_ = json.Unmarshal(step.Payload, &payload)
+			payload = expandValue(payload, opt.rng)
+			records++
+			if writeRecordFault(out, record{Kind: step.EventKind, Payload: payload}, records, opt) {
+				return 0
+			}
 		}
 	}
-	if err := scanner.Err(); err != nil && !errors.Is(err, os.ErrClosed) {
-		emit(out, diagnostic("FAKE_HARNESS_READ_FAILED"))
-		return 1
-	}
-	emit(out, operational("fake harness reached end of input"))
 	return 0
 }
 
-// respond reports the exit code and whether the harness should stop reading.
-func respond(out *os.File, text string) (int, bool) {
-	switch field, rest := split(text); field {
-	case "":
-		return 0, false
-	case "help":
-		emit(out, operational(usage))
-	case "fail":
-		emit(out, operational("fake harness exiting with a failure"))
-		return 1, true
-	case "exit", "quit":
-		emit(out, operational("fake harness exiting"))
-		return 0, true
-	case "echo":
-		emit(out, output(rest))
-	default:
-		emit(out, output(text))
+func runBare(runID string, in io.Reader, out io.Writer, opt options) int {
+	writeRecord(out, operational(fmt.Sprintf("fake harness ready: run_id=%s", runID)), opt.oversizedBytes)
+	writeRecord(out, operational(usage), opt.oversizedBytes)
+	scanner := newScanner(in)
+	inputs := 0
+	for scanner.Scan() {
+		inputs++
+		if opt.failOnInput == inputs {
+			return 1
+		}
+		text, ok := parse(scanner.Bytes())
+		if !ok {
+			writeRecord(out, diagnostic("FAKE_HARNESS_MALFORMED_COMMAND"), opt.oversizedBytes)
+			continue
+		}
+		switch field, rest := split(text); field {
+		case "":
+			continue
+		case "help":
+			writeRecord(out, operational(usage), opt.oversizedBytes)
+		case "fail":
+			return 1
+		case "exit", "quit":
+			return 0
+		case "echo":
+			writeRecord(out, output(rest), opt.oversizedBytes)
+		default:
+			writeRecord(out, output(text), opt.oversizedBytes)
+		}
 	}
-	return 0, false
+	if scanner.Err() != nil {
+		return 1
+	}
+	return 0
 }
 
+func newScanner(in io.Reader) *bufio.Scanner {
+	s := bufio.NewScanner(in)
+	s.Buffer(make([]byte, 1024), 2<<20)
+	return s
+}
 func split(text string) (string, string) {
 	field, rest, _ := strings.Cut(strings.TrimSpace(text), " ")
 	return field, strings.TrimSpace(rest)
 }
-
-// parse accepts the codec's JSON command and also bare text, so the binary
-// stays usable when a human is attached directly to its PTY.
 func parse(line []byte) (string, bool) {
 	trimmed := strings.TrimRight(string(line), "\r")
 	if !strings.HasPrefix(strings.TrimSpace(trimmed), "{") {
 		return trimmed, true
 	}
-	var value command
-	if json.Unmarshal([]byte(trimmed), &value) != nil || value.ID == "" {
+	var v command
+	if json.Unmarshal([]byte(trimmed), &v) != nil || v.ID == "" {
 		return "", false
 	}
-	return value.Text, true
+	return v.Text, true
 }
-
 func output(text string) record {
-	return record{Kind: "stream.raw", Payload: streamPayload{Stream: "stdout", Encoding: "utf-8", Data: text + "\r\n"}}
+	return record{"stream.raw", streamPayload{"stdout", "utf-8", text + "\r\n"}, ""}
 }
-
-func operational(text string) record {
-	value := output(text)
-	value.Sensitivity = "operational"
-	return value
-}
-
+func operational(text string) record { v := output(text); v.Sensitivity = "operational"; return v }
 func diagnostic(code string) record {
-	return record{Kind: "diagnostic", Payload: map[string]string{"code": code, "message": "fake harness could not interpret a command"}, Sensitivity: "operational"}
+	return record{"diagnostic", map[string]string{"code": code, "message": "fake harness could not interpret a command"}, "operational"}
 }
-
-// emit writes one record per line. Write failures are unrecoverable here: the
-// harness has no other channel on which to report them.
-func emit(out *os.File, value record) {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return
+func expand(s string, rng *mathrand.Rand) string {
+	return strings.ReplaceAll(s, "{{random}}", fmt.Sprintf("%016x", rng.Uint64()))
+}
+func expandValue(v any, rng *mathrand.Rand) any {
+	switch x := v.(type) {
+	case string:
+		return expand(x, rng)
+	case []any:
+		for i := range x {
+			x[i] = expandValue(x[i], rng)
+		}
+	case map[string]any:
+		for k := range x {
+			x[k] = expandValue(x[k], rng)
+		}
+	}
+	return v
+}
+func writeRecord(out io.Writer, value record, oversized int) {
+	data, _ := json.Marshal(value)
+	if oversized > len(data) {
+		data = append(data, bytesOf(' ', oversized-len(data))...)
 	}
 	_, _ = out.Write(append(data, '\n'))
+}
+func writeRecordFault(out io.Writer, value record, n int, opt options) bool {
+	data, _ := json.Marshal(value)
+	return writeBytes(out, data, n, opt)
+}
+func writeBytes(out io.Writer, data []byte, n int, opt options) bool {
+	if opt.oversizedBytes > len(data) {
+		data = append(data, bytesOf(' ', opt.oversizedBytes-len(data))...)
+	}
+	if opt.truncateRecord == n && len(data) > 1 {
+		data = data[:len(data)/2]
+	}
+	_, _ = out.Write(append(data, '\n'))
+	return opt.earlyExit
+}
+func bytesOf(b byte, n int) []byte {
+	result := make([]byte, n)
+	for i := range result {
+		result[i] = b
+	}
+	return result
 }

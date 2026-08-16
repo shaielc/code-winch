@@ -2,6 +2,7 @@ package fake_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -19,6 +20,18 @@ func runSpec(t *testing.T) application.RunSpec {
 		t.Fatal(err)
 	}
 	return application.RunSpec{RunID: id}
+}
+
+func TestMalformedRecordDegradesAndParsingContinues(t *testing.T) {
+	codec, _ := (fake.Driver{}).NewCodec(context.Background(), runSpec(t))
+	events, err := codec.Consume(application.OutputChunk{Data: []byte("{broken\n{\"kind\":\"stream.raw\",\"payload\":{}}\n")})
+	if err != nil || len(events) != 3 || events[0].Kind != "raw.output" || events[1].Kind != "diagnostic" || events[2].Kind != "stream.raw" {
+		t.Fatalf("unexpected recovery: events=%#v err=%v", events, err)
+	}
+	var diagnostic map[string]string
+	if err := json.Unmarshal(events[1].Payload, &diagnostic); err != nil || diagnostic["code"] != "FAKE_MALFORMED_RECORD" {
+		t.Fatalf("diagnostic=%v err=%v", diagnostic, err)
+	}
 }
 
 func TestHarnessContract(t *testing.T) {

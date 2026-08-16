@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://code-winch.dev/schemas/scenarios/v1/fake-harness-scenario.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "steps"],
+  "properties": {
+    "version": { "const": 1 },
+    "ignore_sigterm_ms": { "type": "integer", "minimum": 0 },
+    "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/step" } }
+  },
+  "$defs": {
+    "step": {
+      "oneOf": [
+        { "$ref": "#/$defs/emit" }, { "$ref": "#/$defs/wait" },
+        { "$ref": "#/$defs/sleep" }, { "$ref": "#/$defs/exit" },
+        { "$ref": "#/$defs/malformed" }
+      ]
+    },
+    "emit": { "type": "object", "additionalProperties": false, "required": ["kind", "event_kind", "payload"], "properties": { "kind": { "const": "emit" }, "event_kind": { "type": "string", "minLength": 1 }, "payload": {} } },
+    "wait": { "type": "object", "additionalProperties": false, "required": ["kind", "pattern"], "properties": { "kind": { "const": "wait_input" }, "pattern": { "type": "string", "minLength": 1 } } },
+    "sleep": { "type": "object", "additionalProperties": false, "required": ["kind", "duration_ms"], "properties": { "kind": { "const": "sleep" }, "duration_ms": { "type": "integer", "minimum": 0 } } },
+    "exit": { "type": "object", "additionalProperties": false, "required": ["kind", "code"], "properties": { "kind": { "const": "exit" }, "code": { "type": "integer", "minimum": 0, "maximum": 255 } } },
+    "malformed": { "type": "object", "additionalProperties": false, "required": ["kind", "data"], "properties": { "kind": { "const": "malformed" }, "data": { "type": "string", "minLength": 1, "pattern": "^[^\\n]*$" } } }
+  }
+}
