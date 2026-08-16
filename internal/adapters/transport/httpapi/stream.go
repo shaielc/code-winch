@@ -24,6 +24,19 @@ type EventStream struct {
 	runs     map[RunId]map[uint64]*eventSubscriber
 }
 
+// Close disconnects all subscribers so daemon shutdown can drain boundedly.
+func (b *EventStream) Close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for runID, subscribers := range b.runs {
+		for id, sub := range subscribers {
+			sub.once.Do(func() { close(sub.done) })
+			delete(subscribers, id)
+		}
+		delete(b.runs, runID)
+	}
+}
+
 type eventSubscriber struct {
 	events chan Event
 	done   chan struct{}
@@ -188,7 +201,7 @@ func duration(value, fallback time.Duration) time.Duration {
 }
 func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
 func (s *server) closeStream(ctx *http.Request, c *websocket.Conn, runID RunId, last int64, reason string) {
-	s.cfg.Logger.LogAttrs(ctx.Context(), slog.LevelWarn, "event stream closed", slog.String("request_id", ctx.Context().Value(requestKey{}).(identity).requestID), slog.String("run_id", runID), slog.String("reason", reason), slog.Int64("last_sequence", last))
+	s.cfg.Logger.LogAttrs(ctx.Context(), slog.LevelWarn, "event stream closed", slog.String("request_id", ctx.Context().Value(requestKey{}).(identity).requestID), slog.String("run_id", runID), slog.String("error_code", reason), slog.Int64("sequence", last))
 	writeCtx, cancel := context.WithTimeout(context.Background(), duration(s.cfg.StreamWriteTimeout, 5*time.Second))
 	_ = c.Write(writeCtx, websocket.MessageText, mustJSON(streamMessage{Type: "disconnect", LastSequence: last, Resumable: true}))
 	cancel()
