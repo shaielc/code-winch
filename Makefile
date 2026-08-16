@@ -1,5 +1,7 @@
 GO ?= go
 GOLANGCI_LINT ?= golangci-lint
+TRIVY ?= trivy
+SCAN_SEVERITY ?= HIGH,CRITICAL
 
 COMPOSE ?= docker compose -f deployments/compose.yml
 IN_RUNNER = $(COMPOSE) exec -T runner
@@ -17,7 +19,7 @@ TEST_DATABASE ?= winch_test
 
 .PHONY: all api-check api-compat api-generate api-validate build check format \
 	format-check lint run runner-image runner-shell runner-verify test test-cycle \
-	test-env test-env-down test-integration vet web-build
+	test-env test-env-down test-integration vet web-build scan sbom suppressions-check
 
 all: check
 
@@ -88,6 +90,47 @@ web-build:
 
 ## check: [host] Run every check required by CI.
 check: api-check format-check vet lint test build
+
+# ------------------------------------------------------- supply-chain targets
+
+## suppressions-check: [host] Reject incomplete or expired vulnerability exceptions.
+## suppressions.yaml is JSON-compatible YAML so jq is the only parser required.
+suppressions-check:
+	@jq -e '(.suppressions | type == "array") and ([.suppressions[].id] | length == (unique | length)) and all(.suppressions[]; (.id | type == "string" and length > 0) and (.owner | type == "string" and length > 0) and (.reason | type == "string" and length > 0) and (.expires | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$$")) and (try (.expires + "T00:00:00Z" | fromdateiso8601) catch false))' \
+		security/suppressions.yaml >/dev/null
+	@expired="$$(jq -r --arg today "$$(date -u +%F)" \
+		'.suppressions[] | select(.expires < $$today) | "\(.id) (owner: \(.owner), expired: \(.expires))"' \
+		security/suppressions.yaml)"; \
+	if [ -n "$$expired" ]; then echo "expired vulnerability suppression(s):" >&2; echo "$$expired" >&2; exit 1; fi
+
+## scan: [host+docker] Scan both dependency ecosystems and every shipped image.
+## Any scanner error is fatal; SCAN_SEVERITY configures the failing threshold.
+scan: suppressions-check
+	@command -v $(TRIVY) >/dev/null || { echo "trivy is required; scanner unavailable" >&2; exit 1; }
+	@set -e; ignore="$$(mktemp)"; trap 'rm -f "$$ignore"' EXIT; \
+	jq -r '.suppressions[].id' security/suppressions.yaml > "$$ignore"; \
+	$(TRIVY) fs --scanners vuln --pkg-types library --severity $(SCAN_SEVERITY) --exit-code 1 --ignorefile "$$ignore" go.mod; \
+	$(TRIVY) fs --scanners vuln --pkg-types library --include-dev-deps --severity $(SCAN_SEVERITY) --exit-code 1 --ignorefile "$$ignore" web; \
+	docker build --pull -t code-winch/winchd:scan -f deployments/Dockerfile.winchd .; \
+	docker build --pull -t code-winch/web:scan -f deployments/Dockerfile.web .; \
+	$(TRIVY) image --scanners vuln --severity $(SCAN_SEVERITY) --exit-code 1 --ignorefile "$$ignore" code-winch/winchd:scan; \
+	$(TRIVY) image --scanners vuln --severity $(SCAN_SEVERITY) --exit-code 1 --ignorefile "$$ignore" code-winch/web:scan
+
+## sbom: [host+docker] Generate CycloneDX SBOMs for source and shipped images.
+sbom: suppressions-check
+	@command -v $(TRIVY) >/dev/null || { echo "trivy is required; scanner unavailable" >&2; exit 1; }
+	@mkdir -p sbom
+	@docker build -t code-winch/winchd:sbom -f deployments/Dockerfile.winchd .
+	@docker build -t code-winch/web:sbom -f deployments/Dockerfile.web .
+	@$(TRIVY) fs --format cyclonedx --output sbom/repository.json .
+	@$(TRIVY) image --format cyclonedx --output sbom/winchd.json code-winch/winchd:sbom
+	@$(TRIVY) image --format cyclonedx --output sbom/web.json code-winch/web:sbom
+	@set -e; for spec in "winchd:deployments/Dockerfile.winchd" "web:deployments/Dockerfile.web"; do \
+		name="$${spec%%:*}"; file="$${spec#*:}"; \
+		digest="$$(awk '/^FROM / { image=$$2 } END { sub(/^.*@/, "", image); print image }' "$$file")"; \
+		tmp="$$(mktemp)"; jq --arg digest "$$digest" '. + {baseImageDigest: $$digest}' "sbom/$$name.json" > "$$tmp"; mv "$$tmp" "sbom/$$name.json"; \
+	done
+	@for file in sbom/*.json; do jq -e '.bomFormat == "CycloneDX" and (.components | length > 0)' "$$file" >/dev/null || exit 1; done
 
 # ------------------------------------------------------------- docker targets
 

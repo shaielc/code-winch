@@ -1,0 +1,44 @@
+name: Supply chain
+
+on:
+  pull_request:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  scan-and-sbom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: ${{ github.event_name == 'release' && 'write' || 'read' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567
+        with:
+          version: v0.74.0
+          cache: true
+
+      - name: Scan dependencies and images
+        run: make scan
+
+      - name: Generate and validate SBOMs
+        run: make sbom
+
+      - name: Publish SBOM build artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sbom
+          path: sbom/*.json
+          if-no-files-found: error
+
+      - name: Attach SBOMs to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" sbom/*.json --clobber

@@ -1,0 +1,82 @@
+{
+  "suppressions": [
+    {
+      "id": "GHSA-r277-6w6q-xmqw",
+      "owner": "release-security",
+      "reason": "Pre-existing finding; dependency upgrade compatibility is under security review.",
+      "expires": "2026-09-15"
+    },
+    {
+      "id": "CVE-2026-33815",
+      "owner": "release-security",
+      "reason": "Pre-existing finding; dependency upgrade compatibility is under security review.",
+      "expires": "2026-09-15"
+    },
+    {
+      "id": "CVE-2026-33816",
+      "owner": "release-security",
+      "reason": "Pre-existing finding; dependency upgrade compatibility is under security review.",
+      "expires": "2026-09-15"
+    },
+    {
+      "id": "CVE-2026-39828",
+      "owner": "release-security",
+      "reason": "Pre-existing finding; dependency upgrade compatibility is under security review.",
+      "expires": "2026-09-15"
+    },
+    {
+      "id": "CVE-2026-39829",
+      "owner": "release-security",
+      "reason": "Pre-existing finding; dependency upgrade compatibility is under security review.",
+      "expires": "2026-09-15"
+    },
+    {
+      "id": "CVE-2026-39830",
+      "owner": "release-security",
+      "reason": "Pre-existing finding; dependency upgrade compatibility is under security review.",
+      "expires": "2026-09-15"
+    },
+    {
+      "id": "CVE-2026-39831",
+      "owner": "release-security",
+      "reason": "Pre-existing finding; dependency upgrade compatibility is under security review.",
+      "expires": "2026-09-15"
+    },
+    {
+      "id": "CVE-2026-39832",
+      "owner": "release-security",
+      "reason": "Pre-existing finding; dependency upgrade compatibility is under security review.",
+      "expires": "2026-09-15"
+    },
+    {
+      "id": "CVE-2026-39835",
+      "owner": "release-security",
+      "reason": "Pre-existing finding; dependency upgrade compatibility is under security review.",
+      "expires": "2026-09-15"
+    },
+    {
+      "id": "CVE-2026-42508",
+      "owner": "release-security",
+      "reason": "Pre-existing finding; dependency upgrade compatibility is under security review.",
+      "expires": "2026-09-15"
+    },
+    {
+      "id": "CVE-2026-46595",
+      "owner": "release-security",
+      "reason": "Pre-existing finding; dependency upgrade compatibility is under security review.",
+      "expires": "2026-09-15"
+    },
+    {
+      "id": "CVE-2026-46597",
+      "owner": "release-security",
+      "reason": "Pre-existing finding; dependency upgrade compatibility is under security review.",
+      "expires": "2026-09-15"
+    },
+    {
+      "id": "CVE-2026-56852",
+      "owner": "release-security",
+      "reason": "Pre-existing finding; dependency upgrade compatibility is under security review.",
+      "expires": "2026-09-15"
+    }
+  ]
+}
