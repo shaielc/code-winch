@@ -25,6 +25,16 @@ type AdmissionFunc func(context.Context, RunView) error
 func (f AdmissionFunc) AdmitStart(ctx context.Context, r RunView) error { return f(ctx, r) }
 func PermissiveAdmission(context.Context, RunView) error                { return nil }
 
+// RunExecutor performs the runtime half of a lifecycle command: the service
+// persists what the run should be doing, and the executor makes it so. A
+// service without one accepts starts that never reach a harness, so the
+// composition root always sets it; only tests of persistence alone leave it
+// unset.
+type RunExecutor interface {
+	Launch(context.Context, domain.RunID) error
+	Stop(context.Context, domain.RunID) error
+}
+
 type RunService struct {
 	runs      RunRepository
 	events    EventStore
@@ -32,13 +42,22 @@ type RunService struct {
 	clock     Clock
 	drivers   *DriverRegistry
 	admission AdmissionHook
+	executor  RunExecutor
 }
 
 func NewRunService(r RunRepository, e EventStore, ids IDSource, clock Clock, drivers *DriverRegistry, admission AdmissionHook) *RunService {
 	if admission == nil {
 		admission = AdmissionFunc(PermissiveAdmission)
 	}
-	return &RunService{r, e, ids, clock, drivers, admission}
+	return &RunService{runs: r, events: e, ids: ids, clock: clock, drivers: drivers, admission: admission}
+}
+
+// WithExecutor attaches the runtime. It is separate from NewRunService because
+// the executor needs the service to advance run states, so the two are wired
+// after both exist.
+func (s *RunService) WithExecutor(executor RunExecutor) *RunService {
+	s.executor = executor
+	return s
 }
 
 func (s *RunService) CreateRun(ctx context.Context, c CreateRunCommand) (RunView, error) {
@@ -131,12 +150,72 @@ func (s *RunService) transition(ctx context.Context, id domain.RunID, expected u
 	nv, err := s.runs.Save(ctx, rec, v)
 	return RunView{rec, nv, 0}, err
 }
+
+// StartRun queues the run durably, then launches it. The view it returns is
+// read back after the launch so the caller's ETag matches the run the launch
+// left behind rather than the queued one it replaced.
 func (s *RunService) StartRun(ctx context.Context, id domain.RunID, v uint64) (RunView, error) {
-	return s.transition(ctx, id, v, domain.RunCommandStart)
+	view, err := s.transition(ctx, id, v, domain.RunCommandStart)
+	if err != nil || s.executor == nil {
+		return view, err
+	}
+	if launchErr := s.executor.Launch(ctx, id); launchErr != nil {
+		// The executor has already recorded the failed run; report the view it
+		// left behind together with the failure that produced it.
+		if view, err = s.GetRun(ctx, id); err != nil {
+			return RunView{}, err
+		}
+		return view, launchErr
+	}
+	return s.GetRun(ctx, id)
 }
+
 func (s *RunService) StopRun(ctx context.Context, id domain.RunID, v uint64) (RunView, error) {
-	return s.transition(ctx, id, v, domain.RunCommandStop)
+	view, err := s.transition(ctx, id, v, domain.RunCommandStop)
+	if err != nil || s.executor == nil {
+		return view, err
+	}
+	if err = s.executor.Stop(ctx, id); err != nil {
+		return view, err
+	}
+	return s.GetRun(ctx, id)
 }
+
+// Advance applies a lifecycle command the runtime observed rather than one a
+// client requested. There is no expected version to check: the supervisor
+// writes to the same row while an execution runs, so a version that moved in
+// between is retried instead of reported as a conflict.
+func (s *RunService) Advance(ctx context.Context, id domain.RunID, command domain.RunCommand) (RunView, error) {
+	var conflict error
+	for attempt := 0; attempt < advanceAttempts; attempt++ {
+		rec, v, err := s.runs.Get(ctx, id)
+		if err != nil {
+			return RunView{}, err
+		}
+		run, err := hydrate(rec)
+		if err != nil {
+			return RunView{}, err
+		}
+		if err = run.Apply(command, domain.AttemptID{}); err != nil {
+			return RunView{}, err
+		}
+		rec.Attempts = run.Attempts()
+		rec.UpdatedAt = s.clock.Now()
+		nv, err := s.runs.Save(ctx, rec, v)
+		if errors.Is(err, ErrConflict) {
+			conflict = err
+			continue
+		}
+		if err != nil {
+			return RunView{}, err
+		}
+		return RunView{Record: rec, Version: nv}, nil
+	}
+	return RunView{}, conflict
+}
+
+const advanceAttempts = 5
+
 func (s *RunService) ListRunEvents(ctx context.Context, id domain.RunID, after uint64, limit int) ([]protocol.Event, error) {
 	if _, _, err := s.runs.Get(ctx, id); err != nil {
 		return nil, err

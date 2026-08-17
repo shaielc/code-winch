@@ -561,6 +561,15 @@ func (s *SupervisorStore) AppendObservation(_ context.Context, lease application
 	s.controls[lease.RunID] = c
 	return cloneEvents(out), nil
 }
+
+// Events returns the sequenced observations recorded for a run, so a caller
+// driving the supervisor can assert what a reader of the run's history sees.
+func (s *SupervisorStore) Events(id domain.RunID) []protocol.Event {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return cloneEvents(s.events[id])
+}
+
 func rawMapMemory(in map[string][]byte) map[string]json.RawMessage {
 	out := make(map[string]json.RawMessage, len(in))
 	for k, v := range in {

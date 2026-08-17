@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -23,13 +24,38 @@ import (
 	_ "github.com/shaielc/code-winch/internal/adapters/sandbox/local"
 	"github.com/shaielc/code-winch/internal/adapters/transport/httpapi"
 	"github.com/shaielc/code-winch/internal/application"
+	"github.com/shaielc/code-winch/internal/execution"
 	"github.com/shaielc/code-winch/internal/platform/config"
 	"github.com/shaielc/code-winch/internal/platform/telemetry"
+	"github.com/shaielc/code-winch/internal/runner/local"
+	"github.com/shaielc/code-winch/internal/supervisor"
+	"github.com/shaielc/code-winch/pkg/protocol"
 )
 
 // Bounds how long a client may dribble request headers; unrelated to the
 // shutdown drain budget.
 const readHeaderTimeout = 10 * time.Second
+
+const (
+	// leaseDuration bounds how long this daemon's claim on a run survives
+	// without renewal. A single local daemon never contends for one, but the
+	// fencing that makes takeover safe is on from the start.
+	leaseDuration = time.Minute
+	// stopGrace is how long a harness has to exit after a stop before the
+	// sandbox escalates to killing its process group.
+	stopGrace = 5 * time.Second
+)
+
+// Outbox delivery. The interval bounds how long a committed event waits before
+// live subscribers are told about it; durable history is already readable.
+const (
+	outboxInterval    = 50 * time.Millisecond
+	outboxBatch       = 64
+	outboxLease       = 30 * time.Second
+	outboxBaseBackoff = 100 * time.Millisecond
+	outboxMaxBackoff  = 5 * time.Second
+	outboxMaxAttempts = 8
+)
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -78,12 +104,53 @@ func run(ctx context.Context) error {
 	defer stream.Close()
 	store := postgres.New(pool)
 	ids := application.RandomIDs{}
-	runs := application.NewRunService(store, store, ids, application.SystemClock{}, application.DefaultDrivers, nil)
-	backend := httpapi.NewBackend(runs, nil, ids)
+	clock := application.SystemClock{}
+	instance := ids.NewCommandID().String()
+
+	// The runtime, from the runner outwards. Drivers arrive through the
+	// registry the blank imports above populate, so this root names no adapter.
+	runners := local.NewPool(application.DefaultDrivers)
+	runSupervisor := supervisor.New(store, runners, execution.ClassificationRedactor{}, clock, instance, leaseDuration).WithReconciliationIDs(ids)
+	runs := application.NewRunService(store, store, ids, clock, application.DefaultDrivers, nil)
+	engine, err := execution.New(execution.Config{
+		Runs: store, States: runs, Control: store, Supervisor: runSupervisor,
+		Runner: runners, IDs: ids, Clock: clock, Logger: logger, StopGrace: stopGrace,
+	})
+	if err != nil {
+		return err
+	}
+	runs.WithExecutor(engine)
+	inputs := application.NewInputService(store, execution.Capabilities{Runs: store}, nil)
+	outbox, err := application.NewOutboxWorker(store, execution.Publisher{
+		Events: liveEvents{stream}, Commands: store, Input: engine,
+	}, wallClock{}, application.OutboxWorkerConfig{
+		WorkerID: instance, LeaseToken: ids.NewCommandID().String(), BatchSize: outboxBatch,
+		LeaseDuration: outboxLease, BaseBackoff: outboxBaseBackoff, MaxBackoff: outboxMaxBackoff, MaxAttempts: outboxMaxAttempts,
+	})
+	if err != nil {
+		return err
+	}
+
+	backend := httpapi.NewBackend(runs, inputs, ids)
 	api, err := httpapi.NewHandler(httpapi.Config{Token: cfg.Token, CSRFToken: cfg.CSRFToken, AllowedOrigin: cfg.AllowedOrigin, Actor: cfg.Actor, Logger: logger, RequestID: requestID, EventStream: stream}, backend)
 	if err != nil {
 		return err
 	}
+
+	// Durable work outlives the request context: an execution that ends while
+	// the daemon is draining must still record how it ended.
+	runtimeCtx := context.WithoutCancel(ctx)
+	var runtime sync.WaitGroup
+	runtime.Add(2)
+	go func() { defer runtime.Done(); engine.Consume(runtimeCtx, runners.Observations()) }()
+	go func() { defer runtime.Done(); deliver(ctx, outbox, logger) }()
+	defer func() {
+		// Order matters: executions are ended before the runner closes, because
+		// its pumps finish only once their streams are released.
+		engine.Shutdown(runtimeCtx)
+		runners.Close()
+		runtime.Wait()
+	}()
 	assets, served := staticHandler(cfg.StaticDir, cfg.CSRFToken)
 	if !served {
 		logger.Warn("web assets unavailable", "component", "http", "operation", "serve", "status", "degraded")
@@ -126,6 +193,48 @@ func serve(ctx context.Context, server *http.Server, stream *httpapi.EventStream
 			return nil
 		}
 		return fmt.Errorf("http serve: %w", err)
+	}
+}
+
+// wallClock is the outbox worker's clock, which measures lease and backoff
+// deadlines in wall time rather than in domain timestamps.
+type wallClock struct{}
+
+func (wallClock) Now() time.Time { return time.Now().UTC() }
+
+// liveEvents adapts the durable event stream to the WebSocket broadcaster. It
+// is best effort: a subscriber that misses a notification repairs from storage.
+type liveEvents struct{ stream *httpapi.EventStream }
+
+func (l liveEvents) Notify(event protocol.Event) {
+	l.stream.Publish(event.RunID, httpapi.APIEvent(event))
+}
+
+// deliver drains the outbox until the daemon stops. A full batch is followed
+// immediately by another claim so a burst of output is not paced by the tick.
+func deliver(ctx context.Context, worker *application.OutboxWorker, logger *slog.Logger) {
+	ticker := time.NewTicker(outboxInterval)
+	defer ticker.Stop()
+	for {
+		for {
+			delivered, err := worker.RunOnce(ctx)
+			if err != nil {
+				if ctx.Err() == nil {
+					// The cause can name a publisher's payload, so only the
+					// stable class is logged.
+					logger.Warn("outbox delivery failed", "component", "outbox", "operation", "deliver", "error_code", "delivery_failed")
+				}
+				break
+			}
+			if delivered < outboxBatch {
+				break
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }
 

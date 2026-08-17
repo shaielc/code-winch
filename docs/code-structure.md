@@ -11,6 +11,8 @@ code-winch/
 │   ├── domain/                  # dependency-free entities, value types, state machines
 │   ├── application/             # use cases and ports
 │   ├── supervisor/              # per-run serialization, leases, reconciliation
+│   ├── runner/                  # execution ownership: codecs, pumps, observations
+│   ├── execution/               # launch, observation, and input orchestration
 │   ├── workflow/                # definitions, coordinator, runtime port
 │   ├── adapters/
 │   │   ├── harness/             # one package per coding-agent integration

@@ -66,6 +66,16 @@ type OutboxMessage struct {
 	Payload []byte
 }
 
+// Outbox topics. Store implementations write these literals when they record
+// delivery intent in the same transaction as the change that caused it, and a
+// publisher routes on them.
+const (
+	// TopicRunEvents carries one canonical event, already sequenced.
+	TopicRunEvents = "run.events"
+	// TopicRunInput carries one accepted input command, by command ID.
+	TopicRunInput = "run.input"
+)
+
 type OutboxPublisher interface {
 	Publish(context.Context, OutboxMessage) error
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/shaielc/code-winch/internal/application"
 	"github.com/shaielc/code-winch/internal/domain"
+	"github.com/shaielc/code-winch/pkg/protocol"
 )
 
 type ApplicationBackend struct {
@@ -86,6 +87,19 @@ func (b *ApplicationBackend) StopRun(ctx context.Context, _ string, id RunId, _ 
 	v, e := b.runs.StopRun(ctx, rid, uint64(version))
 	return apiRun(v), mapError(e)
 }
+
+// APIEvent projects a canonical event onto the wire type. Live publication and
+// history use the one projection, so a subscriber cannot see a shape the
+// replayed history would not produce.
+func APIEvent(v protocol.Event) Event {
+	var payload map[string]any
+	_ = json.Unmarshal(v.Payload, &payload)
+	sourceBytes, _ := json.Marshal(v.Source)
+	var source map[string]any
+	_ = json.Unmarshal(sourceBytes, &source)
+	return Event{EventId: v.EventID, RunId: v.RunID, Sequence: int64(v.Sequence), OccurredAt: v.OccurredAt, Kind: v.Kind, SchemaVersion: int(v.SchemaVersion), Sensitivity: EventSensitivity(v.Sensitivity), Payload: payload, Source: source}
+}
+
 func (b *ApplicationBackend) ListRunEvents(ctx context.Context, _ string, id RunId, after int64, limit int) (EventPage, error) {
 	rid, e := parseRun(id)
 	if e != nil {
@@ -101,12 +115,7 @@ func (b *ApplicationBackend) ListRunEvents(ctx context.Context, _ string, id Run
 	}
 	out := EventPage{Events: make([]Event, 0, len(values)), HasMore: more, NextAfterSequence: after}
 	for _, v := range values {
-		var payload map[string]any
-		_ = json.Unmarshal(v.Payload, &payload)
-		sourceBytes, _ := json.Marshal(v.Source)
-		var source map[string]any
-		_ = json.Unmarshal(sourceBytes, &source)
-		out.Events = append(out.Events, Event{EventId: v.EventID, RunId: v.RunID, Sequence: int64(v.Sequence), OccurredAt: v.OccurredAt, Kind: v.Kind, SchemaVersion: int(v.SchemaVersion), Sensitivity: EventSensitivity(v.Sensitivity), Payload: payload, Source: source})
+		out.Events = append(out.Events, APIEvent(v))
 		out.NextAfterSequence = int64(v.Sequence)
 	}
 	return out, nil
