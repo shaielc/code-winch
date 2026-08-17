@@ -14,3 +14,6 @@ deployments/.env
 
 # Local skill-discovery links; the skills themselves live in skills/
 .claude/
+
+# Run ID the interim tmp/ scripts pass between themselves; goes with tmp/ (P1-051)
+tmp/.last-run

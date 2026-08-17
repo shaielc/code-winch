@@ -11,3 +11,4 @@ its face, and states what plan rule would have caught it.
 | Record | Failure |
 |---|---|
 | [2026-08-16 migration re-runnability](2026-08-16-migration-rerunnability.md) | Migrations were planned to run once; P1-048 made them run on every boot |
+| [2026-08-17 unverifiable stream criterion](2026-08-17-unverifiable-stream-criterion.md) | P1-050 spans five shapes; relieving its size by splitting the CLI downstream left one of its criteria with no witness |

@@ -76,12 +76,26 @@ process.
     $ curl -X POST localhost:8080/api/v1/runs/unknown-profile-run/start …
     → expect: 422 with a stable code, and no process started
 
+Subscribed before the run is started, so the stream carries the run rather than
+replaying it. `tmp/stream.py` is the interim client until P1-051's
+`winch run watch` replaces it:
+
+    $ ./tmp/stream.py $ID 30 &
+    $ ./tmp/start.sh $ID && ./tmp/input.sh 'echo hi' $ID && ./tmp/stop.sh $ID
+    → expect: lifecycle, harness output, "hi", and the terminal lifecycle event,
+      each arriving live and in gap-free sequence order
+
 ## Verification
 
 - Service tests against the in-memory ports for every documented transition,
   including concurrent start/stop resolving to one deterministic outcome.
 - PostgreSQL integration test for create/start/stop and resolved-profile storage.
 - HTTP integration tests producing each problem code from a real error path.
+- A test subscribing to `/events/stream` over HTTP against the real store,
+  outbox worker, and publisher, asserting the sequence a subscriber receives.
+  P1-018's stream tests publish from the test body into an in-process
+  `EventStream`, so the path this task creates — commit, outbox, publish — is
+  not covered by them.
 - Delivery test: input accepted before a crash is delivered exactly once after
   restart.
 

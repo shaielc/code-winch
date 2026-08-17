@@ -20,6 +20,10 @@ drivable while the web app churns.
 - Configuration from flags and environment, sharing `internal/platform/config`;
   the API token is read from the environment or a file, never a flag.
 - `--json` output on every command so the CLI is scriptable by tests.
+- Delete `tmp/`. It holds the interim scripts and WebSocket client that stood in
+  for these commands while P1-050 had no way to demonstrate its own stream
+  criterion; each file there maps to one command above. See
+  `docs/workplan/post-mortems/2026-08-17-unverifiable-stream-criterion.md`.
 
 ## Non-goals
 
@@ -34,7 +38,7 @@ drivable while the web app churns.
 ## Owned surfaces
 
 `cmd/winch/` (command files, excluding `dev.go` from P1-049),
-`docs/operations/cli.md`.
+`docs/operations/cli.md`, `tmp/` (deleted).
 
 ## Demonstration
 
@@ -64,6 +68,7 @@ drivable while the web app churns.
 - [ ] Non-zero exit codes distinguish usage errors, API problems, and transport
       failures.
 - [ ] Adding a command adds a file.
+- [ ] `tmp/` is gone, and no script outside `cmd/winch` drives the HTTP API.
 
 ## Deferrals
 
