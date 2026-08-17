@@ -73,7 +73,17 @@ process.
     $ curl -fsS localhost:8080/api/v1/runs/$ID/events?after_sequence=N
     → expect: "hi" appears, citing the input command ID
 
-    $ curl -X POST localhost:8080/api/v1/runs/unknown-profile-run/start …
+    $ curl -fsS -X POST localhost:8080/api/v1/runs \
+        -d '{"workspacePath":"/workspace","harnessProfile":"nonexistent","sandboxProfile":"local"}' …
+    → expect: 422 with a stable code, and no run created
+
+An unknown profile is refused at creation, so no stored run can carry one and
+the start path cannot be reached with one from outside. Its re-check guards a
+different case: a profile that leaves the registry between create and start,
+which a deployment changing `WINCH_HARNESS_PROFILE` produces. Restart the
+daemon without the profile a created run names, then:
+
+    $ curl -X POST localhost:8080/api/v1/runs/$ID/start …
     → expect: 422 with a stable code, and no process started
 
 Subscribed before the run is started, so the stream carries the run rather than
