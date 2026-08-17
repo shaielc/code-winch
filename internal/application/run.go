@@ -92,12 +92,33 @@ func (s *RunService) GetRun(ctx context.Context, id domain.RunID) (RunView, erro
 	if err != nil {
 		return RunView{}, err
 	}
-	ev, err := s.events.Read(ctx, id, 0, 1<<20)
+	last, err := s.events.LastSequence(ctx, id)
 	if err != nil {
 		return RunView{}, err
 	}
-	return RunView{rec, v, uint64(len(ev))}, nil
+	return RunView{rec, v, last}, nil
 }
+
+// shortestPath drives a fresh attempt to a stored state. The persisted model
+// keeps only the state of each attempt, not the route it took there, so any
+// route reaching the same state restores the same record.
+var shortestPath = map[domain.RunState][]domain.RunCommand{
+	domain.RunStateQueued:    {domain.RunCommandStart},
+	domain.RunStatePreparing: {domain.RunCommandStart, domain.RunCommandAcquireLease},
+	domain.RunStateRunning:   {domain.RunCommandStart, domain.RunCommandAcquireLease, domain.RunCommandExecutionStarted},
+	domain.RunStateStopping:  {domain.RunCommandStart, domain.RunCommandAcquireLease, domain.RunCommandExecutionStarted, domain.RunCommandStop},
+	domain.RunStateCancelled: {domain.RunCommandCancel},
+	domain.RunStateCompleted: {domain.RunCommandStart, domain.RunCommandAcquireLease, domain.RunCommandExecutionStarted, domain.RunCommandSuccessfulExit},
+	domain.RunStateFailed:    {domain.RunCommandStart, domain.RunCommandAcquireLease, domain.RunCommandPreparationFailed},
+}
+
+// hydrate rebuilds a run from its stored attempts by replaying commands, so the
+// domain validates the record rather than trusting it.
+//
+// Retry is the only command that appends an attempt and the domain accepts it
+// only from Failed, so every attempt but the last is necessarily Failed. Each
+// one is therefore driven to Failed before the next is appended; a stored
+// record that disagrees is corrupt and is reported rather than repaired.
 func hydrate(rec RunRecord) (*domain.Run, error) {
 	if len(rec.Attempts) == 0 {
 		return nil, errors.New("run has no attempt")
@@ -106,18 +127,33 @@ func hydrate(rec RunRecord) (*domain.Run, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, a := range rec.Attempts[1:] {
+	for i, a := range rec.Attempts[1:] {
+		if previous := rec.Attempts[i].State; previous != domain.RunStateFailed {
+			return nil, fmt.Errorf("run %s attempt %d is %s, but only a failed attempt can be retried", rec.ID, i+1, previous)
+		}
+		if err = replay(r, domain.RunStateFailed); err != nil {
+			return nil, err
+		}
 		if err = r.Apply(domain.RunCommandRetry, a.ID); err != nil {
 			return nil, err
 		}
-	} // restore current state by replaying shortest lifecycle
-	commands := map[domain.RunState][]domain.RunCommand{domain.RunStateQueued: {domain.RunCommandStart}, domain.RunStatePreparing: {domain.RunCommandStart, domain.RunCommandAcquireLease}, domain.RunStateRunning: {domain.RunCommandStart, domain.RunCommandAcquireLease, domain.RunCommandExecutionStarted}, domain.RunStateStopping: {domain.RunCommandStart, domain.RunCommandAcquireLease, domain.RunCommandExecutionStarted, domain.RunCommandStop}, domain.RunStateCancelled: {domain.RunCommandCancel}, domain.RunStateCompleted: {domain.RunCommandStart, domain.RunCommandAcquireLease, domain.RunCommandExecutionStarted, domain.RunCommandSuccessfulExit}, domain.RunStateFailed: {domain.RunCommandStart, domain.RunCommandAcquireLease, domain.RunCommandPreparationFailed}}
-	for _, c := range commands[rec.Attempts[len(rec.Attempts)-1].State] {
-		if err = r.Apply(c, domain.AttemptID{}); err != nil {
-			return nil, err
+	}
+	return r, replay(r, rec.Attempts[len(rec.Attempts)-1].State)
+}
+
+// replay drives the current attempt to state. A first attempt starts at
+// Created and a retried one at Queued, so the leading Start is skipped for the
+// latter; every other command is reachable from both entry points.
+func replay(r *domain.Run, state domain.RunState) error {
+	for _, c := range shortestPath[state] {
+		if c == domain.RunCommandStart && r.CurrentAttempt().State == domain.RunStateQueued {
+			continue
+		}
+		if err := r.Apply(c, domain.AttemptID{}); err != nil {
+			return err
 		}
 	}
-	return r, nil
+	return nil
 }
 func (s *RunService) transition(ctx context.Context, id domain.RunID, expected uint64, command domain.RunCommand) (RunView, error) {
 	rec, v, err := s.runs.Get(ctx, id)
@@ -142,8 +178,16 @@ func (s *RunService) transition(ctx context.Context, id domain.RunID, expected u
 			return RunView{}, err
 		}
 	}
+	before := run.CurrentAttempt()
 	if err = run.Apply(command, domain.AttemptID{}); err != nil {
 		return RunView{}, err
+	}
+	// A stop in Stopping or a terminal state is accepted and changes nothing.
+	// Saving anyway would move the version, and the version is the ETag: a
+	// client holding a valid one for a finished run would then be refused
+	// because somebody else stopped it again.
+	if run.CurrentAttempt() == before {
+		return RunView{rec, v, 0}, nil
 	}
 	rec.Attempts = run.Attempts()
 	rec.UpdatedAt = s.clock.Now()

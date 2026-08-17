@@ -58,6 +58,13 @@ type UnsequencedEvent struct {
 type EventStore interface {
 	Append(context.Context, domain.RunID, uint64, []UnsequencedEvent) ([]protocol.Event, error)
 	Read(context.Context, domain.RunID, uint64, int) ([]protocol.Event, error)
+	// LastSequence is the highest sequence committed for a run, or zero when it
+	// has none yet. Implementations maintain this counter as they append, so a
+	// caller learns how far a history goes without reading the history.
+	// Reporting an unknown run is implementation-defined — a store that does
+	// not track runs cannot tell one from a run with no events — so callers
+	// establish that the run exists before asking.
+	LastSequence(context.Context, domain.RunID) (uint64, error)
 }
 
 type OutboxMessage struct {

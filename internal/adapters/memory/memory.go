@@ -239,6 +239,23 @@ func (s *EventStore) Read(_ context.Context, runID domain.RunID, after uint64, l
 	}
 	return cloneEvents(values[int(after):end]), nil
 }
+
+// LastSequence reports the sequence of the newest committed event. This store
+// does not know which runs exist, so an unknown run is indistinguishable from
+// one with no events and both answer zero.
+func (s *EventStore) LastSequence(_ context.Context, runID domain.RunID) (uint64, error) {
+	if err := s.Failures.next("last_sequence"); err != nil {
+		return 0, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	values := s.events[runID]
+	if len(values) == 0 {
+		return 0, nil
+	}
+	return values[len(values)-1].Sequence, nil
+}
+
 func (s *EventStore) AppendCalls() []AppendCall {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

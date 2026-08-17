@@ -274,6 +274,17 @@ func (s *Store) Read(ctx context.Context, runID domain.RunID, after uint64, limi
 	return out, rows.Err()
 }
 
+// LastSequence reads the counter Append and AppendObservation maintain as they
+// commit, so a caller does not pay for the history to learn how far it goes.
+func (s *Store) LastSequence(ctx context.Context, runID domain.RunID) (uint64, error) {
+	var sequence uint64
+	err := s.pool.QueryRow(ctx, `SELECT last_sequence FROM runs WHERE id=$1`, runID.String()).Scan(&sequence)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, application.ErrNotFound
+	}
+	return sequence, err
+}
+
 func (s *Store) PutCommand(ctx context.Context, command InputCommand) (bool, error) {
 	if !json.Valid(command.Payload) {
 		return false, errInvalidJSON
