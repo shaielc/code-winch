@@ -18,7 +18,12 @@ func TestOpenAPIContract(t *testing.T) {
 		relative := relative
 		t.Run(filepath.Base(relative), func(t *testing.T) {
 			t.Parallel()
-			document, err := openapi3.NewLoader().LoadFromFile(relative)
+			// code-winch.yaml assembles paths/ by $ref, so the loader must
+			// follow them; validation then covers the assembled document
+			// rather than the root file alone.
+			loader := openapi3.NewLoader()
+			loader.IsExternalRefsAllowed = true
+			document, err := loader.LoadFromFile(relative)
 			if err != nil {
 				t.Fatalf("load OpenAPI fixture %q: %v", relative, err)
 			}

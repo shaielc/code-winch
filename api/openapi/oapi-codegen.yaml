@@ -6,3 +6,8 @@ generate:
   embedded-spec: true
 output-options:
   skip-prune: true
+# Path files under paths/ reference the shared components in code-winch.yaml.
+# "-" tells oapi-codegen those references resolve inside this same package
+# rather than an imported one, so the split changes no generated type.
+import-mapping:
+  ../code-winch.yaml: "-"

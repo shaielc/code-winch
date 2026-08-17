@@ -11,174 +11,21 @@ security:
   - bearerAuth: []
 paths:
   /health:
-    get:
-      operationId: getHealth
-      summary: Report service health
-      security: []
-      responses:
-        "200":
-          description: The service is healthy.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HealthResponse"
+    $ref: "./paths/health.yaml"
   /runs:
-    post:
-      operationId: createRun
-      summary: Create a run
-      parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateRunRequest"
-      responses:
-        "201":
-          description: The run was created.
-          headers:
-            Location:
-              description: Canonical URL of the created run.
-              schema: { type: string }
-            ETag:
-              $ref: "#/components/headers/ETag"
-            Idempotency-Key:
-              $ref: "#/components/headers/IdempotencyKey"
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Run" }
-        "400": { $ref: "#/components/responses/ProblemBadRequest" }
-        "401": { $ref: "#/components/responses/ProblemUnauthorized" }
-        "409": { $ref: "#/components/responses/ProblemIdempotencyConflict" }
-        "422": { $ref: "#/components/responses/ProblemValidationFailed" }
+    $ref: "./paths/runs.yaml"
   /runs/{runId}:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-    get:
-      operationId: getRun
-      summary: Read a run
-      responses:
-        "200":
-          description: Current run representation.
-          headers:
-            ETag: { $ref: "#/components/headers/ETag" }
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Run" }
-        "401": { $ref: "#/components/responses/ProblemUnauthorized" }
-        "404": { $ref: "#/components/responses/ProblemRunNotFound" }
+    $ref: "./paths/run.yaml"
   /runs/{runId}/start:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-    post:
-      operationId: startRun
-      summary: Start a created run
-      parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - $ref: "#/components/parameters/IfMatch"
-      responses:
-        "202": { $ref: "#/components/responses/RunAccepted" }
-        "400": { $ref: "#/components/responses/ProblemBadRequest" }
-        "401": { $ref: "#/components/responses/ProblemUnauthorized" }
-        "404": { $ref: "#/components/responses/ProblemRunNotFound" }
-        "409": { $ref: "#/components/responses/ProblemStateConflict" }
-        "412": { $ref: "#/components/responses/ProblemPreconditionFailed" }
-        "428": { $ref: "#/components/responses/ProblemPreconditionRequired" }
+    $ref: "./paths/run-start.yaml"
   /runs/{runId}/stop:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-    post:
-      operationId: stopRun
-      summary: Stop a run
-      description: Replaying this operation, including for a terminal run, is safe.
-      parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - $ref: "#/components/parameters/IfMatch"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/StopRunRequest" }
-      responses:
-        "202": { $ref: "#/components/responses/RunAccepted" }
-        "400": { $ref: "#/components/responses/ProblemBadRequest" }
-        "401": { $ref: "#/components/responses/ProblemUnauthorized" }
-        "404": { $ref: "#/components/responses/ProblemRunNotFound" }
-        "409": { $ref: "#/components/responses/ProblemIdempotencyConflict" }
-        "412": { $ref: "#/components/responses/ProblemPreconditionFailed" }
-        "428": { $ref: "#/components/responses/ProblemPreconditionRequired" }
+    $ref: "./paths/run-stop.yaml"
   /runs/{runId}/events:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-    get:
-      operationId: listRunEvents
-      summary: Read a page of durable run events
-      parameters:
-        - name: after_sequence
-          in: query
-          description: Return events with a sequence strictly greater than this value.
-          schema: { type: integer, format: int64, minimum: 0, default: 0 }
-        - name: limit
-          in: query
-          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
-      responses:
-        "200":
-          description: Events ordered by ascending sequence.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/EventPage" }
-        "400": { $ref: "#/components/responses/ProblemBadRequest" }
-        "401": { $ref: "#/components/responses/ProblemUnauthorized" }
-        "404": { $ref: "#/components/responses/ProblemRunNotFound" }
+    $ref: "./paths/run-events.yaml"
   /runs/{runId}/events/stream:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-    get:
-      operationId: streamRunEvents
-      summary: Resume an ordered run event WebSocket stream
-      description: |
-        Upgrades to WebSocket after header or secure-cookie authentication and
-        exact Origin validation. Messages are event, caught_up, heartbeat, or a
-        resumable disconnect carrying lastSequence. Authorization is refreshed
-        while the connection remains open.
-      parameters:
-        - name: after_sequence
-          in: query
-          description: Resume strictly after this durable sequence.
-          schema: { type: integer, format: int64, minimum: 0, default: 0 }
-      responses:
-        "101": { description: WebSocket protocol switch. }
-        "400": { $ref: "#/components/responses/ProblemBadRequest" }
-        "401": { $ref: "#/components/responses/ProblemUnauthorized" }
-        "403": { description: The WebSocket Origin is not allowed. }
-        "404": { $ref: "#/components/responses/ProblemRunNotFound" }
+    $ref: "./paths/run-events-stream.yaml"
   /runs/{runId}/input:
-    parameters:
-      - $ref: "#/components/parameters/RunId"
-    post:
-      operationId: sendRunInput
-      summary: Send idempotent input to a running run
-      parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - $ref: "#/components/parameters/IfMatch"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/RunInputRequest" }
-      responses:
-        "202":
-          description: Input was durably accepted or safely replayed.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/InputAccepted" }
-        "400": { $ref: "#/components/responses/ProblemBadRequest" }
-        "401": { $ref: "#/components/responses/ProblemUnauthorized" }
-        "404": { $ref: "#/components/responses/ProblemRunNotFound" }
-        "409": { $ref: "#/components/responses/ProblemStateConflict" }
-        "412": { $ref: "#/components/responses/ProblemPreconditionFailed" }
-        "428": { $ref: "#/components/responses/ProblemPreconditionRequired" }
+    $ref: "./paths/run-input.yaml"
 components:
   securitySchemes:
     bearerAuth:

@@ -15,35 +15,52 @@ TEST_DATABASE ?= winch_test
 # With no Go toolchain installed, the [docker] group is the way in. See
 # deployments/README.md for the testing procedure.
 
-.PHONY: all api-check api-compat api-generate api-validate build check format \
-	format-check lint run runner-image runner-shell runner-verify test test-cycle \
-	test-env test-env-down test-integration vet web-build
+.PHONY: all api-check api-check-go api-compat api-generate api-generate-go \
+	api-validate build check format format-check lint run runner-image \
+	runner-shell runner-verify test test-cycle test-env test-env-down \
+	test-integration vet web-build
 
 all: check
 
 # ---------------------------------------------------------------- host targets
 
 ## api-generate: [host] Regenerate server and browser types from the OpenAPI source.
-api-generate:
-	go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.4.1 --config api/openapi/oapi-codegen.yaml api/openapi/code-winch.yaml
+## Both halves, so it needs npm as well as Go; api-generate-go is the Go half alone.
+api-generate: api-generate-go
 	cd web && npm run api:generate
+
+## api-generate-go: [host] Regenerate the server types only. Needs no npm, so it
+## runs wherever $(GO) does, including the runner container.
+api-generate-go:
+	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.4.1 --config api/openapi/oapi-codegen.yaml api/openapi/code-winch.yaml
 
 ## api-validate: [host] Parse and validate the OpenAPI document and contract fixtures.
 api-validate:
-	go test ./test/contract/openapi -run TestOpenAPIContract
+	$(GO) test ./test/contract/openapi -run TestOpenAPIContract
 
 ## api-compat: [host] Reject breaking changes relative to the committed v1 baseline.
 api-compat:
-	go run github.com/oasdiff/oasdiff@v1.11.7 breaking test/contract/openapi/v1.yaml api/openapi/code-winch.yaml --fail-on ERR
+	$(GO) run github.com/oasdiff/oasdiff@v1.11.7 breaking test/contract/openapi/v1.yaml api/openapi/code-winch.yaml --fail-on ERR
 
 ## api-check: [host] Verify validation, compatibility, and deterministic generated output.
+## The steps are chained with && deliberately: with `;` a failed regeneration was
+## swallowed and the target reported success having generated nothing.
 api-check: api-validate api-compat
 	@tmp="$$(mktemp -d)"; trap 'rm -rf "$$tmp"' EXIT; \
-	cp internal/adapters/transport/httpapi/types.gen.go "$$tmp/go"; \
-	cp web/src/api/schema.ts "$$tmp/ts"; \
-	$(MAKE) api-generate; \
-	cmp "$$tmp/go" internal/adapters/transport/httpapi/types.gen.go; \
+	cp internal/adapters/transport/httpapi/types.gen.go "$$tmp/go" && \
+	cp web/src/api/schema.ts "$$tmp/ts" && \
+	$(MAKE) api-generate && \
+	cmp "$$tmp/go" internal/adapters/transport/httpapi/types.gen.go && \
 	cmp "$$tmp/ts" web/src/api/schema.ts
+
+## api-check-go: [docker-friendly] api-check without the browser half, for an
+## environment with Go but no npm. It does not cover web/src/api/schema.ts, so it
+## is not a substitute for api-check in CI.
+api-check-go: api-validate api-compat
+	@tmp="$$(mktemp -d)"; trap 'rm -rf "$$tmp"' EXIT; \
+	cp internal/adapters/transport/httpapi/types.gen.go "$$tmp/go" && \
+	$(MAKE) api-generate-go GO='$(GO)' && \
+	cmp "$$tmp/go" internal/adapters/transport/httpapi/types.gen.go
 
 ## format: [host] Format all Go source files.
 format:

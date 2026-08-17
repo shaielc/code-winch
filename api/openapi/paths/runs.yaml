@@ -1,0 +1,29 @@
+post:
+  operationId: createRun
+  summary: Create a run
+  parameters:
+    - $ref: "../code-winch.yaml#/components/parameters/IdempotencyKey"
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../code-winch.yaml#/components/schemas/CreateRunRequest"
+  responses:
+    "201":
+      description: The run was created.
+      headers:
+        Location:
+          description: Canonical URL of the created run.
+          schema: { type: string }
+        ETag:
+          $ref: "../code-winch.yaml#/components/headers/ETag"
+        Idempotency-Key:
+          $ref: "../code-winch.yaml#/components/headers/IdempotencyKey"
+      content:
+        application/json:
+          schema: { $ref: "../code-winch.yaml#/components/schemas/Run" }
+    "400": { $ref: "../code-winch.yaml#/components/responses/ProblemBadRequest" }
+    "401": { $ref: "../code-winch.yaml#/components/responses/ProblemUnauthorized" }
+    "409": { $ref: "../code-winch.yaml#/components/responses/ProblemIdempotencyConflict" }
+    "422": { $ref: "../code-winch.yaml#/components/responses/ProblemValidationFailed" }

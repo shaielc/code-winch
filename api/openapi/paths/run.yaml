@@ -1,0 +1,15 @@
+parameters:
+  - $ref: "../code-winch.yaml#/components/parameters/RunId"
+get:
+  operationId: getRun
+  summary: Read a run
+  responses:
+    "200":
+      description: Current run representation.
+      headers:
+        ETag: { $ref: "../code-winch.yaml#/components/headers/ETag" }
+      content:
+        application/json:
+          schema: { $ref: "../code-winch.yaml#/components/schemas/Run" }
+    "401": { $ref: "../code-winch.yaml#/components/responses/ProblemUnauthorized" }
+    "404": { $ref: "../code-winch.yaml#/components/responses/ProblemRunNotFound" }

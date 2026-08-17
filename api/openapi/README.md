@@ -6,6 +6,42 @@ defines the initial `/api/v1` run lifecycle contract. Mutating operations use
 `ETag` in `If-Match`. Errors use `application/problem+json` with stable `code`
 values and a safe correlation `requestId`.
 
+## Layout
+
+`code-winch.yaml` holds `info`, `servers`, `security`, and every shared
+component. Each resource's operations live in its own file under `paths/`,
+assembled into the document by `$ref`:
+
+```
+api/openapi/
+├── code-winch.yaml          # shared components, and one $ref per resource
+└── paths/
+    ├── health.yaml
+    ├── runs.yaml            # /runs
+    ├── run.yaml             # /runs/{runId}
+    ├── run-start.yaml
+    ├── run-stop.yaml
+    ├── run-events.yaml
+    ├── run-events-stream.yaml
+    └── run-input.yaml
+```
+
+**Adding a resource means adding a file under `paths/` and one `$ref` line**,
+rather than editing a document every other task is also editing. A path file
+refers to shared components as `../code-winch.yaml#/components/...`.
+
+Shared components stay in `code-winch.yaml` and cannot currently move into
+`components/*.yaml`. oapi-codegen v2.4.1 needs an `import-mapping` entry for
+every external document; the entry names the Go package the referenced types
+come from, and `-` means "this package". That is right for a path file, which
+contributes operations and no types. For a schema it makes the generator emit
+`type Problem = Problem`, a self-referential alias that does not compile.
+Mapping to a real second package instead would rename every generated type and
+change the Go API. Splitting schemas therefore needs a bundling step that
+resolves the pieces into one document before generation, which is a toolchain
+decision this repository has not taken. Briefs that name
+`api/openapi/components/*.yaml` need that decision first.
+
 Run `make api-generate` after changing the source. This updates the Go server
 models in `internal/adapters/transport/httpapi` and the TypeScript declarations
 in `web/src/api`. Do not edit either generated file directly.

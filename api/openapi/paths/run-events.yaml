@@ -1,0 +1,22 @@
+parameters:
+  - $ref: "../code-winch.yaml#/components/parameters/RunId"
+get:
+  operationId: listRunEvents
+  summary: Read a page of durable run events
+  parameters:
+    - name: after_sequence
+      in: query
+      description: Return events with a sequence strictly greater than this value.
+      schema: { type: integer, format: int64, minimum: 0, default: 0 }
+    - name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+  responses:
+    "200":
+      description: Events ordered by ascending sequence.
+      content:
+        application/json:
+          schema: { $ref: "../code-winch.yaml#/components/schemas/EventPage" }
+    "400": { $ref: "../code-winch.yaml#/components/responses/ProblemBadRequest" }
+    "401": { $ref: "../code-winch.yaml#/components/responses/ProblemUnauthorized" }
+    "404": { $ref: "../code-winch.yaml#/components/responses/ProblemRunNotFound" }

@@ -1,0 +1,11 @@
+get:
+  operationId: getHealth
+  summary: Report service health
+  security: []
+  responses:
+    "200":
+      description: The service is healthy.
+      content:
+        application/json:
+          schema:
+            $ref: "../code-winch.yaml#/components/schemas/HealthResponse"

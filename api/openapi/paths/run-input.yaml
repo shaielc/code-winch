@@ -1,0 +1,25 @@
+parameters:
+  - $ref: "../code-winch.yaml#/components/parameters/RunId"
+post:
+  operationId: sendRunInput
+  summary: Send idempotent input to a running run
+  parameters:
+    - $ref: "../code-winch.yaml#/components/parameters/IdempotencyKey"
+    - $ref: "../code-winch.yaml#/components/parameters/IfMatch"
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema: { $ref: "../code-winch.yaml#/components/schemas/RunInputRequest" }
+  responses:
+    "202":
+      description: Input was durably accepted or safely replayed.
+      content:
+        application/json:
+          schema: { $ref: "../code-winch.yaml#/components/schemas/InputAccepted" }
+    "400": { $ref: "../code-winch.yaml#/components/responses/ProblemBadRequest" }
+    "401": { $ref: "../code-winch.yaml#/components/responses/ProblemUnauthorized" }
+    "404": { $ref: "../code-winch.yaml#/components/responses/ProblemRunNotFound" }
+    "409": { $ref: "../code-winch.yaml#/components/responses/ProblemStateConflict" }
+    "412": { $ref: "../code-winch.yaml#/components/responses/ProblemPreconditionFailed" }
+    "428": { $ref: "../code-winch.yaml#/components/responses/ProblemPreconditionRequired" }
