@@ -274,6 +274,33 @@ func (s *Store) Read(ctx context.Context, runID domain.RunID, after uint64, limi
 	return out, rows.Err()
 }
 
+// InFlight selects on the latest attempt of each run, which is the one the API
+// reports, so a run left mid-flight by a dead daemon is listed however many
+// attempts preceded it.
+func (s *Store) InFlight(ctx context.Context) ([]domain.RunID, error) {
+	rows, err := s.pool.Query(ctx, `SELECT r.id FROM runs r JOIN run_attempts a ON a.run_id=r.id
+	WHERE a.ordinal=(SELECT max(ordinal) FROM run_attempts WHERE run_id=r.id)
+	  AND a.state IN ('queued','preparing','running','stopping')
+	ORDER BY r.created_at, r.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []domain.RunID{}
+	for rows.Next() {
+		var value string
+		if err = rows.Scan(&value); err != nil {
+			return nil, err
+		}
+		id, err := domain.ParseRunID(value)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // LastSequence reads the counter Append and AppendObservation maintain as they
 // commit, so a caller does not pay for the history to learn how far it goes.
 func (s *Store) LastSequence(ctx context.Context, runID domain.RunID) (uint64, error) {

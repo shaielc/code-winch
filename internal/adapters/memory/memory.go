@@ -129,6 +129,30 @@ func (r *RunRepository) Get(_ context.Context, id domain.RunID) (application.Run
 	}
 	return cloneRun(value.record), value.version, nil
 }
+
+// InFlight orders by run ID, since this store keeps no insertion order and the
+// port only promises a stable one.
+func (r *RunRepository) InFlight(_ context.Context) ([]domain.RunID, error) {
+	if err := r.Failures.next("in_flight"); err != nil {
+		return nil, err
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := []domain.RunID{}
+	for id, value := range r.items {
+		attempts := value.record.Attempts
+		if len(attempts) == 0 {
+			continue
+		}
+		switch attempts[len(attempts)-1].State {
+		case domain.RunStateQueued, domain.RunStatePreparing, domain.RunStateRunning, domain.RunStateStopping:
+			out = append(out, id)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
+	return out, nil
+}
+
 func (r *RunRepository) SaveCalls() []RunSaveCall {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

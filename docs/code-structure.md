@@ -88,6 +88,7 @@ type SandboxDriver interface {
 type EventStore interface {
     Append(ctx context.Context, RunID, ExpectedSequence, []UnsequencedEvent) ([]RunEvent, error)
     Read(ctx context.Context, RunID, AfterSequence, Limit) ([]RunEvent, error)
+    LastSequence(ctx context.Context, RunID) (Sequence, error)
 }
 
 type WorkflowRuntime interface {

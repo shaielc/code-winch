@@ -95,6 +95,13 @@ Each active run has one logical supervisor. It:
 - applies input idempotency keys; and
 - reconciles persisted intent with observed runner state after restart.
 
+A daemon sweeps every in-flight run at startup, before its listener accepts a
+request, and reconciles each one. Reconciliation records its conclusion as the
+run's desired state; the sweep also moves the run's attempt to match, because
+the attempt state is what readers of the API see. A run whose execution died
+with the previous daemon therefore reports a terminal state, and refuses input,
+from the first request the new daemon answers.
+
 Supervisors need not be permanent goroutines. An actor-like mailbox backed by a
 database lease permits rehydration and later horizontal scaling.
 

@@ -40,6 +40,12 @@ type WorkspaceRepository interface {
 type RunRepository interface {
 	Save(context.Context, RunRecord, uint64) (uint64, error)
 	Get(context.Context, domain.RunID) (RunRecord, uint64, error)
+	// InFlight lists the runs whose latest attempt has left Created and not
+	// reached a terminal state, oldest first. These are exactly the runs a
+	// daemon is answerable for: a Created run is waiting for a client and a
+	// terminal one is finished, while an in-flight run that no longer has a
+	// live execution is a lie that startup reconciliation must correct.
+	InFlight(context.Context) ([]domain.RunID, error)
 }
 
 // UnsequencedEvent is canonical event data before the store assigns its

@@ -131,6 +131,14 @@ func run(ctx context.Context) error {
 		return err
 	}
 
+	// Reconcile before the listener accepts a request. A run this daemon did
+	// not launch cannot be running locally, so answering "running" for it —
+	// and accepting input that no execution will ever receive — is a lie the
+	// first client would otherwise read.
+	if _, err = execution.NewReconciler(store, runs, runSupervisor, runners, ids, logger).Sweep(ctx); err != nil {
+		return fmt.Errorf("startup reconciliation: %w", err)
+	}
+
 	backend := httpapi.NewBackend(runs, inputs, ids)
 	api, err := httpapi.NewHandler(httpapi.Config{Token: cfg.Token, CSRFToken: cfg.CSRFToken, AllowedOrigin: cfg.AllowedOrigin, Actor: cfg.Actor, Logger: logger, RequestID: requestID, EventStream: stream}, backend)
 	if err != nil {
