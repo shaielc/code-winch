@@ -152,6 +152,13 @@ func (b *ApplicationBackend) SendRunInput(ctx context.Context, actor string, id 
 	if e != nil {
 		return InputAccepted{}, mapError(e)
 	}
+	// Accept answers a repeated key with the command it already recorded. A
+	// different kind under the same key is therefore not a replay but the key
+	// reused for another request, which the contract refuses rather than
+	// silently answering with the first request's command.
+	if result.Kind != application.InputKind(r.Kind) {
+		return InputAccepted{}, ErrIdempotencyConflict
+	}
 	return InputAccepted{Accepted: result.Accepted, CommandId: result.CommandID.String(), Kind: InputAcceptedKind(result.Kind), RunId: result.RunID.String()}, nil
 }
 
