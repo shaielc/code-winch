@@ -61,10 +61,14 @@ func (s *Store) Save(ctx context.Context, record application.RunRecord, expected
 	defer func() { _ = tx.Rollback(ctx) }()
 	next := expected + 1
 	if expected == 0 {
-		_, err = tx.Exec(ctx, `INSERT INTO runs(id,version,workspace_path,harness_profile,sandbox_profile,resolved_configuration,created_at,updated_at) VALUES($1,1,$2,$3,$4,$5,$6,$7)`, record.ID.String(), record.WorkspacePath, record.HarnessProfile, record.SandboxProfile, record.ResolvedConfiguration, record.CreatedAt.Time(), record.UpdatedAt.Time())
+		// A record that carries no configuration or timestamps keeps the
+		// column defaults rather than writing NULL or the zero time.
+		_, err = tx.Exec(ctx, `INSERT INTO runs(id,version,workspace_path,harness_profile,sandbox_profile,resolved_configuration,created_at,updated_at)
+		VALUES($1,1,$2,$3,$4,COALESCE($5::jsonb,'{}'::jsonb),COALESCE($6::timestamptz,transaction_timestamp()),COALESCE($7::timestamptz,transaction_timestamp()))`,
+			record.ID.String(), record.WorkspacePath, record.HarnessProfile, record.SandboxProfile, optionalJSON(record.ResolvedConfiguration), optionalTime(record.CreatedAt), optionalTime(record.UpdatedAt))
 	} else {
 		var found uint64
-		err = tx.QueryRow(ctx, `UPDATE runs SET version=$2,updated_at=$4 WHERE id=$1 AND version=$3 RETURNING version`, record.ID.String(), next, expected, record.UpdatedAt.Time()).Scan(&found)
+		err = tx.QueryRow(ctx, `UPDATE runs SET version=$2,updated_at=COALESCE($4::timestamptz,updated_at) WHERE id=$1 AND version=$3 RETURNING version`, record.ID.String(), next, expected, optionalTime(record.UpdatedAt)).Scan(&found)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, fmt.Errorf("%w: run=%s expected_version=%d", application.ErrConflict, record.ID, expected)
 		}
@@ -83,6 +87,22 @@ func (s *Store) Save(ctx context.Context, record application.RunRecord, expected
 		return 0, conflict(err, "run="+record.ID.String())
 	}
 	return next, nil
+}
+
+// optionalTime and optionalJSON pass NULL for an unset value so the query can
+// fall back to the column default instead of storing the zero one.
+func optionalTime(v domain.Timestamp) any {
+	if t := v.Time(); !t.IsZero() {
+		return t
+	}
+	return nil
+}
+
+func optionalJSON(v []byte) any {
+	if len(v) == 0 {
+		return nil
+	}
+	return v
 }
 
 func zeroID(id domain.AttemptID) string {
@@ -325,6 +345,20 @@ func (s *Store) GetCommand(ctx context.Context, id domain.CommandID) (InputComma
 		command.RunID, _ = domain.ParseRunID(runID)
 	}
 	return command, err
+}
+
+// RunForCommand resolves the run an accepted input command targets. An outbox
+// record carries the command ID only, and delivery needs the run.
+func (s *Store) RunForCommand(ctx context.Context, id domain.CommandID) (domain.RunID, error) {
+	var runID string
+	err := s.pool.QueryRow(ctx, `SELECT run_id FROM input_commands WHERE id=$1`, id.String()).Scan(&runID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.RunID{}, application.ErrNotFound
+	}
+	if err != nil {
+		return domain.RunID{}, err
+	}
+	return domain.ParseRunID(runID)
 }
 
 func (s *Store) LoadControl(ctx context.Context, id domain.RunID) (application.RunControl, error) {

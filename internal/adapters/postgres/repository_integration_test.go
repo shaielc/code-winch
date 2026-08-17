@@ -186,8 +186,14 @@ func TestMigrateUpOnMigratedDatabaseIsANoOp(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM schema_migrations`).Scan(&applied); err != nil {
 		t.Fatal(err)
 	}
-	if applied != 5 {
-		t.Fatalf("ledger records %d migrations, want 5", applied)
+	// Counted from the directory rather than hardcoded: a migration nobody
+	// applied is exactly the defect this test exists to catch.
+	files, err := os.ReadDir("migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied != len(files) {
+		t.Fatalf("ledger records %d migrations for %d files", applied, len(files))
 	}
 }
 
