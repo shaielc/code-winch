@@ -118,6 +118,7 @@ that gap**, and the phase gate is not met until they land.
 | [P1-053](phase-1/p1-053-establish-the-standing-scenario-suite.md) | Establish the standing scenario suite | P1-050, P1-052 | pending |
 | [P1-054](phase-1/p1-054-store-credential-references.md) | Store credential references | P1-011, P1-050 | pending |
 | [P1-061](phase-1/p1-061-harden-integration-suite-clocks-and-process-state-checks.md) | Harden integration-suite clocks and process-state checks | P1-012, P1-049 | pending |
+| [P1-062](phase-1/p1-062-run-against-the-codex-harness.md) | Run against the Codex harness | P1-014, P1-050, P1-053 | pending |
 
 ### Phase 2 — Structured experience and second harness
 
@@ -260,6 +261,43 @@ installation, deployment overrides, and how scheduling and the control panel
 work.
 
 ## Changelog
+
+### 2026-08-17 — P1-062 added
+
+`internal/adapters/harness/codex/` has a descriptor, a launch builder, a codec,
+an exit map, and its own tests, and no `register.go`. Its siblings —
+`harness/fake`, `sandbox/fake`, `sandbox/local` — each carry a one-line `init()`
+that appends to the driver registry, and each is blank-imported by
+`cmd/winchd/main.go`. Codex is imported by nothing outside its own tests, so the
+only harness a running daemon can resolve is the fake one. P1-014 marked the
+first harness adapter complete in Phase 1, and the roadmap's Phase 1 line "one
+harness adapter" has had no reachable owner since.
+
+No task claimed it. P1-050 builds the registry and demonstrates it with `fake`;
+P2-025 registers a *second, new* adapter package through that registry and
+assumes a first; P1-051 lists whatever is registered. The registration itself
+fell through the seam when [`wiring-plan.md`](wiring-plan.md)'s P1-025 — whose
+startup list read "driver registration (codex + fake harness; local sandbox)" —
+was superseded by P1-048 and P1-050, neither of which carried the codex clause
+forward. **P1-062** owns it, as a swap: the harness seam already has a
+registered implementation, and this puts the real provider behind it.
+
+Registering a capability-limited adapter is not only two lines, which is why the
+task is not only two lines. `execution.Capabilities` derives a run's input modes
+from its state alone, so it offers `text` to every running run; Codex advertises
+`incremental-input: false`. Registering it without teaching the capability
+computation to read the descriptor would accept input, record it durably, and
+deliver it into a pipe no process is reading. ADR-0003's "reject unsupported
+requests rather than silently degrading" is the requirement, and P1-062 is the
+first task that can observe it being broken.
+
+It depends on P1-053 because a swap is accepted by re-running the standing suite
+against the new substrate, and on P1-050 for the registry it appends to. That
+extends Phase 1's critical path from 3 to 4 and lowers average width from 2.7 to
+2.3 across the nine reopened tasks. The chain is real: the suite that accepts
+the swap is the last link before it. The collision set is unchanged — P1-062's
+surfaces are the codex package, the input-capability computation, and one e2e
+profile, none of which any other open task writes.
 
 ### 2026-08-16 — P1-061 added
 

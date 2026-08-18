@@ -853,6 +853,21 @@
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-1/p1-061-harden-integration-suite-clocks-and-process-state-checks.md"
+    },
+    {
+      "id": "P1-062",
+      "title": "Run against the Codex harness",
+      "phase": 1,
+      "phase_name": "Local single-user vertical slice",
+      "status": "pending",
+      "depends_on": [
+        "P1-014",
+        "P1-050",
+        "P1-053"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/p1-062-run-against-the-codex-harness.md"
     }
   ]
 }
