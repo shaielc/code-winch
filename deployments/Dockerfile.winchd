@@ -3,12 +3,26 @@
 # Build context is the repository root:
 #   docker build -f deployments/Dockerfile.winchd .
 
+# The single Node pin for the whole file: the browser build below and the
+# toolchain copied into the build stage must never drift apart.
+FROM node:22-bookworm-slim AS node-toolchain
+
 FROM golang:1.24-bookworm AS build
 WORKDIR /src
 
 # The runner bind-mounts the host repo here under a different uid, and git then
 # refuses to report VCS status, which fails `go build`.
 RUN git config --global --add safe.directory /src
+
+# Node and npm, so the compose `runner` service built from this stage can run
+# the browser half of the suite (api-check, vitest, web-build) and not only the
+# Go half. Copied from the pinned image rather than installed from a distro
+# repository so both stages run byte-identical Node. Nothing here reaches the
+# runtime stage, which copies only compiled binaries and web/dist.
+COPY --from=node-toolchain /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-toolchain /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 # Dependencies resolve from the committed go.mod/go.sum only. -mod=readonly
 # fails the build rather than silently rewriting them.
@@ -23,7 +37,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 go build -mod=readonly -o /out/winchd ./cmd/winchd && \
     CGO_ENABLED=0 go build -mod=readonly -o /out/fake-harness ./cmd/fake-harness
 
-FROM node:22-bookworm-slim AS web-build
+FROM node-toolchain AS web-build
 WORKDIR /web
 COPY web/package.json ./
 RUN npm install --no-audit --no-fund

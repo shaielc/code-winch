@@ -26,7 +26,7 @@ harness process is launched.
 |---|---|---|---|
 | `winchd` | Go daemon + web assets + fake harness | `127.0.0.1:8080` | Serves the SPA and `/api/v1` from one origin |
 | `postgres` | `postgres:17-alpine` | internal only | Data persists in the `postgres-data` volume |
-| `runner` | Go toolchain, the daemon image's build stage | not published | `test` profile only; see [Running the tests](#running-the-tests) |
+| `runner` | Go and Node toolchains, the daemon image's build stage | not published | `test` profile only; see [Running the tests](#running-the-tests) |
 
 `winchd` is published only on loopback. The API rejects mutating requests whose
 `Origin` does not match `WINCH_ALLOWED_ORIGIN`, so the browser must reach both
@@ -70,10 +70,11 @@ copying secrets into the repository.
 
 Every Make target is marked `[host]` or `[docker]`. `[host]` targets run on this
 machine and need `go`, `node`, or `golangci-lint` installed — CI uses those.
-`[docker]` targets need Docker only: the `runner` container supplies the Go
-toolchain and `postgres` supplies the database. With no Go toolchain installed,
-the `[docker]` group is the way in, and no target asks you to type a
-`docker compose` command yourself.
+`[docker]` targets need Docker only: the `runner` container supplies the Go and
+Node toolchains and `postgres` supplies the database. With no toolchain
+installed, the `[docker]` group is the way in, and no target asks you to type a
+`docker compose` command yourself. `golangci-lint` is the only tool the image
+does not carry, so `lint` is the only CI gate the container cannot reproduce.
 
 The whole cycle is one command:
 
@@ -81,19 +82,21 @@ The whole cycle is one command:
 make test-cycle
 ```
 
-That builds the image, starts the runner and its database, formats/vets/unit-tests
-and compiles inside the container, runs the integration suite, and tears the
-runner and its database down. It tears down even when a step fails, and exits
-with that step's status.
+That builds the image, starts the runner and its database, runs every CI gate
+but `lint` inside the container — the Go gates, the full `api-check` including
+the browser types, and the browser gates from `.github/workflows/web.yml` — then
+runs the integration suite and tears the runner and its database down. It tears
+down even when a step fails, and exits with that step's status.
 
-The same four steps, run by hand when you want the runner to stay up between
-edits:
+The same steps, run by hand when you want the runner to stay up between edits:
 
 ```sh
-make runner-image      # build the toolchain image (needs registry access)
-make test-env          # start the runner and create the winch_test database
-make test-integration  # go test -tags integration ./... inside the runner
-make test-env-down     # stop the runner and drop winch_test; the daemon keeps running
+make runner-image       # build the toolchain image (needs registry access)
+make test-env           # start the runner and create the winch_test database
+make runner-verify      # CI's `check` minus lint: api-check, gofmt, vet, tests, build
+make runner-web-verify  # the browser gates: prettier, eslint, tsc, vitest, vite build
+make test-integration   # go test -tags integration ./... inside the runner
+make test-env-down      # stop the runner and drop winch_test; the daemon keeps running
 ```
 
 Teardown drops the test database rather than leaving it on the server between
@@ -107,17 +110,29 @@ rather than failing when postgres is already down.
 only needed to pick up a Dockerfile change. Keeping it separate means repeated
 test runs never touch the registry.
 
-Two more `[docker]` targets: `make runner-verify` runs gofmt, `go vet`,
-`go test ./...`, and `go build ./...` in the container — `check` minus `lint` and
-`api-check`, which need golangci-lint and npm that the image does not carry.
-`make runner-shell` opens a shell in it.
+`runner-verify` invokes the `[host]` targets inside the container rather than
+restating them, so the two paths cannot drift. It covers the whole of
+`api-check`, browser types included, because the image carries npm; only `lint`
+is missing, and only because golangci-lint is not installed. `runner-web-verify`
+mirrors `.github/workflows/web.yml`, whose `api:check` step `runner-verify`
+already covers. Both install `web/node_modules` first, via `runner-web-deps`.
+`make runner-shell` opens an interactive shell in the container.
 
 The runner is the daemon image's build stage with the repository bind-mounted
 over its copy of the source, so it compiles what is in the working tree without
-a rebuild. Module and build caches persist in the `go-mod` and `go-build`
-volumes. That stage also marks `/src` a git safe directory: the mount arrives
-owned by your host user while the container runs as root, and without it git
-refuses to report VCS status and `go build` fails.
+a rebuild. Module and build caches persist in the `go-mod`, `go-build`, and
+`npm-cache` volumes. That stage also marks `/src` a git safe directory: the mount
+arrives owned by your host user while the container runs as root, and without it
+git refuses to report VCS status and `go build` fails.
+
+Because the container is root, `web/node_modules` and `web/dist` are named
+volumes (`web-node-modules`, `web-dist`) layered over the bind mount rather than
+part of it. The container installs and builds into its own copies, so its
+platform-specific packages and root-owned build output never land in your
+working tree, and a host `make web-build` keeps its own. Regenerating a tracked
+file is safe without that treatment — `api-check` truncates `types.gen.go` and
+`schema.ts` in place, which leaves their ownership alone. The volumes survive
+`test-env-down`, so a repeat cycle only reconciles them.
 
 Integration tests are behind the `integration` build tag and skip unless
 `PG_TEST_DATABASE_URL` is set; the profile sets it to a `winch_test` database

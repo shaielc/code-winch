@@ -90,9 +90,11 @@ That runs OpenAPI validation, compatibility, and generated-output determinism,
 plus Go formatting, vet, lint, tests, and the daemon build. It is a `[host]`
 target and needs go, npm, and golangci-lint installed.
 
-Without a host toolchain, `make test-cycle` runs the Go gates and the integration
-suite in Docker. It does not cover `lint` or `api-check`, so say so in the pull
-request rather than claiming `make check` passed.
+Without a host toolchain, `make test-cycle` runs the same gates and the
+integration suite in Docker: the runner container carries Go and Node, so
+`api-check` and the browser suite run there too. It does not cover `lint`, the
+one tool the image lacks, so say so in the pull request rather than claiming
+`make check` passed.
 
 If your change touches storage, migrations, or process lifecycle:
 

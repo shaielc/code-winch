@@ -3,22 +3,25 @@ GOLANGCI_LINT ?= golangci-lint
 
 COMPOSE ?= docker compose -f deployments/compose.yml
 IN_RUNNER = $(COMPOSE) exec -T runner
+# The browser toolchain runs from web/, where its package.json lives.
+IN_RUNNER_WEB = $(COMPOSE) exec -T -w /src/web runner
 TEST_DATABASE ?= winch_test
 
 # Targets are marked [host] or [docker].
 #
 #   [host]   runs directly on this machine and needs go, node, or
 #            golangci-lint installed. CI uses these.
-#   [docker] needs Docker only; the `runner` container supplies the Go
-#            toolchain and postgres supplies the database.
+#   [docker] needs Docker only; the `runner` container supplies the Go and
+#            Node toolchains and postgres supplies the database.
 #
-# With no Go toolchain installed, the [docker] group is the way in. See
-# deployments/README.md for the testing procedure.
+# With no toolchain installed, the [docker] group is the way in. golangci-lint
+# is the only tool the container lacks, so `lint` is the only CI gate it cannot
+# reproduce. See deployments/README.md for the testing procedure.
 
 .PHONY: all api-check api-check-go api-compat api-generate api-generate-go \
 	api-validate build check format format-check lint run runner-image \
-	runner-shell runner-verify test test-cycle test-env test-env-down \
-	test-integration vet web-build
+	runner-shell runner-verify runner-web-deps runner-web-verify test \
+	test-cycle test-env test-env-down test-integration vet web-build
 
 all: check
 
@@ -53,9 +56,10 @@ api-check: api-validate api-compat
 	cmp "$$tmp/go" internal/adapters/transport/httpapi/types.gen.go && \
 	cmp "$$tmp/ts" web/src/api/schema.ts
 
-## api-check-go: [docker-friendly] api-check without the browser half, for an
-## environment with Go but no npm. It does not cover web/src/api/schema.ts, so it
-## is not a substitute for api-check in CI.
+## api-check-go: [host] api-check without the browser half, for a host that has Go
+## but no Node. It does not cover web/src/api/schema.ts, so it is not a substitute
+## for api-check in CI. The runner container carries npm and runs the full
+## api-check, so the [docker] path no longer needs this.
 api-check-go: api-validate api-compat
 	@tmp="$$(mktemp -d)"; trap 'rm -rf "$$tmp"' EXIT; \
 	cp internal/adapters/transport/httpapi/types.gen.go "$$tmp/go" && \
@@ -100,6 +104,7 @@ run:
 	$(GO) run ./cmd/winchd
 
 ## web-build: [host] Build the browser assets the daemon serves from WINCH_STATIC_DIR.
+## runner-web-verify builds them inside the container when there is no host Node.
 web-build:
 	cd web && npm install --no-audit --no-fund && npm run build
 
@@ -121,13 +126,29 @@ test-env:
 		| grep -q 1 \
 		|| $(COMPOSE) exec -T postgres createdb -U winch $(TEST_DATABASE)
 
-## runner-verify: [docker] Format, vet, unit-test, and compile everything in the runner.
-## The container has no golangci-lint or npm, so this is `check` minus lint and api-check.
-runner-verify: test-env
-	@$(IN_RUNNER) sh -c 'files="$$(gofmt -l .)"; if [ -n "$$files" ]; then echo "Not gofmt-formatted:" >&2; echo "$$files" >&2; exit 1; fi'
-	$(IN_RUNNER) go vet ./...
-	$(IN_RUNNER) go test ./...
-	$(IN_RUNNER) go build ./...
+## runner-web-deps: [docker] Install web/node_modules inside the runner.
+## They live in a named volume rather than the bind-mounted working tree, so the
+## container's install never overwrites the host's; the volume outlives
+## test-env-down, so repeat runs only reconcile it.
+runner-web-deps: test-env
+	$(IN_RUNNER_WEB) npm install --no-audit --no-fund
+
+## runner-verify: [docker] Run CI's `check` inside the container, minus lint.
+## golangci-lint is the only tool the image lacks; api-check now runs here in
+## full, browser types included, because the container carries npm. This defers
+## to the [host] targets rather than restating them, so the two paths cannot drift.
+runner-verify: test-env runner-web-deps
+	$(IN_RUNNER) make api-check format-check vet test build
+
+## runner-web-verify: [docker] Run the browser gates from .github/workflows/web.yml
+## in the runner: formatting, lint, types, the vitest suite, and the production
+## build. That workflow's api:check is covered by runner-verify's api-check.
+runner-web-verify: runner-web-deps
+	$(IN_RUNNER_WEB) npm run format:check
+	$(IN_RUNNER_WEB) npm run lint
+	$(IN_RUNNER_WEB) npm run typecheck
+	$(IN_RUNNER_WEB) npm test
+	$(IN_RUNNER_WEB) npm run build
 
 ## test-integration: [docker] Run the build-tagged integration suite in the runner.
 test-integration: test-env
@@ -146,10 +167,11 @@ test-env-down:
 		|| echo "note: kept '$(TEST_DATABASE)'; postgres is not running" >&2
 
 ## test-cycle: [docker] Build, start, verify, integration-test, and tear down.
+## Every CI gate but lint, browser suite included.
 ## Tears down even when a step fails, and exits with that step's status.
 test-cycle: runner-image test-env
 	@status=0; \
-	$(MAKE) runner-verify test-integration || status=$$?; \
+	$(MAKE) runner-verify runner-web-verify test-integration || status=$$?; \
 	$(MAKE) test-env-down; \
 	exit $$status
 

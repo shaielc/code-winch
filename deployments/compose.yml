@@ -53,8 +53,9 @@ services:
     ports:
       - "127.0.0.1:${WINCH_WEB_PORT:-8080}:8080"
 
-  # A long-lived Go toolchain for running the suite without installing Go on the
-  # host. Dormant unless started with `--profile test`; see deployments/README.md.
+  # A long-lived Go and Node toolchain for running the suite without installing
+  # either on the host. Dormant unless started with `--profile test`; see
+  # deployments/README.md.
   runner:
     profiles: [test]
     build:
@@ -80,9 +81,22 @@ services:
       - ..:/src
       - go-mod:/go/pkg/mod
       - go-build:/root/.cache/go-build
+      # The runner is root, so anything it creates under the bind mount above
+      # lands root-owned in your working tree. Regenerating a tracked file is
+      # safe (the writer truncates in place and ownership survives), but these
+      # two directories are created from nothing, so they get volumes instead:
+      # the container keeps its own node_modules and its own build output, and
+      # a host `make web-build` is never locked out of either. Both outlive
+      # test-env-down, so repeat runs reuse them.
+      - web-node-modules:/src/web/node_modules
+      - web-dist:/src/web/dist
+      - npm-cache:/root/.npm
     command: ["sleep", "infinity"]
 
 volumes:
   postgres-data:
   go-mod:
   go-build:
+  web-node-modules:
+  web-dist:
+  npm-cache:

@@ -16,9 +16,11 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v4
+      # One Node version everywhere: this workflow, the Go workflow's api-check,
+      # deployments/Dockerfile.winchd, and the runner container it builds.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm install
       - run: npm run format:check
       - run: npm run lint

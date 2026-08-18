@@ -56,16 +56,19 @@ linter is not on `PATH`.
 
 ### In Docker
 
-With no Go toolchain installed, the containerised toolchain runs the Go gates
-and the integration suite instead:
+With no toolchain installed, the containerised one runs the same gates and the
+integration suite instead:
 
 ```sh
-make test-cycle      # build, start, verify, integration-test, tear down
-make runner-verify   # gofmt, vet, unit tests, and compile in the runner
-make runner-shell    # a shell in the runner
+make test-cycle         # build, start, verify, integration-test, tear down
+make runner-verify      # api-check, gofmt, vet, unit tests, and build in the runner
+make runner-web-verify  # prettier, eslint, tsc, vitest, and the vite build
+make runner-shell       # a shell in the runner
 ```
 
-`runner-verify` is `check` minus `lint` and `api-check`, which need golangci-lint
-and npm that the image does not carry — so a host run is still required before
-submitting. See [deployments/README.md](deployments/README.md) for the step-by-step
-form and the database it uses.
+The container carries Go and Node, so `runner-verify` is `check` minus `lint`
+alone — `api-check` runs there in full, browser types included — and
+`runner-web-verify` covers the browser workflow. Only golangci-lint is missing,
+so say `lint` was not run rather than claiming a clean `make check`. See
+[deployments/README.md](deployments/README.md) for the step-by-step form and the
+database it uses.
