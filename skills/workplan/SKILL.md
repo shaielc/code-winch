@@ -1,47 +1,21 @@
 ---
 name: workplan
-description: Create, extend, re-derive at a phase gate, update, or audit an implementation workplan — a directory of task briefs plus a machine-readable tracker — derived from a project's design documents. Use when asked to plan implementation work across phases, add tasks to a plan already in flight, replan the next phase against the code that now exists, correct task status, widen a plan that has become serial, or check a plan for
-coverage gaps and unreachable code. Assumes a design-document set exists (at minimum docs/architecture.md and docs/decisions/).
+description: Create, extend, re-derive at a phase gate, update, or audit an implementation workplan — a directory of task briefs plus a machine-readable tracker — derived from a project's design documents. Use when asked to plan implementation work across phases, add tasks to a plan already in flight, replan the next phase against the code that now exists, correct task status, widen a plan that has become serial, or check the plan as a whole for coverage gaps, unjustified dependency edges, and unreachable code. Assumes a design-document set exists (at minimum docs/architecture.md and docs/decisions/). To implement one task, or to judge whether one task is done, use the task skill instead.
 ---
 
 # Workplan
 
-A workplan converts a design baseline into implementation-sized tasks that an
-autonomous agent or a contributor can pick up one at a time, each in its own
-pull request.
+The subject is the plan: its phases, its briefs, its dependency graph, its
+tracker. You are answerable for coverage of the design set, for width, and for
+every claim in the plan being checkable against the repository.
 
-A good workplan holds four properties at once.
+Read [`skills/workplan-model.md`](../workplan-model.md) first. It defines what a
+workplan is, the four properties, the seven invariants, the four task shapes,
+the vocabulary, and the tracker's frozen shape. Everything below assumes it.
 
-**It always describes a running system.** At every point in the plan's history
-there is a configuration that starts, deploys, and can be driven by hand. Tasks
-make that system more real; they do not accumulate parts to be assembled later.
-
-**Every task changes observable behavior.** The change may be small — the same
-scenario passing against a real database rather than an in-memory one — but it
-is visible from outside the code, and the brief says how to see it.
-
-**It is wide.** Many tasks are available at once, so several contributors or
-dispatch workers proceed without waiting on each other. Width is a design
-property, achieved deliberately or not at all.
-
-**Every claim in it is checkable.** Status, completion, coverage, and
-reachability are verifiable against the repository rather than asserted.
-
-Faithful coverage of the design documents is necessary and not sufficient: a
-plan can describe the architecture completely, pass its own contract tests, and
-still produce a system nobody can start.
-
-## Deliverables
-
-| Path | Purpose |
-|---|---|
-| `docs/workplan/README.md` | Narrative index, per-phase dependency tables, phase exit rule, how to use the plan |
-| `docs/workplan/phase-N/<id>-<slug>.md` | One brief per task |
-| `docs/workplan/tasks.json` | Machine-readable tracker — status, ownership, dependencies |
-| `docs/workplan/tasks.schema.json` | Schema for the tracker |
-
-Resolve conventions before writing: if a plan already exists, match its ID
-scheme, directory layout, and brief structure. Otherwise use the ones here.
+Given work on one task — implement this brief, is this task done, review the
+change that claims to satisfy it — use
+[`skills/task/SKILL.md`](../task/SKILL.md) instead.
 
 ## Modes
 
@@ -54,146 +28,19 @@ Establish which mode applies before doing anything else.
    against the code that now exists. See *Gate procedure*.
 4. **Update** — status, ownership, or blocked reason changed. See *Status
    truthfulness*.
-5. **Audit** — report coverage gaps, invariant violations, and unreachable code
-   without changing the plan.
+5. **Audit** — report on the plan as a whole, changing nothing. See *Audit
+   mode*.
+
+Resolve conventions before writing: if a plan already exists, match its ID
+scheme, directory layout, and brief structure. Otherwise use the ones here.
 
 Briefs are drafts until their phase opens. Writing all of them up front is
 correct — it is what makes the whole-system map useful — but a brief written
 before its phase's dependencies exist is a hypothesis, and the gate is where it
 gets tested against reality.
 
-## The seven invariants
-
-These realize the four properties. They hold of the plan as a whole rather than
-of any one task — a plan can violate one while every individual brief reads
-well — so every mode checks them explicitly.
-
-### I1 — The system runs from the first task
-
-A composition root exists and produces a startable process before any domain
-code is written. No task may leave the system unrunnable. The first task's
-demonstration is something like `compose up` serving a health endpoint; it does
-almost nothing, but it runs, and every later task keeps it running.
-
-The consequence for task ordering is the whole point: a task can no longer
-*add a part to something not yet assembled*. It either wires a new seam into a
-system that already starts, or swaps an implementation behind a seam that is
-already wired.
-
-### I2 — The system deploys from the first task
-
-Container definition, compose or equivalent, and configuration loading exist
-before domain code. Deployment is an invariant, never a task. Migrations run at
-startup from the moment there is a database. Deployment appearing as its own
-task in a draft is the signal to fold that content into the first task instead.
-
-### I3 — The fake configuration is a first-class, controllable runtime profile
-
-Fakes and in-memory implementations are a **supported way to run the product**,
-not test-only doubles. They are documented, exercised end to end in CI, and
-runnable by hand at any commit in the plan's history.
-
-Controllable means a person can drive the fake, not just replay it:
-
-- scripted transcripts or scenario files selected at runtime;
-- injectable latency, failure, malformed output, and early exit;
-- deterministic seeding when determinism is wanted, and the ability to turn it
-  off when exploration is wanted.
-
-A fake has real drawbacks — it is not the provider, the database, or the
-kernel — and the brief that introduces it says what it does not prove. Stating
-those limits is what makes the profile safe to rely on for everything else.
-
-### I4 — Substrate swaps prove parity against a standing scenario suite
-
-One end-to-end scenario suite is written in the first phase against the
-all-fake profile, driving the system through its real entrypoint. Every task
-that makes a substrate real re-runs that same suite against its substrate.
-
-```
-scenario: create → start → stream → input → stop
-
-  all in-memory        ✔
-  + real store         ✔ same scenario
-  + real process I/O   ✔ same scenario
-  + real provider      ✔ same scenario
-  + container sandbox  ✔ same scenario
-```
-
-"Same scenario, more real" is the acceptance criterion for a swap task. The
-suite grows only when a task introduces genuinely new observable behavior.
-
-Automated parity is the floor, not the ceiling. Every brief also carries a
-**manual check**: exact commands a person runs and what they should see. A task
-whose behavior cannot be observed by hand is a task whose behavior cannot be
-observed.
-
-### I5 — A maintained hands-on surface exists early
-
-An operator/debug CLI is built in the first phase and kept working through
-every phase. It is the guaranteed way to drive the system by hand, independent
-of API churn and of whatever state the product UI is in. Each phase's briefs
-state which CLI commands reach the new behavior.
-
-This is not a substitute for the product's real interaction surface; it is what
-guarantees interaction exists at all while that surface is being built.
-
-### I6 — Nothing is deferred without an owning task
-
-A brief may not say "later", "a subsequent task", or "out of scope for now"
-without naming a task ID **that exists in `tasks.json` at the moment the
-deferral is written**. Any stub, TODO, unimplemented branch, or unreachable
-error path introduced by a task carries the ID of the task that removes it.
-
-If the deferral is a genuine architectural open question rather than
-implementation work, it does not belong in a brief at all — it belongs in the
-design set as a deferred decision with an explicit trigger to revisit, and the
-brief cites it.
-
-The test is that a reader can always answer "when does this get finished?" with
-an ID rather than a shrug.
-
-### I7 — The plan stays wide
-
-Every dependency edge is justified in writing, and every task declares the
-surfaces it writes, so that concurrency is derived rather than asserted.
-
-Width needs two independent things, and both must hold: a task must be
-*available* — its dependencies are complete — and *non-colliding* — no other
-available task writes the same files or contracts. A plan can satisfy the first
-and fail the second. Ten available tasks that all edit the composition root are,
-in practice, one task.
-
-The mechanism is in *Parallelism* below.
-
-## Task shapes
-
-Layer-ordered work is correct and this skill preserves it. The constraint is
-not *what order layers come in* — it is that the seam reaches a running system
-in the same task that introduces it.
-
-Every task is one of four shapes. State the shape in the brief header.
-
-**Seam** — introduces a port or boundary, its fake/in-memory implementation,
-its registration in the composition root, and its reachability from the CLI or
-API. Demonstration: the standing scenario passes with the new seam in the path.
-
-**Swap** — replaces one implementation behind an existing seam with a real one.
-Demonstration: the standing scenario passes unchanged against the new
-substrate; the fake profile still passes too.
-
-**Capability** — adds genuinely new observable behavior. Demonstration: a new
-scenario, added to the standing suite.
-
-**Hardening** — adds adversarial or negative guarantees. Demonstration: the
-attack or failure is attempted and visibly refused. Security-sensitive work
-requires negative tests, not happy paths.
-
-Every task fits one of the four. A unit of work that fits none of them produces
-code no runtime configuration reaches; merge it into the task that first reaches
-it, even at the cost of a larger task. Small tasks are what keep a plan legible
-and that value survives the merge — reported progress on unreachable code does
-not.
+Every mode checks the seven invariants explicitly, because a plan can violate
+one while every individual brief reads well.
 
 ## Parallelism
 
@@ -202,27 +49,21 @@ derived from status rather than stored as a flag.
 
 ### Dependency edges carry reasons
 
-Record the reason beside each ID in the brief header. Three reasons are
-legitimate:
+Record the reason — compile, contract, or semantic — beside each ID in the brief
+header. An edge whose reason cannot be written in one clause is not a real edge.
 
-- **compile** — the task cannot build without a type, interface, or generated
-  artifact the other produces;
-- **contract** — both tasks would otherwise define the same contract surface:
-  the same API path, schema, port, or migration;
-- **semantic** — this task's demonstration is impossible until the other's
-  behavior exists.
-
-An edge whose reason cannot be written in one clause is not a real edge. In
-particular, drop edges resting on "it logically comes after" (ordering
-intuition), "same subsystem" (proximity), or "easier to review together" (split
-the pull requests instead).
+Drop edges resting on "it logically comes after" (ordering intuition), "same
+subsystem" (proximity), or "easier to review together" (split the pull requests
+instead). Review effort belongs to pull requests; it is never a reason to move
+scope between briefs, in either direction.
 
 One more illegitimate reason deserves its own paragraph, being the most common
-and the most expensive: **"it is nicer to develop against the real thing."** This is
-what I3 exists for. A controllable fake profile dissolves these edges and is the
-single largest source of width in a layered plan — an adapter that depends on a
-real driver because the driver is more convenient to test against should depend
-on the fake instead, and be swapped later.
+and the most expensive: **"it is nicer to develop against the real thing."** This
+is what I3 exists for. A controllable fake profile dissolves these edges and is
+the single largest source of width in a layered plan — an adapter that depends
+on a real driver because the driver is more convenient to test against should
+depend on the fake instead, and be swapped later. Written as a semantic edge,
+this fallacy passes review; check it explicitly.
 
 ### Tasks declare owned surfaces
 
@@ -338,23 +179,26 @@ Or: `None.`
 `docs/<file>.md` §<section>, ADR-<nnnn>
 ```
 
+Two checks before a brief is final:
+
+- **Every criterion has a witness inside the task.** Compare the acceptance
+  criteria against the Demonstration and Verification blocks line by line.
+  Demonstrations get written against the Objective sentence and then criteria
+  accrete above them. A criterion whose only evidence comes from a task that
+  depends on this one cannot be judged, and the schedule is what is wrong.
+- **The header names one shape, and the scope fits it.** Scope spanning several
+  shapes means several tasks sharing a header.
+
 ## tasks.json rules
 
-The tracker's schema is **frozen**. It has exactly these fields per task, and
-nothing may be added — dispatch automation and availability queries read it:
-
-`id`, `title`, `phase`, `phase_name`, `status`, `depends_on`, `owner`,
-`blocked_reason`, `brief`
-
-Consequences to respect:
+The tracker's schema is **frozen** — the fields are listed in
+`workplan-model.md`, and nothing may be added, because dispatch automation and
+availability queries read it. Consequences to respect:
 
 - Everything this skill introduces — shape, reachability, demonstration,
   deferrals, traceability — lives in the **briefs**, not the tracker.
-- Availability is derived, never stored: a task is next available when its
-  status is `pending` and every ID in `depends_on` is `completed`. Do not add a
-  `ready` flag; it goes stale.
-- `blocked_reason` is a non-empty string when status is `blocked`, and `null`
-  otherwise. The schema enforces this.
+- Do not add a `ready` flag. Availability is derived and a stored flag goes
+  stale.
 - IDs are append-only. Merged pull requests, dispatch history, and cross-brief
   references all cite them; renumbering silently invalidates that record. A task
   inserted logically "between" two others still gets the next free number.
@@ -386,6 +230,16 @@ When a phase closes, before opening the next:
 6. **Record the diff and its reason** in a short changelog section of
    `README.md`. A brief that changed silently teaches nobody anything.
 
+Re-scoping a task — splitting it along its shapes, moving a criterion, moving
+its witness — is gate work, and this is the gate. It changes the phase's graph,
+critical path, and width, which is why steps 5 and 6 exist: the recomputation
+and the recorded reason.
+
+Re-scopes reach you as reports from outside — a review found a brief too large,
+an implementer found a criterion the task cannot witness. Re-derive the split
+here rather than ratifying the one the reporter proposed. Review pressure
+selects the most detachable scope, which is rarely the scope that should move.
+
 ## Status truthfulness
 
 A status is a claim about the repository, and claims decay. Task statuses have
@@ -396,13 +250,13 @@ not met.
   not against the pull request description.
 - In update mode, re-verify any task whose completion is a dependency of the
   work being planned.
-- In audit mode, sample completed tasks and report any whose criteria do not
+- In a plan audit, sample completed tasks and report any whose criteria do not
   hold.
 - `blocked` requires a reason naming what would unblock it, ideally a task ID.
 
 ## Audit mode
 
-Report, without changing the plan:
+The subject is the plan. Report, without changing it:
 
 - **Coverage** — every section of the design set maps to at least one task;
   every task traces back to a documented requirement. Name the gaps and the
@@ -420,7 +274,19 @@ Report, without changing the plan:
   is also actionable. A payload kind that can be displayed but not submitted, or
   a state transition the documentation promises but no API exposes, is a round
   trip that stops halfway.
+- **Witnesses** — every acceptance criterion is observable by a surface that
+  exists no later than its own task. List criteria whose only witness is
+  downstream.
 - **Status** — sampled completed tasks that do not hold.
+
+Findings here are attributed to the plan, or to the task that owns the gap where
+one exists — never to whichever task happens to be in flight. A half-built
+capability whose owner is scheduled later is not a finding at all; it is the
+plan working.
+
+Where the root cause is a seam between two briefs rather than one brief being
+wrong, write it up in `docs/workplan/post-mortems/` following the convention
+there.
 
 ## Smells
 
@@ -446,12 +312,20 @@ fix, not a style preference.
 - A dependency edge whose only justification is ordering intuition.
 - A central switch, registry, or specification file every task must edit to make
   its own work reachable.
+- One brief carrying several shapes' work under a single shape header.
+- A criterion whose only witness is a task that depends on the task claiming it.
+- A hands-on surface scheduled after the API it exists to drive. Instruments
+  come first.
 
 ## Before finishing
+
+Applies to create, extend, and re-derive. An audit changes nothing, so it
+finishes when its findings are attributed at the right scope instead.
 
 - Every brief has a non-empty **Runtime reachability** section and declares its
   **owned surfaces**.
 - Every brief has a **Demonstration** with commands a person can actually run.
+- Every acceptance criterion has a witness no later than its own task.
 - Every dependency edge names compile, contract, or semantic in one clause.
 - Every deferral names an ID that exists in `tasks.json`.
 - `tasks.json` validates against the frozen schema; `README.md` tables agree
@@ -459,4 +333,4 @@ fix, not a style preference.
 - The dependency graph has no unknown references, forward references, or cycles.
 - Critical path, average width, and the collision set are recorded per phase.
 - The first task produces a system that starts and deploys.
-- Every task fits one of the four shapes.
+- Every task fits one of the four shapes, and only one.

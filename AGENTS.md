@@ -14,8 +14,12 @@ subtree.
 - **Design baseline** — `docs/architecture.md`, `docs/code-structure.md`,
   `docs/contracts.md`, `docs/security.md`, `docs/roadmap.md`, and the ADRs in
   `docs/decisions/`.
-- **Planning rules** — `skills/workplan/SKILL.md`. Read it when you are changing
-  the plan itself; you do not need it to implement a task.
+- **Task rules** — `skills/task/SKILL.md`. How to locate your brief, which of
+  its sections bind, what your task is and is not answerable for, and how to
+  judge it done. Read it whenever you are implementing or auditing one task.
+- **Planning rules** — `skills/workplan/SKILL.md`, resting on
+  `skills/workplan-model.md`. Read it when you are changing the plan itself; you
+  do not need it to implement a task.
 
 ## Rules that bind every task
 

@@ -11,20 +11,31 @@ this repository regardless of which one it is.
 ```
 skills/
 ├── README.md
+├── <shared-reference>.md
 └── <skill-name>/
     └── SKILL.md
 ```
+
+A shared reference at the top level is not a skill and is never loaded on its
+own. It exists when two skills act on the same thing and would otherwise drift
+apart; each links to it and neither repeats it.
 
 ## Available skills
 
 | Skill | Audience | Use it when |
 |---|---|---|
-| [`workplan`](workplan/SKILL.md) | planning agent | Creating, extending, re-deriving at a phase gate, updating, or auditing `docs/workplan/` |
+| [`workplan`](workplan/SKILL.md) | planning agent | Creating, extending, re-deriving at a phase gate, updating, or auditing `docs/workplan/` as a whole |
+| [`task`](task/SKILL.md) | implementing or reviewing agent | Implementing one brief, verifying it, or judging whether one task is done |
 
-Audience matters. A planning skill is for whoever writes the plan; an
-implementing agent picking up a single task usually needs only the parts of it
-that constrain how a task is finished, not the whole document. Say who a skill
-is for when you add one.
+Both rest on [`workplan-model.md`](workplan-model.md): what a workplan is, the
+seven invariants, the four task shapes, the tracker's shape.
+
+Audience matters, and here it is the whole point of the split. Changing the plan
+and doing one task are different jobs with different boundaries: the planning
+skill is answerable for the plan's coverage, width, and graph, while the task
+skill is answerable for one brief and the change that claims to satisfy it. A
+single document covering both invites a task audit to report the plan's debt
+against whichever brief is in flight. Say who a skill is for when you add one.
 
 ## Getting an agent to use them
 
@@ -41,15 +52,14 @@ it in permanently.
 ### Dispatched task agents
 
 `scripts/task-prompt.md` instructs every dispatched implementer to read
-`docs/workplan/$brief` and **all applicable `AGENTS.md` files**. No `AGENTS.md`
-exists in this repository yet, so that instruction currently resolves to
-nothing.
+`docs/workplan/$brief` and **all applicable `AGENTS.md` files**. The root
+`AGENTS.md` carries the rules that bind every change in this repository, which
+is what wires skills into dispatched work.
 
-Creating a root `AGENTS.md` that points here is what wires skills into
-dispatched work. It should reference the parts an implementer needs — the
-invariants a finished task must preserve, what counts as a demonstration, and
-the rule that nothing is deferred without an owning task ID — rather than
-loading a planning skill wholesale into an implementation prompt.
+`task/SKILL.md` is the skill for that audience: how to locate a brief from an
+ID, which of its sections bind, what a single task is and is not answerable for,
+and how to judge it done. Point implementers there rather than loading the
+planning skill wholesale into an implementation prompt.
 
 ### Claude Code
 
@@ -60,13 +70,14 @@ from the target.
 ```sh
 mkdir -p .claude/skills
 ln -s ../../skills/workplan .claude/skills/workplan
+ln -s ../../skills/task .claude/skills/task
 echo '.claude/' >> .gitignore
 ```
 
-It is then invocable as `/workplan`, and Claude loads it on its own when the
-work matches its description. Edits to `SKILL.md` are picked up live through the
-link; creating `.claude/skills/` for the first time needs one restart before the
-directory is watched.
+They are then invocable as `/workplan` and `/task`, and Claude loads one on its
+own when the work matches its description. Edits to `SKILL.md` are picked up
+live through the link; creating `.claude/skills/` for the first time needs one
+restart before the directory is watched.
 
 Add one `ln -s` line per skill.
 
