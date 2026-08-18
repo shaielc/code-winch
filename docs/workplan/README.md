@@ -119,6 +119,7 @@ that gap**, and the phase gate is not met until they land.
 | [P1-054](phase-1/p1-054-store-credential-references.md) | Store credential references | P1-011, P1-050 | pending |
 | [P1-061](phase-1/p1-061-harden-integration-suite-clocks-and-process-state-checks.md) | Harden integration-suite clocks and process-state checks | P1-012, P1-049 | pending |
 | [P1-062](phase-1/p1-062-run-against-the-codex-harness.md) | Run against the Codex harness | P1-014, P1-050, P1-053 | pending |
+| [P1-063](phase-1/p1-063-record-accepted-input-as-an-event.md) | Record accepted input as an event | P1-016, P1-050 | pending |
 
 ### Phase 2 — Structured experience and second harness
 
@@ -261,6 +262,54 @@ installation, deployment overrides, and how scheduling and the control panel
 work.
 
 ## Changelog
+
+### 2026-08-18 — P1-063 added
+
+`docs/contracts.md` §3 ends "The resulting event cites the command ID." No event
+does. A run's history at HEAD is `run.lifecycle` and `stream.raw` and nothing
+else; the input path emits no event at all, so nothing records that a person
+acted on a run, let alone which command it was.
+
+**P1-016** owned this. Its objective reads "Accept typed input once, persist
+acceptance/outbox intent, **and correlate resulting events to the command**",
+and its five acceptance criteria cover idempotent replay, stable errors, crash
+survival, log hygiene, and import direction — none of them correlation. The
+criteria drifted from the brief's own objective, the task was marked complete
+against the criteria, and the objective's third clause was never built. This is
+the failure the skill's status-truthfulness rule describes, found by auditing a
+different task: P1-050's demonstration inherited the promise as
+`→ expect: "hi" appears, citing the input command ID`, and that line was
+checking a criterion P1-050 does not own. It now points at **P1-063** instead.
+
+The correlation worth building is not the one the demonstration line implied.
+Attributing harness *output* back to an input cannot be done reliably — the
+fake harness is handed the command ID at `fake.go:101` and returns nothing that
+carries it, and Codex will not echo one either, so any link would be inferred
+from timing. §3 asks for something else and says so: input "is a command rather
+than an event **until accepted**", and the event resulting from *acceptance* is
+the application's own, emitted where the command ID is known with certainty.
+No heuristic, and no envelope change either — `components/event.yaml` declares
+`kind` as an open string and `payload` as an open object, so the citation
+travels in the payload of a new kind.
+
+P1-063 is a capability rather than a seam: `AcceptInput` already runs one
+transaction that records the command, bumps `input_command_sequence`, and
+enqueues the `run.input` outbox row under `FOR UPDATE OF r`. The event joins
+that transaction and takes its sequence from the lock already held, so an
+accepted command with no event cannot exist.
+
+It depends on P1-016 for the acceptance seam and on P1-050 for the outbox
+worker, publisher, and events endpoints that make an appended event observable.
+It does not extend the critical path: Phase 1's longest open chain stays
+P1-050 → P1-053 → P1-062 at 3, and P1-063 sits at depth 2 beside P1-051 and
+P1-054, so average width across the eight open tasks rises from 2.3 to 2.7.
+
+One collision was found and designed out rather than accepted — P1-061 owns
+`repository_integration_test.go`, where this task's atomicity test would
+naturally have gone, so the brief puts it in
+`input_event_integration_test.go` instead. The remaining collision set is
+unchanged.
+
 
 ### 2026-08-17 — P1-062 added
 

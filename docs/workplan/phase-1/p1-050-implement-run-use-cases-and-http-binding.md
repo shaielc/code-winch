@@ -74,7 +74,8 @@ process.
 
     $ curl -fsS -X POST localhost:8080/api/v1/runs/$ID/input -d '{"kind":"text","text":"echo hi"}' …
     $ curl -fsS localhost:8080/api/v1/runs/$ID/events?after_sequence=N
-    → expect: "hi" appears, citing the input command ID
+    → expect: "hi" appears in the harness output. The event citing the input
+      command ID that docs/contracts.md §3 promises is P1-063, not this task.
 
     $ curl -fsS -X POST localhost:8080/api/v1/runs \
         -d '{"workspacePath":"/workspace","harnessProfile":"nonexistent","sandboxProfile":"local"}' …
@@ -136,6 +137,7 @@ replaying it. `tmp/stream.py` is the interim client until P1-051's
 | Credential references resolved at launch | P1-054 |
 | Bounding concurrent and queued runs | P2-059 |
 | Retrying a failed run | P2-057 |
+| The accepted input recorded as an event citing its command ID | P1-063 |
 
 ## Traces to
 
