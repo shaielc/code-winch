@@ -8,13 +8,18 @@ values and a safe correlation `requestId`.
 
 ## Layout
 
-`code-winch.yaml` holds `info`, `servers`, `security`, and every shared
-component. Each resource's operations live in its own file under `paths/`,
-assembled into the document by `$ref`:
+`code-winch.yaml` holds `info`, `servers`, `security`, and the components every
+resource shares. Each resource's operations live under `paths/` and its object
+schemas under `components/`, assembled into the document by `$ref`:
 
 ```
 api/openapi/
 ├── code-winch.yaml          # shared components, and one $ref per resource
+├── components/
+│   ├── event.yaml           # Event, EventPage
+│   ├── health.yaml          # HealthResponse
+│   ├── run.yaml             # Run, CreateRunRequest, StopRunRequest
+│   └── run-input.yaml       # RunInputRequest, InputAccepted
 └── paths/
     ├── health.yaml
     ├── runs.yaml            # /runs
@@ -26,21 +31,44 @@ api/openapi/
     └── run-input.yaml
 ```
 
-**Adding a resource means adding a file under `paths/` and one `$ref` line**,
-rather than editing a document every other task is also editing. A path file
-refers to shared components as `../code-winch.yaml#/components/...`.
+**Adding a resource means adding a file under `paths/`, a file under
+`components/`, and one `$ref` line each**, rather than editing a document every
+other task is also editing. A path file reaches shared components as
+`../code-winch.yaml#/components/...` and resource schemas as
+`../components/<file>.yaml#/components/schemas/...`. The one shared file a new
+resource still edits is `oapi-codegen.yaml`, which needs an `import-mapping`
+entry per external document; that map has no wildcard form.
 
-Shared components stay in `code-winch.yaml` and cannot currently move into
-`components/*.yaml`. oapi-codegen v2.4.1 needs an `import-mapping` entry for
-every external document; the entry names the Go package the referenced types
-come from, and `-` means "this package". That is right for a path file, which
-contributes operations and no types. For a schema it makes the generator emit
-`type Problem = Problem`, a self-referential alias that does not compile.
-Mapping to a real second package instead would rename every generated type and
-change the Go API. Splitting schemas therefore needs a bundling step that
-resolves the pieces into one document before generation, which is a toolchain
-decision this repository has not taken. Briefs that name
-`api/openapi/components/*.yaml` need that decision first.
+### What stays in the root, and why
+
+`RunId`, `RunState`, `Problem`, and `FieldError` stay in `code-winch.yaml`
+because the root's own `parameters` and `responses` sections reference them.
+Two separate constraints both point the same way:
+
+- oapi-codegen generates each components file in its own pass, and a pass
+  cannot dedup against another's output. The root declares a `RunId`
+  *parameter*, which generates `type RunId`; a `RunId` *schema* in
+  `components/run.yaml` generates a second one, and the package no longer
+  compiles.
+- openapi-typescript namespace-prefixes any root component whose subtree
+  reaches an external file — `components["parameters"]["parameters-RunId"]`
+  instead of `["RunId"]`. Keeping the referenced schema in the root keeps the
+  browser key names stable.
+
+One prefixed key survives on purpose: the `RunAccepted` response references
+`Run`, and `Run` belongs in `components/run.yaml` because that is the schema
+tasks extend. Nothing outside the generated file reads
+`components["responses"][...]`, so the cost is a name in generated output.
+
+### Generation is two passes
+
+`api-generate-go` runs oapi-codegen once over `code-winch.yaml`, then once per
+`components/*.yaml` with `--config oapi-codegen-components.yaml`, each emitting
+models into the same `httpapi` package. The `import-mapping` value `-` means
+"this reference resolves in this package", so the root pass emits no import and
+no duplicate declaration — but it also emits no type, which is why the second
+pass is not optional. The components list is discovered from the directory, so
+a new file is picked up without editing the Makefile.
 
 Run `make api-generate` after changing the source. This updates the Go server
 models in `internal/adapters/transport/httpapi` and the TypeScript declarations

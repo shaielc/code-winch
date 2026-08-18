@@ -166,38 +166,37 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        HealthResponse: {
-            /** @enum {string} */
-            status: "ok";
-        };
         /** @example 01J00000000000000000000000 */
         RunId: string;
         /** @enum {string} */
         RunState: "created" | "queued" | "preparing" | "running" | "stopping" | "completed" | "failed" | "cancelled";
+        FieldError: {
+            field: string;
+            code: string;
+            message: string;
+        };
+        Problem: {
+            /** Format: uri */
+            type: string;
+            title: string;
+            status: number;
+            /** @description Stable machine-readable error code. */
+            code: string;
+            /** @description Actionable summary that contains no content or secrets. */
+            detail: string;
+            /** @description Correlation identifier safe to include in logs. */
+            requestId: string;
+            errors?: components["schemas"]["FieldError"][];
+        };
+        HealthResponse: {
+            /** @enum {string} */
+            status: "ok";
+        };
         CreateRunRequest: {
             /** @description Workspace reference; it must not contain credentials. */
             workspacePath: string;
             harnessProfile: string;
             sandboxProfile: string;
-        };
-        StopRunRequest: {
-            reason?: string;
-        };
-        RunInputRequest: {
-            /** @enum {string} */
-            kind: "text" | "interrupt" | "terminal_bytes" | "resize";
-            text?: string;
-            /** Format: byte */
-            bytes?: string;
-            rows?: number;
-            columns?: number;
-        };
-        InputAccepted: {
-            commandId: string;
-            runId: components["schemas"]["RunId"];
-            /** @enum {string} */
-            kind: "text" | "interrupt" | "terminal_bytes" | "resize";
-            accepted: boolean;
         };
         Run: {
             id: components["schemas"]["RunId"];
@@ -219,6 +218,9 @@ export interface components {
              * @default 0
              */
             lastSequence: number;
+        };
+        StopRunRequest: {
+            reason?: string;
         };
         Event: {
             eventId: string;
@@ -247,23 +249,21 @@ export interface components {
             nextAfterSequence: number;
             hasMore: boolean;
         };
-        FieldError: {
-            field: string;
-            code: string;
-            message: string;
+        RunInputRequest: {
+            /** @enum {string} */
+            kind: "text" | "interrupt" | "terminal_bytes" | "resize";
+            text?: string;
+            /** Format: byte */
+            bytes?: string;
+            rows?: number;
+            columns?: number;
         };
-        Problem: {
-            /** Format: uri */
-            type: string;
-            title: string;
-            status: number;
-            /** @description Stable machine-readable error code. */
-            code: string;
-            /** @description Actionable summary that contains no content or secrets. */
-            detail: string;
-            /** @description Correlation identifier safe to include in logs. */
-            requestId: string;
-            errors?: components["schemas"]["FieldError"][];
+        InputAccepted: {
+            commandId: string;
+            runId: components["schemas"]["RunId"];
+            /** @enum {string} */
+            kind: "text" | "interrupt" | "terminal_bytes" | "resize";
+            accepted: boolean;
         };
     };
     responses: {
@@ -421,6 +421,17 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description The command was accepted or safely replayed. */
+        "responses-RunAccepted": {
+            headers: {
+                ETag: components["headers"]["ETag"];
+                "Idempotency-Key": components["headers"]["IdempotencyKey"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Run"];
+            };
+        };
     };
     parameters: {
         RunId: components["schemas"]["RunId"];
@@ -536,7 +547,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["RunAccepted"];
+            202: components["responses"]["responses-RunAccepted"];
             400: components["responses"]["ProblemBadRequest"];
             401: components["responses"]["ProblemUnauthorized"];
             404: components["responses"]["ProblemRunNotFound"];
@@ -565,7 +576,7 @@ export interface operations {
             };
         };
         responses: {
-            202: components["responses"]["RunAccepted"];
+            202: components["responses"]["responses-RunAccepted"];
             400: components["responses"]["ProblemBadRequest"];
             401: components["responses"]["ProblemUnauthorized"];
             404: components["responses"]["ProblemRunNotFound"];

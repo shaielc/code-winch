@@ -1,0 +1,24 @@
+openapi: 3.0.3
+info: { title: Code Winch run input schemas, version: 1.0.0 }
+paths: {}
+components:
+  schemas:
+    RunInputRequest:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [text, interrupt, terminal_bytes, resize] }
+        text: { type: string, maxLength: 65536 }
+        bytes: { type: string, format: byte, maxLength: 87384 }
+        rows: { type: integer, minimum: 1, maximum: 65535 }
+        columns: { type: integer, minimum: 1, maximum: 65535 }
+    InputAccepted:
+      type: object
+      additionalProperties: false
+      required: [commandId, runId, kind, accepted]
+      properties:
+        commandId: { type: string }
+        runId: { $ref: "../code-winch.yaml#/components/schemas/RunId" }
+        kind: { type: string, enum: [text, interrupt, terminal_bytes, resize] }
+        accepted: { type: boolean }

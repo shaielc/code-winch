@@ -1,0 +1,12 @@
+package: httpapi
+# Output is set per file by api-generate-go's -o flag; one components file
+# produces one .gen.go beside it in the same package.
+generate:
+  models: true
+output-options:
+  skip-prune: true
+# Resource objects reach back for the root's shared scalars: Run, InputAccepted
+# and Event all name RunId. "-" keeps that resolving in-package rather than
+# re-declaring the scalar in every file that mentions it.
+import-mapping:
+  ../code-winch.yaml: "-"

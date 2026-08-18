@@ -1,0 +1,32 @@
+openapi: 3.0.3
+info: { title: Code Winch run schemas, version: 1.0.0 }
+paths: {}
+components:
+  schemas:
+    CreateRunRequest:
+      type: object
+      additionalProperties: false
+      required: [workspacePath, harnessProfile, sandboxProfile]
+      properties:
+        workspacePath: { type: string, minLength: 1, maxLength: 4096, description: Workspace reference; it must not contain credentials. }
+        harnessProfile: { type: string, minLength: 1, maxLength: 128 }
+        sandboxProfile: { type: string, minLength: 1, maxLength: 128 }
+    StopRunRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason: { type: string, maxLength: 500 }
+    Run:
+      type: object
+      additionalProperties: false
+      required: [id, state, version, createdAt, updatedAt, workspacePath, harnessProfile, sandboxProfile]
+      properties:
+        id: { $ref: "../code-winch.yaml#/components/schemas/RunId" }
+        state: { $ref: "../code-winch.yaml#/components/schemas/RunState" }
+        version: { type: integer, format: int64, minimum: 1, description: Monotonic concurrency version represented by ETag. }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        workspacePath: { type: string }
+        harnessProfile: { type: string }
+        sandboxProfile: { type: string }
+        lastSequence: { type: integer, format: int64, minimum: 0, default: 0 }

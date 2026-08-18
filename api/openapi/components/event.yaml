@@ -1,0 +1,28 @@
+openapi: 3.0.3
+info: { title: Code Winch event schemas, version: 1.0.0 }
+paths: {}
+components:
+  schemas:
+    Event:
+      type: object
+      additionalProperties: false
+      required: [eventId, runId, sequence, occurredAt, kind, schemaVersion, source, sensitivity, payload]
+      properties:
+        eventId: { type: string }
+        runId: { $ref: "../code-winch.yaml#/components/schemas/RunId" }
+        sequence: { type: integer, format: int64, minimum: 1 }
+        occurredAt: { type: string, format: date-time }
+        kind: { type: string, minLength: 1 }
+        schemaVersion: { type: integer, minimum: 1 }
+        source: { type: object, additionalProperties: true }
+        sensitivity: { type: string, enum: [public, operational, user-content, confidential, secret] }
+        payload: { type: object, additionalProperties: true }
+        extensions: { type: object, additionalProperties: true }
+    EventPage:
+      type: object
+      additionalProperties: false
+      required: [events, nextAfterSequence, hasMore]
+      properties:
+        events: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/Event" } }
+        nextAfterSequence: { type: integer, format: int64, minimum: 0 }
+        hasMore: { type: boolean }

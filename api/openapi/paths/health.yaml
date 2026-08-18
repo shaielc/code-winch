@@ -8,4 +8,4 @@ get:
       content:
         application/json:
           schema:
-            $ref: "../code-winch.yaml#/components/schemas/HealthResponse"
+            $ref: "../components/health.yaml#/components/schemas/HealthResponse"

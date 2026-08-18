@@ -64,7 +64,7 @@ components:
         Idempotency-Key: { $ref: "#/components/headers/IdempotencyKey" }
       content:
         application/json:
-          schema: { $ref: "#/components/schemas/Run" }
+          schema: { $ref: "./components/run.yaml#/components/schemas/Run" }
     ProblemBadRequest:
       description: The request could not be parsed.
       content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" }, example: { type: "https://code-winch.dev/problems/bad-request", title: "Bad request", status: 400, code: "bad_request", detail: "The request body is not valid JSON.", requestId: "01K0EXAMPLE00000000000000" } } }
@@ -90,82 +90,8 @@ components:
       description: One or more request fields are invalid.
       content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" }, example: { type: "https://code-winch.dev/problems/validation-failed", title: "Validation failed", status: 422, code: "validation_failed", detail: "Correct the invalid fields and retry.", requestId: "01K0EXAMPLE00000000000000", errors: [{ field: "workspacePath", code: "required", message: "workspacePath is required" }] } } }
   schemas:
-    HealthResponse:
-      type: object
-      additionalProperties: false
-      required: [status]
-      properties: { status: { type: string, enum: [ok] } }
     RunId: { type: string, pattern: "^[0-9A-HJKMNP-TV-Z]{26}$", example: "01J00000000000000000000000" }
     RunState: { type: string, enum: [created, queued, preparing, running, stopping, completed, failed, cancelled] }
-    CreateRunRequest:
-      type: object
-      additionalProperties: false
-      required: [workspacePath, harnessProfile, sandboxProfile]
-      properties:
-        workspacePath: { type: string, minLength: 1, maxLength: 4096, description: Workspace reference; it must not contain credentials. }
-        harnessProfile: { type: string, minLength: 1, maxLength: 128 }
-        sandboxProfile: { type: string, minLength: 1, maxLength: 128 }
-    StopRunRequest:
-      type: object
-      additionalProperties: false
-      properties:
-        reason: { type: string, maxLength: 500 }
-    RunInputRequest:
-      type: object
-      additionalProperties: false
-      required: [kind]
-      properties:
-        kind: { type: string, enum: [text, interrupt, terminal_bytes, resize] }
-        text: { type: string, maxLength: 65536 }
-        bytes: { type: string, format: byte, maxLength: 87384 }
-        rows: { type: integer, minimum: 1, maximum: 65535 }
-        columns: { type: integer, minimum: 1, maximum: 65535 }
-    InputAccepted:
-      type: object
-      additionalProperties: false
-      required: [commandId, runId, kind, accepted]
-      properties:
-        commandId: { type: string }
-        runId: { $ref: "#/components/schemas/RunId" }
-        kind: { type: string, enum: [text, interrupt, terminal_bytes, resize] }
-        accepted: { type: boolean }
-    Run:
-      type: object
-      additionalProperties: false
-      required: [id, state, version, createdAt, updatedAt, workspacePath, harnessProfile, sandboxProfile]
-      properties:
-        id: { $ref: "#/components/schemas/RunId" }
-        state: { $ref: "#/components/schemas/RunState" }
-        version: { type: integer, format: int64, minimum: 1, description: Monotonic concurrency version represented by ETag. }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
-        workspacePath: { type: string }
-        harnessProfile: { type: string }
-        sandboxProfile: { type: string }
-        lastSequence: { type: integer, format: int64, minimum: 0, default: 0 }
-    Event:
-      type: object
-      additionalProperties: false
-      required: [eventId, runId, sequence, occurredAt, kind, schemaVersion, source, sensitivity, payload]
-      properties:
-        eventId: { type: string }
-        runId: { $ref: "#/components/schemas/RunId" }
-        sequence: { type: integer, format: int64, minimum: 1 }
-        occurredAt: { type: string, format: date-time }
-        kind: { type: string, minLength: 1 }
-        schemaVersion: { type: integer, minimum: 1 }
-        source: { type: object, additionalProperties: true }
-        sensitivity: { type: string, enum: [public, operational, user-content, confidential, secret] }
-        payload: { type: object, additionalProperties: true }
-        extensions: { type: object, additionalProperties: true }
-    EventPage:
-      type: object
-      additionalProperties: false
-      required: [events, nextAfterSequence, hasMore]
-      properties:
-        events: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/Event" } }
-        nextAfterSequence: { type: integer, format: int64, minimum: 0 }
-        hasMore: { type: boolean }
     FieldError:
       type: object
       additionalProperties: false

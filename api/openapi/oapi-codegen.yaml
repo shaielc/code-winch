@@ -6,8 +6,18 @@ generate:
   embedded-spec: true
 output-options:
   skip-prune: true
-# Path files under paths/ reference the shared components in code-winch.yaml.
-# "-" tells oapi-codegen those references resolve inside this same package
-# rather than an imported one, so the split changes no generated type.
+# Every external document resolves into this same Go package, so "-" suppresses
+# the import that a real package name would add. The types themselves are not
+# emitted here; api-generate-go runs a second models-only pass per components
+# file, which is what actually declares them. Both spellings of each path appear
+# because the root reaches components/ as ./ and the path files reach it as ../.
 import-mapping:
   ../code-winch.yaml: "-"
+  ./components/run.yaml: "-"
+  ./components/run-input.yaml: "-"
+  ./components/event.yaml: "-"
+  ./components/health.yaml: "-"
+  ../components/run.yaml: "-"
+  ../components/run-input.yaml: "-"
+  ../components/event.yaml: "-"
+  ../components/health.yaml: "-"

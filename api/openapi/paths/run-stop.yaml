@@ -11,7 +11,7 @@ post:
     required: false
     content:
       application/json:
-        schema: { $ref: "../code-winch.yaml#/components/schemas/StopRunRequest" }
+        schema: { $ref: "../components/run.yaml#/components/schemas/StopRunRequest" }
   responses:
     "202": { $ref: "../code-winch.yaml#/components/responses/RunAccepted" }
     "400": { $ref: "../code-winch.yaml#/components/responses/ProblemBadRequest" }

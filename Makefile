@@ -1,6 +1,12 @@
 GO ?= go
 GOLANGCI_LINT ?= golangci-lint
 
+OAPI_CODEGEN ?= github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.4.1
+# One schema file per resource, mirroring api/openapi/paths/. Discovered from
+# the directory rather than listed, so adding a resource does not edit this
+# file too.
+API_COMPONENTS = $(basename $(notdir $(wildcard api/openapi/components/*.yaml)))
+
 COMPOSE ?= docker compose -f deployments/compose.yml
 IN_RUNNER = $(COMPOSE) exec -T runner
 # The browser toolchain runs from web/, where its package.json lives.
@@ -34,8 +40,17 @@ api-generate: api-generate-go
 
 ## api-generate-go: [host] Regenerate the server types only. Needs no npm, so it
 ## runs wherever $(GO) does, including the runner container.
+## The components pass is not optional: the root document maps its external
+## refs to "-", which resolves them in-package without declaring them, so
+## without this loop types.gen.go references types nothing defines.
 api-generate-go:
-	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.4.1 --config api/openapi/oapi-codegen.yaml api/openapi/code-winch.yaml
+	$(GO) run $(OAPI_CODEGEN) --config api/openapi/oapi-codegen.yaml api/openapi/code-winch.yaml
+	@for f in $(API_COMPONENTS); do \
+		echo "$(GO) run $(OAPI_CODEGEN) --config api/openapi/oapi-codegen-components.yaml api/openapi/components/$$f.yaml"; \
+		$(GO) run $(OAPI_CODEGEN) --config api/openapi/oapi-codegen-components.yaml \
+			-o internal/adapters/transport/httpapi/$$(echo $$f | tr - _).gen.go \
+			api/openapi/components/$$f.yaml || exit 1; \
+	done
 
 ## api-validate: [host] Parse and validate the OpenAPI document and contract fixtures.
 api-validate:
@@ -46,14 +61,21 @@ api-compat:
 	$(GO) run github.com/oasdiff/oasdiff@v1.11.7 breaking test/contract/openapi/v1.yaml api/openapi/code-winch.yaml --fail-on ERR
 
 ## api-check: [host] Verify validation, compatibility, and deterministic generated output.
+## Every *.gen.go is compared, not just types.gen.go, and so is the file list:
+## the components split means a regeneration can add or drop a file, which a
+## fixed list of names would not notice.
 ## The steps are chained with && deliberately: with `;` a failed regeneration was
 ## swallowed and the target reported success having generated nothing.
 api-check: api-validate api-compat
 	@tmp="$$(mktemp -d)"; trap 'rm -rf "$$tmp"' EXIT; \
-	cp internal/adapters/transport/httpapi/types.gen.go "$$tmp/go" && \
+	mkdir "$$tmp/go" && cp internal/adapters/transport/httpapi/*.gen.go "$$tmp/go/" && \
+	ls internal/adapters/transport/httpapi/*.gen.go > "$$tmp/list" && \
 	cp web/src/api/schema.ts "$$tmp/ts" && \
 	$(MAKE) api-generate && \
-	cmp "$$tmp/go" internal/adapters/transport/httpapi/types.gen.go && \
+	ls internal/adapters/transport/httpapi/*.gen.go | cmp - "$$tmp/list" && \
+	for f in internal/adapters/transport/httpapi/*.gen.go; do \
+		cmp "$$tmp/go/$$(basename $$f)" "$$f" || exit 1; \
+	done && \
 	cmp "$$tmp/ts" web/src/api/schema.ts
 
 ## api-check-go: [host] api-check without the browser half, for a host that has Go
@@ -62,9 +84,13 @@ api-check: api-validate api-compat
 ## api-check, so the [docker] path no longer needs this.
 api-check-go: api-validate api-compat
 	@tmp="$$(mktemp -d)"; trap 'rm -rf "$$tmp"' EXIT; \
-	cp internal/adapters/transport/httpapi/types.gen.go "$$tmp/go" && \
+	mkdir "$$tmp/go" && cp internal/adapters/transport/httpapi/*.gen.go "$$tmp/go/" && \
+	ls internal/adapters/transport/httpapi/*.gen.go > "$$tmp/list" && \
 	$(MAKE) api-generate-go GO='$(GO)' && \
-	cmp "$$tmp/go" internal/adapters/transport/httpapi/types.gen.go
+	ls internal/adapters/transport/httpapi/*.gen.go | cmp - "$$tmp/list" && \
+	for f in internal/adapters/transport/httpapi/*.gen.go; do \
+		cmp "$$tmp/go/$$(basename $$f)" "$$f" || exit 1; \
+	done
 
 ## format: [host] Format all Go source files.
 format:

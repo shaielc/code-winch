@@ -10,13 +10,13 @@ post:
     required: true
     content:
       application/json:
-        schema: { $ref: "../code-winch.yaml#/components/schemas/RunInputRequest" }
+        schema: { $ref: "../components/run-input.yaml#/components/schemas/RunInputRequest" }
   responses:
     "202":
       description: Input was durably accepted or safely replayed.
       content:
         application/json:
-          schema: { $ref: "../code-winch.yaml#/components/schemas/InputAccepted" }
+          schema: { $ref: "../components/run-input.yaml#/components/schemas/InputAccepted" }
     "400": { $ref: "../code-winch.yaml#/components/responses/ProblemBadRequest" }
     "401": { $ref: "../code-winch.yaml#/components/responses/ProblemUnauthorized" }
     "404": { $ref: "../code-winch.yaml#/components/responses/ProblemRunNotFound" }

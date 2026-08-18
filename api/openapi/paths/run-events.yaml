@@ -16,7 +16,7 @@ get:
       description: Events ordered by ascending sequence.
       content:
         application/json:
-          schema: { $ref: "../code-winch.yaml#/components/schemas/EventPage" }
+          schema: { $ref: "../components/event.yaml#/components/schemas/EventPage" }
     "400": { $ref: "../code-winch.yaml#/components/responses/ProblemBadRequest" }
     "401": { $ref: "../code-winch.yaml#/components/responses/ProblemUnauthorized" }
     "404": { $ref: "../code-winch.yaml#/components/responses/ProblemRunNotFound" }

@@ -77,8 +77,10 @@ the `codex` profile under `test/e2e/`.
 
 Two lines land in surfaces other tasks own, and both are why those tasks are
 dependencies rather than peers: the blank import in `cmd/winchd/main.go`
-(P1-050) and the unsupported-input problem code in `api/openapi/components/`
-(P1-050's split). The e2e profile is appended through the switch P1-053 builds,
+(P1-050) and the unsupported-input problem code in `api/openapi/code-winch.yaml`
+(P1-050's split keeps `Problem` and the `responses` section in the root, so a
+new problem code is a `responses` entry there rather than a components file).
+The e2e profile is appended through the switch P1-053 builds,
 which is append-only, so it is not a claim on that task's files.
 
 ## Demonstration

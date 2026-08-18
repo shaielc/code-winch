@@ -8,7 +8,7 @@ post:
     content:
       application/json:
         schema:
-          $ref: "../code-winch.yaml#/components/schemas/CreateRunRequest"
+          $ref: "../components/run.yaml#/components/schemas/CreateRunRequest"
   responses:
     "201":
       description: The run was created.
@@ -22,7 +22,7 @@ post:
           $ref: "../code-winch.yaml#/components/headers/IdempotencyKey"
       content:
         application/json:
-          schema: { $ref: "../code-winch.yaml#/components/schemas/Run" }
+          schema: { $ref: "../components/run.yaml#/components/schemas/Run" }
     "400": { $ref: "../code-winch.yaml#/components/responses/ProblemBadRequest" }
     "401": { $ref: "../code-winch.yaml#/components/responses/ProblemUnauthorized" }
     "409": { $ref: "../code-winch.yaml#/components/responses/ProblemIdempotencyConflict" }

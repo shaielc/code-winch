@@ -31,10 +31,13 @@ process.
   `Reconcile` finally has a runner to inspect.
 - Emit the queue-time, startup-time, and active-run metrics P1-048 declared.
 - Split `api/openapi/code-winch.yaml` into per-resource path files under
-  `api/openapi/paths/` and shared schemas under `api/openapi/components/`,
-  assembled by `$ref`. Every Phase 2 task adds a resource; without the split
-  they all edit one file and the phase's width is fiction. The generated Go and
-  TypeScript output must be unchanged by the split itself.
+  `api/openapi/paths/` and per-resource object schemas under
+  `api/openapi/components/`, assembled by `$ref`. Every Phase 2 task adds a
+  resource; without the split they all edit one file and the phase's width is
+  fiction. The generated Go and TypeScript API must be unchanged by the split
+  itself. Schemas the root's own `parameters` and `responses` reference —
+  `RunId`, `RunState`, `Problem`, `FieldError` — stay in the root; see
+  `api/openapi/README.md` for the two toolchain constraints that require it.
 - Define a single admission hook on the start path with a permissive default,
   so P2-059 implements a policy rather than editing the start path.
 
@@ -115,9 +118,12 @@ replaying it. `tmp/stream.py` is the interim client until P1-051's
       reachable through the service.
 - [ ] A persisted run records its resolved profile and contains no secret value.
 - [ ] Registering a new driver requires adding a file, not editing a switch.
-- [ ] Adding an API resource requires adding a path file, not editing a shared
-      document; `make api-check` still passes and the generated output is
-      byte-identical across the split.
+- [ ] Adding an API resource requires adding a path file and a components file,
+      not editing a shared document; `make api-check` still passes and the
+      generated Go and TypeScript API is unchanged across the split. Not
+      byte-identical: schemas move between generated files and reorder within
+      them, so the check is that the declared type and key names match, which
+      `git show HEAD:<file>` makes checkable.
 - [ ] Published events reach a subscribed WebSocket in sequence order.
 - [ ] Startup reconciliation produces a truthful state for a run interrupted by
       a daemon kill.

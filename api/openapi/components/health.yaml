@@ -1,0 +1,10 @@
+openapi: 3.0.3
+info: { title: Code Winch health schemas, version: 1.0.0 }
+paths: {}
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties: { status: { type: string, enum: [ok] } }
