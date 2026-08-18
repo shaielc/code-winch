@@ -52,14 +52,15 @@ it in permanently.
 ### Dispatched task agents
 
 `scripts/task-prompt.md` instructs every dispatched implementer to read
-`docs/workplan/$brief` and **all applicable `AGENTS.md` files**. The root
-`AGENTS.md` carries the rules that bind every change in this repository, which
-is what wires skills into dispatched work.
+[`task/SKILL.md`](task/SKILL.md), then `docs/workplan/$brief`, then **all
+applicable `AGENTS.md` files**. That is how a skill reaches dispatched work: the
+prompt names it, and the root `AGENTS.md` carries the rules binding every change
+in the repository.
 
-`task/SKILL.md` is the skill for that audience: how to locate a brief from an
+`task/SKILL.md` is the skill for that audience — how to locate a brief from an
 ID, which of its sections bind, what a single task is and is not answerable for,
-and how to judge it done. Point implementers there rather than loading the
-planning skill wholesale into an implementation prompt.
+and how to judge it done. Name it in a dispatch prompt rather than loading the
+planning skill wholesale into an implementation.
 
 ### Claude Code
 
