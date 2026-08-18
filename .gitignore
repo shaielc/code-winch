@@ -4,6 +4,11 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Written by whichever npm install ran last, host or container. Nothing needs it:
+# every install path uses `npm install` rather than `npm ci`, and web/package.json
+# pins every direct dependency exactly.
+web/package-lock.json
+
 # Local runner secrets
 runner/.env
 
