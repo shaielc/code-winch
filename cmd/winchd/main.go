@@ -24,6 +24,7 @@ import (
 	_ "github.com/shaielc/code-winch/internal/adapters/sandbox/local"
 	"github.com/shaielc/code-winch/internal/adapters/transport/httpapi"
 	"github.com/shaielc/code-winch/internal/application"
+	"github.com/shaielc/code-winch/internal/domain"
 	"github.com/shaielc/code-winch/internal/execution"
 	"github.com/shaielc/code-winch/internal/platform/config"
 	"github.com/shaielc/code-winch/internal/platform/telemetry"
@@ -45,6 +46,52 @@ const (
 	// sandbox escalates to killing its process group.
 	stopGrace = 5 * time.Second
 )
+
+// The metrics docs/architecture.md §7 requires of Phase 1. The registry is a
+// guard rather than a client: it bounds names and label values, and an
+// observation is emitted as one structured log record, the same way startup
+// time has always been reported.
+const (
+	metricStartupTime = "winch_startup_time_seconds"
+	metricQueueTime   = "winch_queue_time_seconds"
+	metricActiveRuns  = "winch_active_runs"
+)
+
+// metricStatuses is every `status` value an emitter in this daemon passes.
+// declareMetrics bounds them and startup validates the whole table, so an
+// emitter reaching for a label nobody declared refuses to boot rather than
+// widening telemetry cardinality unnoticed.
+var metricStatuses = map[string][]string{
+	metricStartupTime: {"ready"},
+	// A queued run leaves for exactly one of these: the lease that begins
+	// preparation, or the cancellation reconciliation records for a run whose
+	// daemon died before it reached a harness.
+	metricQueueTime: {string(domain.RunStatePreparing), string(domain.RunStateCancelled)},
+	metricActiveRuns: {
+		string(domain.RunStateRunning), string(domain.RunStateStopping),
+	},
+}
+
+func declareMetrics(registry *telemetry.Registry) {
+	registry.Declare(metricStartupTime, "status", "ready")
+	registry.Declare(metricQueueTime, "status", string(domain.RunStatePreparing), string(domain.RunStateCancelled))
+	registry.Declare(metricActiveRuns, "status", string(domain.RunStateRunning), string(domain.RunStateStopping))
+}
+
+// validateMetrics refuses a daemon whose declarations do not cover everything
+// its emitters will emit. It runs before the listener accepts a request, so a
+// drift between the two is a failed start rather than a silently dropped
+// measurement in production.
+func validateMetrics(registry *telemetry.Registry) error {
+	for _, name := range []string{metricStartupTime, metricQueueTime, metricActiveRuns} {
+		for _, status := range metricStatuses[name] {
+			if err := registry.Validate(name, map[string]string{"status": status}); err != nil {
+				return fmt.Errorf("metric %s status %s: %w", name, status, err)
+			}
+		}
+	}
+	return nil
+}
 
 // Outbox delivery. The interval bounds how long a committed event waits before
 // live subscribers are told about it; durable history is already readable.
@@ -81,7 +128,7 @@ func run(ctx context.Context) error {
 	// Anything reaching for the package-level logger must redact too.
 	slog.SetDefault(logger)
 	metrics := telemetry.NewRegistry()
-	metrics.Declare("winch_startup_time_seconds", "status", "ready")
+	declareMetrics(metrics)
 	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("database pool: %w", err)
@@ -111,7 +158,8 @@ func run(ctx context.Context) error {
 	// registry the blank imports above populate, so this root names no adapter.
 	runners := local.NewPool(application.DefaultDrivers)
 	runSupervisor := supervisor.New(store, runners, execution.ClassificationRedactor{}, clock, instance, leaseDuration).WithReconciliationIDs(ids)
-	runs := application.NewRunService(store, store, ids, clock, application.DefaultDrivers, nil)
+	runs := application.NewRunService(store, store, ids, clock, application.DefaultDrivers, nil).
+		WithMetrics(runMetrics{registry: metrics, logger: logger})
 	engine, err := execution.New(execution.Config{
 		Runs: store, States: runs, Control: store, Supervisor: runSupervisor,
 		Runner: runners, IDs: ids, Clock: clock, Logger: logger, StopGrace: stopGrace,
@@ -173,7 +221,7 @@ func run(ctx context.Context) error {
 	server := &http.Server{Addr: cfg.Addr, Handler: root, ReadHeaderTimeout: readHeaderTimeout}
 	// Refuses to start on an undeclared metric or label, so emitters cannot
 	// widen telemetry cardinality unnoticed.
-	if err = metrics.Validate("winch_startup_time_seconds", map[string]string{"status": "ready"}); err != nil {
+	if err = validateMetrics(metrics); err != nil {
 		return fmt.Errorf("startup metric: %w", err)
 	}
 	logger.Info("startup complete", "component", "daemon", "operation", "start", "status", "ready", "duration_ms", time.Since(started).Milliseconds())
@@ -203,6 +251,48 @@ func serve(ctx context.Context, server *http.Server, stream *httpapi.EventStream
 		return fmt.Errorf("http serve: %w", err)
 	}
 }
+
+// runMetrics turns the run service's observations into the bounded records the
+// registry allows. It validates every label before emitting rather than
+// trusting startup alone, so a value that slipped past the declaration is
+// dropped instead of published.
+type runMetrics struct {
+	registry *telemetry.Registry
+	logger   *slog.Logger
+}
+
+func (m runMetrics) QueueTime(_ context.Context, id domain.RunID, state domain.RunState, waited time.Duration) {
+	if !m.allowed(metricQueueTime, string(state)) {
+		return
+	}
+	m.logger.Info("run left the queue", "component", "runs", "operation", "queue",
+		"run_id", id.String(), "status", string(state), "duration_ms", waited.Milliseconds())
+}
+
+// ActiveRuns emits one record per declared status rather than ranging over the
+// map, so a gauge reads the same on every emission and an undeclared state in
+// the map cannot reach the log.
+func (m runMetrics) ActiveRuns(_ context.Context, counts map[domain.RunState]int) {
+	for _, status := range metricStatuses[metricActiveRuns] {
+		if !m.allowed(metricActiveRuns, status) {
+			continue
+		}
+		m.logger.Info("active runs", "component", "runs", "operation", "observe",
+			"status", status, "size", counts[domain.RunState(status)])
+	}
+}
+
+func (m runMetrics) allowed(name, status string) bool {
+	if err := m.registry.Validate(name, map[string]string{"status": status}); err != nil {
+		// The registry's error names the metric it refused, so only the class
+		// is logged; the measurement itself is dropped.
+		m.logger.Warn("metric not emitted", "component", "daemon", "operation", "observe", "error_code", "undeclared_metric")
+		return false
+	}
+	return true
+}
+
+var _ application.RunMetrics = runMetrics{}
 
 // wallClock is the outbox worker's clock, which measures lease and backoff
 // deadlines in wall time rather than in domain timestamps.

@@ -21,6 +21,8 @@ type fixture struct {
 	service *application.RunService
 	runs    *memory.RunRepository
 	events  *memory.EventStore
+	clock   *memory.Clock
+	metrics *recordedMetrics
 }
 
 func newFixture(t *testing.T, admission application.AdmissionHook) *fixture {
@@ -34,11 +36,78 @@ func newFixture(t *testing.T, admission application.AdmissionHook) *fixture {
 	registry.RegisterSandbox("fake", fakesandbox.New(application.SandboxCapabilities{Isolation: "in-memory"}))
 	runs := &memory.RunRepository{}
 	events := &memory.EventStore{}
+	clock := memory.NewClock(now)
+	metrics := &recordedMetrics{}
 	return &fixture{
-		service: application.NewRunService(runs, events, application.RandomIDs{}, memory.NewClock(now), registry, admission),
+		service: application.NewRunService(runs, events, application.RandomIDs{}, clock, registry, admission).WithMetrics(metrics),
 		runs:    runs,
 		events:  events,
+		clock:   clock,
+		metrics: metrics,
 	}
+}
+
+// advance moves the fixture's clock, so a duration a measurement reports is the
+// one the test chose rather than however long the test itself took.
+func (f *fixture) advance(t *testing.T, d time.Duration) {
+	t.Helper()
+	next, err := domain.NewTimestamp(f.clock.Now().Time().Add(d))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.clock.Set(next)
+}
+
+type queueObservation struct {
+	id     domain.RunID
+	state  domain.RunState
+	waited time.Duration
+}
+
+// recordedMetrics captures what the service observed. The lifecycle tests race
+// starts against stops, so it is safe for concurrent use.
+type recordedMetrics struct {
+	mu     sync.Mutex
+	queued []queueObservation
+	active []map[domain.RunState]int
+}
+
+func (m *recordedMetrics) QueueTime(_ context.Context, id domain.RunID, state domain.RunState, waited time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.queued = append(m.queued, queueObservation{id, state, waited})
+}
+
+func (m *recordedMetrics) ActiveRuns(_ context.Context, counts map[domain.RunState]int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	copied := make(map[domain.RunState]int, len(counts))
+	for state, n := range counts {
+		copied[state] = n
+	}
+	m.active = append(m.active, copied)
+}
+
+func (m *recordedMetrics) queueTimes() []queueObservation {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]queueObservation(nil), m.queued...)
+}
+
+// lastActive is the most recent gauge reading, and false when none was taken.
+func (m *recordedMetrics) lastActive() (map[domain.RunState]int, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.active) == 0 {
+		return nil, false
+	}
+	return m.active[len(m.active)-1], true
+}
+
+func (m *recordedMetrics) activeReadings() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.active)
 }
 
 func (f *fixture) create(t *testing.T) application.RunView {
@@ -497,6 +566,142 @@ func TestGetRunReportsTheLastSequenceWithoutReadingTheHistory(t *testing.T) {
 	// The injected failure is still queued, proving GetRun never consumed it.
 	if _, err = f.service.ListRunEvents(context.Background(), id, 0, 10); err == nil {
 		t.Fatal("the read failure was consumed by GetRun rather than by a read")
+	}
+}
+
+// docs/architecture.md §7 asks for queue time. It is the wait a run spends in
+// Queued before anything picks it up, so it is measured when the run leaves
+// Queued and not before: a run still queued has no queue time yet.
+func TestQueueTimeIsMeasuredWhenTheRunLeavesQueued(t *testing.T) {
+	const queued = 7 * time.Second
+	for name, leave := range map[string]struct {
+		command domain.RunCommand
+		want    domain.RunState
+	}{
+		"lease acquired": {domain.RunCommandAcquireLease, domain.RunStatePreparing},
+		"cancelled":      {domain.RunCommandCancel, domain.RunStateCancelled},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t, nil)
+			view := f.create(t)
+			id := view.Record.ID
+			if _, err := f.service.StartRun(context.Background(), id, view.Version); err != nil {
+				t.Fatalf("start: %v", err)
+			}
+			if got := f.metrics.queueTimes(); len(got) != 0 {
+				t.Fatalf("a still-queued run reported %d queue times", len(got))
+			}
+
+			f.advance(t, queued)
+			if _, err := f.service.Advance(context.Background(), id, leave.command); err != nil {
+				t.Fatalf("advance %s: %v", leave.command, err)
+			}
+			got := f.metrics.queueTimes()
+			if len(got) != 1 {
+				t.Fatalf("%d queue times reported, want 1", len(got))
+			}
+			if got[0].id != id {
+				t.Fatalf("queue time reported for run %s, want %s", got[0].id, id)
+			}
+			if got[0].waited != queued {
+				t.Fatalf("waited = %s, want %s", got[0].waited, queued)
+			}
+			if got[0].state != leave.want {
+				t.Fatalf("state = %s, want %s", got[0].state, leave.want)
+			}
+
+			// Later transitions are not queue time: a second reading would
+			// make the metric mean "time in the previous state".
+			f.advance(t, queued)
+			_, _ = f.service.Advance(context.Background(), id, domain.RunCommandPreparationFailed)
+			if got = f.metrics.queueTimes(); len(got) != 1 {
+				t.Fatalf("%d queue times after leaving Queued, want 1", len(got))
+			}
+		})
+	}
+}
+
+// The active-runs gauge counts only the states a daemon holds an execution in,
+// and it counts them from the store, so a reading is the truth about every run
+// rather than about the one that just moved.
+func TestActiveRunsCountsOnlyRunningAndStoppingRuns(t *testing.T) {
+	f := newFixture(t, nil)
+	first := f.create(t).Record.ID
+	second := f.create(t).Record.ID
+
+	drive := func(id domain.RunID, commands ...domain.RunCommand) {
+		t.Helper()
+		for _, c := range commands {
+			if _, err := f.service.Advance(context.Background(), id, c); err != nil {
+				t.Fatalf("advance %s: %v", c, err)
+			}
+		}
+	}
+
+	// Nothing has reached an execution yet, so no reading has been taken.
+	drive(first, domain.RunCommandStart, domain.RunCommandAcquireLease)
+	if got, taken := f.metrics.lastActive(); taken {
+		t.Fatalf("a queued and a preparing run reported %v", got)
+	}
+
+	for _, step := range []struct {
+		commands []domain.RunCommand
+		id       domain.RunID
+		want     map[domain.RunState]int
+	}{
+		{[]domain.RunCommand{domain.RunCommandExecutionStarted}, first,
+			map[domain.RunState]int{domain.RunStateRunning: 1, domain.RunStateStopping: 0}},
+		{[]domain.RunCommand{domain.RunCommandStart, domain.RunCommandAcquireLease, domain.RunCommandExecutionStarted}, second,
+			map[domain.RunState]int{domain.RunStateRunning: 2, domain.RunStateStopping: 0}},
+		{[]domain.RunCommand{domain.RunCommandStop}, second,
+			map[domain.RunState]int{domain.RunStateRunning: 1, domain.RunStateStopping: 1}},
+		{[]domain.RunCommand{domain.RunCommandSuccessfulExit}, second,
+			map[domain.RunState]int{domain.RunStateRunning: 1, domain.RunStateStopping: 0}},
+		{[]domain.RunCommand{domain.RunCommandFailedExit}, first,
+			map[domain.RunState]int{domain.RunStateRunning: 0, domain.RunStateStopping: 0}},
+	} {
+		drive(step.id, step.commands...)
+		got, taken := f.metrics.lastActive()
+		if !taken {
+			t.Fatalf("no reading after %v", step.commands)
+		}
+		if len(got) != len(step.want) {
+			t.Fatalf("after %v the reading is %v, want %v", step.commands, got, step.want)
+		}
+		for state, want := range step.want {
+			if got[state] != want {
+				t.Fatalf("after %v the reading is %v, want %v", step.commands, got, step.want)
+			}
+		}
+	}
+}
+
+// A refused or conflicting command changes nothing, so it must measure
+// nothing: a metric that moves on a rejected request reports work that never
+// happened.
+func TestARefusedCommandReportsNoMeasurement(t *testing.T) {
+	f := newFixture(t, nil)
+	view := f.create(t)
+	id := view.Record.ID
+	for _, c := range []domain.RunCommand{domain.RunCommandStart, domain.RunCommandAcquireLease, domain.RunCommandExecutionStarted} {
+		if _, err := f.service.Advance(context.Background(), id, c); err != nil {
+			t.Fatalf("advance %s: %v", c, err)
+		}
+	}
+	readings := f.metrics.activeReadings()
+	before := len(f.metrics.queueTimes())
+
+	if _, err := f.service.StopRun(context.Background(), id, view.Version); !errors.Is(err, application.ErrConflict) {
+		t.Fatalf("err = %v, want ErrConflict", err)
+	}
+	if _, err := f.service.Advance(context.Background(), id, domain.RunCommandAcquireLease); err == nil {
+		t.Fatal("acquire_lease from running was accepted")
+	}
+	if got := len(f.metrics.queueTimes()); got != before {
+		t.Fatalf("%d queue times after refusals, want %d", got, before)
+	}
+	if got := f.metrics.activeReadings(); got != readings {
+		t.Fatalf("%d gauge readings after refusals, want %d", got, readings)
 	}
 }
 

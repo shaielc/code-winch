@@ -30,3 +30,23 @@ func TestMetricLabelsBounded(t *testing.T) {
 		t.Fatal("accepted unbounded value")
 	}
 }
+
+// Every metric name is pre-registered, so a name on its own proves nothing:
+// the label is what Declare bounds, and an emitter that invents one has to be
+// refused before it reaches the log.
+func TestUndeclaredMetricsAndLabelsAreRefused(t *testing.T) {
+	r := NewRegistry()
+	if e := r.Validate("winch_queue_time_seconds", map[string]string{"status": "preparing"}); e == nil {
+		t.Fatal("accepted a label nothing declared")
+	}
+	r.Declare("winch_queue_time_seconds", "status", "preparing", "cancelled")
+	if e := r.Validate("winch_queue_time_seconds", map[string]string{"status": "preparing"}); e != nil {
+		t.Fatal(e)
+	}
+	if e := r.Validate("winch_queue_time_seconds", map[string]string{"reason": "preparing"}); e == nil {
+		t.Fatal("accepted an undeclared label name")
+	}
+	if e := r.Validate("winch_invented_total", nil); e == nil {
+		t.Fatal("accepted an unregistered metric")
+	}
+}

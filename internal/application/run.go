@@ -35,6 +35,39 @@ type RunExecutor interface {
 	Stop(context.Context, domain.RunID) error
 }
 
+// RunMetrics receives the two run measurements docs/architecture.md §7 names:
+// how long a run waited before anything picked it up, and how many runs are
+// active right now. The service reports observations in domain vocabulary; the
+// composition root owns the registry that bounds the metric names and label
+// values, and decides how an observation is emitted.
+//
+// Neither method returns an error. A measurement that cannot be taken is worth
+// less than the lifecycle command that produced it, so a failure here must
+// never fail a start or a stop.
+type RunMetrics interface {
+	// QueueTime reports how long a run's current attempt sat in Queued before
+	// it reached state.
+	QueueTime(ctx context.Context, id domain.RunID, state domain.RunState, waited time.Duration)
+	// ActiveRuns reports how many runs are in each active state right now.
+	// States absent from the map hold no runs.
+	ActiveRuns(ctx context.Context, counts map[domain.RunState]int)
+}
+
+// activeRunStates are the states a daemon is answerable for a live execution
+// in: Running accepts input, and Stopping is still holding an execution down.
+// Created and Queued have no execution yet, Preparing has not reached one, and
+// a terminal state is finished, so none of them is active.
+var activeRunStates = []domain.RunState{domain.RunStateRunning, domain.RunStateStopping}
+
+func isActiveRunState(state domain.RunState) bool {
+	for _, active := range activeRunStates {
+		if state == active {
+			return true
+		}
+	}
+	return false
+}
+
 type RunService struct {
 	runs      RunRepository
 	events    EventStore
@@ -43,6 +76,7 @@ type RunService struct {
 	drivers   *DriverRegistry
 	admission AdmissionHook
 	executor  RunExecutor
+	metrics   RunMetrics
 }
 
 func NewRunService(r RunRepository, e EventStore, ids IDSource, clock Clock, drivers *DriverRegistry, admission AdmissionHook) *RunService {
@@ -57,6 +91,15 @@ func NewRunService(r RunRepository, e EventStore, ids IDSource, clock Clock, dri
 // after both exist.
 func (s *RunService) WithExecutor(executor RunExecutor) *RunService {
 	s.executor = executor
+	return s
+}
+
+// WithMetrics attaches the observer that turns a state change into a
+// measurement. A service without one runs unchanged and reports nothing, which
+// is what a test of persistence alone wants; the composition root always sets
+// it, so the daemon's metrics have a producing path.
+func (s *RunService) WithMetrics(metrics RunMetrics) *RunService {
+	s.metrics = metrics
 	return s
 }
 
@@ -190,9 +233,66 @@ func (s *RunService) transition(ctx context.Context, id domain.RunID, expected u
 		return RunView{rec, v, 0}, nil
 	}
 	rec.Attempts = run.Attempts()
+	// The record's previous UpdatedAt is when the attempt entered the state it
+	// is now leaving: the only write a run receives while it sits in one state
+	// is the write that moves it out.
+	entered := rec.UpdatedAt
 	rec.UpdatedAt = s.clock.Now()
 	nv, err := s.runs.Save(ctx, rec, v)
+	if err == nil {
+		s.observe(ctx, rec, before.State, entered)
+	}
 	return RunView{rec, nv, 0}, err
+}
+
+// observe reports what a committed state change made true. It runs after the
+// write, so a refused or conflicting command measures nothing, and it is
+// deliberately best effort: an unreadable store costs a data point, not a run.
+func (s *RunService) observe(ctx context.Context, rec RunRecord, previous domain.RunState, entered domain.Timestamp) {
+	if s.metrics == nil || len(rec.Attempts) == 0 {
+		return
+	}
+	current := rec.Attempts[len(rec.Attempts)-1].State
+	if current == previous {
+		return
+	}
+	if previous == domain.RunStateQueued && !entered.IsZero() {
+		s.metrics.QueueTime(ctx, rec.ID, current, rec.UpdatedAt.Time().Sub(entered.Time()))
+	}
+	// Only a transition touching an active state moves the gauge. Preparing to
+	// Failed, for instance, is a real transition between two inactive states.
+	if !isActiveRunState(previous) && !isActiveRunState(current) {
+		return
+	}
+	if counts, err := s.activeCounts(ctx); err == nil {
+		s.metrics.ActiveRuns(ctx, counts)
+	}
+}
+
+// activeCounts counts the runs currently in each active state. It reads the
+// store rather than a counter held in memory, because the count a restarted
+// daemon reports has to be the truth reconciliation left behind and not zero,
+// and because the runs it is answerable for are exactly the in-flight ones.
+func (s *RunService) activeCounts(ctx context.Context) (map[domain.RunState]int, error) {
+	ids, err := s.runs.InFlight(ctx)
+	if err != nil {
+		return nil, err
+	}
+	counts := make(map[domain.RunState]int, len(activeRunStates))
+	for _, state := range activeRunStates {
+		counts[state] = 0
+	}
+	for _, id := range ids {
+		rec, _, getErr := s.runs.Get(ctx, id)
+		if getErr != nil || len(rec.Attempts) == 0 {
+			continue
+		}
+		state := rec.Attempts[len(rec.Attempts)-1].State
+		if _, active := counts[state]; active {
+			counts[state]++
+		}
+	}
+	return counts, nil
 }
 
 // StartRun queues the run durably, then launches it. The view it returns is
@@ -240,10 +340,12 @@ func (s *RunService) Advance(ctx context.Context, id domain.RunID, command domai
 		if err != nil {
 			return RunView{}, err
 		}
+		before := run.CurrentAttempt().State
 		if err = run.Apply(command, domain.AttemptID{}); err != nil {
 			return RunView{}, err
 		}
 		rec.Attempts = run.Attempts()
+		entered := rec.UpdatedAt
 		rec.UpdatedAt = s.clock.Now()
 		nv, err := s.runs.Save(ctx, rec, v)
 		if errors.Is(err, ErrConflict) {
@@ -253,6 +355,7 @@ func (s *RunService) Advance(ctx context.Context, id domain.RunID, command domai
 		if err != nil {
 			return RunView{}, err
 		}
+		s.observe(ctx, rec, before, entered)
 		return RunView{Record: rec, Version: nv}, nil
 	}
 	return RunView{}, conflict
