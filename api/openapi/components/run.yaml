@@ -2,6 +2,19 @@ openapi: 3.0.3
 info: { title: Code Winch run schemas, version: 1.0.0 }
 paths: {}
 components:
+  # RunAccepted lives here rather than in the root because it wraps Run, and a
+  # root response whose subtree reaches another file makes openapi-typescript
+  # mint a second, prefixed component for it. Declared beside the schema it
+  # returns, it is one component with one name in both generated outputs.
+  responses:
+    RunAccepted:
+      description: The command was accepted or safely replayed.
+      headers:
+        ETag: { $ref: "../code-winch.yaml#/components/headers/ETag" }
+        Idempotency-Key: { $ref: "../code-winch.yaml#/components/headers/IdempotencyKey" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Run" }
   schemas:
     CreateRunRequest:
       type: object

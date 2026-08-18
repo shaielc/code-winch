@@ -267,17 +267,6 @@ export interface components {
         };
     };
     responses: {
-        /** @description The command was accepted or safely replayed. */
-        RunAccepted: {
-            headers: {
-                ETag: components["headers"]["ETag"];
-                "Idempotency-Key": components["headers"]["IdempotencyKey"];
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["Run"];
-            };
-        };
         /** @description The request could not be parsed. */
         ProblemBadRequest: {
             headers: {
@@ -422,7 +411,7 @@ export interface components {
             };
         };
         /** @description The command was accepted or safely replayed. */
-        "responses-RunAccepted": {
+        RunAccepted: {
             headers: {
                 ETag: components["headers"]["ETag"];
                 "Idempotency-Key": components["headers"]["IdempotencyKey"];
@@ -547,7 +536,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: components["responses"]["responses-RunAccepted"];
+            202: components["responses"]["RunAccepted"];
             400: components["responses"]["ProblemBadRequest"];
             401: components["responses"]["ProblemUnauthorized"];
             404: components["responses"]["ProblemRunNotFound"];
@@ -576,7 +565,7 @@ export interface operations {
             };
         };
         responses: {
-            202: components["responses"]["responses-RunAccepted"];
+            202: components["responses"]["RunAccepted"];
             400: components["responses"]["ProblemBadRequest"];
             401: components["responses"]["ProblemUnauthorized"];
             404: components["responses"]["ProblemRunNotFound"];

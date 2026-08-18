@@ -18,7 +18,7 @@ api/openapi/
 ├── components/
 │   ├── event.yaml           # Event, EventPage
 │   ├── health.yaml          # HealthResponse
-│   ├── run.yaml             # Run, CreateRunRequest, StopRunRequest
+│   ├── run.yaml             # Run, CreateRunRequest, StopRunRequest, RunAccepted
 │   └── run-input.yaml       # RunInputRequest, InputAccepted
 └── paths/
     ├── health.yaml
@@ -34,8 +34,8 @@ api/openapi/
 **Adding a resource means adding a file under `paths/`, a file under
 `components/`, and one `$ref` line each**, rather than editing a document every
 other task is also editing. A path file reaches shared components as
-`../code-winch.yaml#/components/...` and resource schemas as
-`../components/<file>.yaml#/components/schemas/...`. The one shared file a new
+`../code-winch.yaml#/components/...` and resource schemas and responses as
+`../components/<file>.yaml#/components/...`. The one shared file a new
 resource still edits is `oapi-codegen.yaml`, which needs an `import-mapping`
 entry per external document; that map has no wildcard form.
 
@@ -55,10 +55,20 @@ Two separate constraints both point the same way:
   instead of `["RunId"]`. Keeping the referenced schema in the root keeps the
   browser key names stable.
 
-One prefixed key survives on purpose: the `RunAccepted` response references
-`Run`, and `Run` belongs in `components/run.yaml` because that is the schema
-tasks extend. Nothing outside the generated file reads
-`components["responses"][...]`, so the cost is a name in generated output.
+The same rule decides where a *response* goes. `RunAccepted` returns `Run`, and
+`Run` belongs in `components/run.yaml` because that is the schema tasks extend,
+so a root-declared `RunAccepted` would be a root component whose subtree
+reaches an external file. openapi-typescript then emits it twice — once as the
+root's `RunAccepted`, which no operation references, and once as the prefixed
+`responses-RunAccepted` the operations point at. `RunAccepted` therefore lives
+in `components/run.yaml` beside the schema it returns, and the path files reach
+it as `../components/run.yaml#/components/responses/RunAccepted`. A response
+declared in the same file as every schema it reaches keeps one name in both
+generated outputs.
+
+The rule for a new resource: a component belongs in the file that reaches
+everything it references. Root components may reference the root; a component
+that reaches `components/` belongs in `components/`.
 
 ### Generation is two passes
 

@@ -35,3 +35,6 @@ type Run struct {
 type StopRunRequest struct {
 	Reason *string `json:"reason,omitempty"`
 }
+
+// RunAccepted defines model for RunAccepted.
+type RunAccepted = Run

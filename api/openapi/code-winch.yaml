@@ -57,14 +57,6 @@ components:
       description: Idempotency key associated with the response.
       schema: { type: string }
   responses:
-    RunAccepted:
-      description: The command was accepted or safely replayed.
-      headers:
-        ETag: { $ref: "#/components/headers/ETag" }
-        Idempotency-Key: { $ref: "#/components/headers/IdempotencyKey" }
-      content:
-        application/json:
-          schema: { $ref: "./components/run.yaml#/components/schemas/Run" }
     ProblemBadRequest:
       description: The request could not be parsed.
       content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" }, example: { type: "https://code-winch.dev/problems/bad-request", title: "Bad request", status: 400, code: "bad_request", detail: "The request body is not valid JSON.", requestId: "01K0EXAMPLE00000000000000" } } }

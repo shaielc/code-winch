@@ -13,7 +13,7 @@ post:
       application/json:
         schema: { $ref: "../components/run.yaml#/components/schemas/StopRunRequest" }
   responses:
-    "202": { $ref: "../code-winch.yaml#/components/responses/RunAccepted" }
+    "202": { $ref: "../components/run.yaml#/components/responses/RunAccepted" }
     "400": { $ref: "../code-winch.yaml#/components/responses/ProblemBadRequest" }
     "401": { $ref: "../code-winch.yaml#/components/responses/ProblemUnauthorized" }
     "404": { $ref: "../code-winch.yaml#/components/responses/ProblemRunNotFound" }
