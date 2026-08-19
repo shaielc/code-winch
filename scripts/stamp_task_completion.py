@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stamp a pull request's task as completed in the workplan tracker."""
+"""Stamp a pull request's task as completed in the active workplan tracker."""
 
 from __future__ import annotations
 
@@ -12,14 +12,31 @@ from typing import Any
 
 from task_scheduler import failure_detail, run, task_id_for_pr
 
-TRACKER = Path("docs/workplan/tasks.json")
+WORKPLAN_ROOT = Path("docs/workplan")
 BOT_NAME = "github-actions[bot]"
 BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
 
 
+def active_workplan_dir(repo_root: Path) -> Path:
+    current = repo_root / WORKPLAN_ROOT / "CURRENT"
+    if not current.exists():
+        return WORKPLAN_ROOT
+    generation = current.read_text().strip()
+    if not generation or "/" in generation or ".." in generation:
+        raise ValueError(f"invalid active workplan generation {generation!r}")
+    path = WORKPLAN_ROOT / generation
+    if not (repo_root / path / "tasks.json").is_file():
+        raise ValueError(f"active workplan tracker does not exist at {path / 'tasks.json'}")
+    return path
+
+
+def tracker_path(repo_root: Path) -> Path:
+    return active_workplan_dir(repo_root) / "tasks.json"
+
+
 def load_tracker(path: Path) -> dict[str, Any]:
     tracker = json.loads(path.read_text())
-    if tracker.get("schema_version") != 1:
+    if tracker.get("schema_version") not in {1, 2}:
         raise ValueError(f"unsupported tracker schema in {path}")
     return tracker
 
@@ -39,7 +56,6 @@ def contains_base(repo_root: Path, remote: str, branch: str) -> bool:
 
 
 def merge_base_branch(repo_root: Path, remote: str, branch: str) -> bool:
-    """Merge the base branch in, leaving the branch untouched when it conflicts."""
     result = subprocess.run(
         ("git", "merge", "--no-edit", f"{remote}/{branch}"),
         cwd=repo_root,
@@ -69,9 +85,9 @@ def push_head(repo_root: Path, remote: str, head_ref: str) -> None:
     run("git", "push", remote, f"HEAD:refs/heads/{head_ref}", cwd=repo_root)
 
 
-def push_stamp(repo_root: Path, remote: str, head_ref: str, task_id: str) -> None:
+def push_stamp(repo_root: Path, remote: str, head_ref: str, task_id: str, tracker: Path) -> None:
     configure_identity(repo_root)
-    run("git", "add", str(TRACKER), cwd=repo_root)
+    run("git", "add", str(tracker), cwd=repo_root)
     run("git", "commit", "-m", f"chore: mark {task_id} completed", cwd=repo_root)
     push_head(repo_root, remote, head_ref)
 
@@ -83,7 +99,6 @@ def catch_up_with_base(
     payload: dict[str, Any],
     task_id: str,
 ) -> int:
-    """Fold the base branch into a stale branch so the next approval can stamp it."""
     base = f"{args.remote}/{args.branch}"
     if is_fork(pr, payload):
         print(
@@ -125,7 +140,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     repo_root = Path(run("git", "rev-parse", "--show-toplevel", cwd=Path.cwd()))
-    tracker_path = repo_root / TRACKER
+    tracker = repo_root / tracker_path(repo_root)
 
     payload = json.loads(args.event_file.read_text())
     pr = payload.get("pull_request")
@@ -137,12 +152,16 @@ def main() -> int:
         print(f"pull request is labelled {args.skip_label}; skipping the task gate")
         return 0
 
-    tracker = load_tracker(tracker_path)
-    known_ids = {task["id"] for task in tracker["tasks"]}
-    task_id = task_id_for_pr(pr, known_ids)
+    tracker_data = load_tracker(tracker)
+    executable = {
+        task["id"]
+        for task in tracker_data["tasks"]
+        if task.get("status") not in {"superseded", "removed"}
+    }
+    task_id = task_id_for_pr(pr, executable)
     if not task_id:
         print(
-            "error: this pull request must reference exactly one known task ID in its "
+            "error: this pull request must reference exactly one executable task ID in its "
             "title, body, or branch name. Add `Task: P0-000` to the body, or apply the "
             f"`{args.skip_label}` label if it does not implement a workplan task.",
             file=sys.stderr,
@@ -153,7 +172,7 @@ def main() -> int:
         print(f"{task_id} resolved; it will be stamped completed once approved")
         return 0
 
-    task = next(item for item in tracker["tasks"] if item["id"] == task_id)
+    task = next(item for item in tracker_data["tasks"] if item["id"] == task_id)
     if task["status"] == "completed":
         print(f"{task_id} is already completed in the tracker")
         return 0
@@ -168,13 +187,13 @@ def main() -> int:
     if is_fork(pr, payload):
         print(
             f"error: {task_id} needs a tracker update but the branch lives in a fork, so "
-            "it cannot be pushed. Set the status manually in docs/workplan/tasks.json.",
+            f"it cannot be pushed. Set the status manually in {tracker.relative_to(repo_root)}.",
             file=sys.stderr,
         )
         return 1
 
-    save_tracker(tracker_path, tracker)
-    push_stamp(repo_root, args.remote, pr["head"]["ref"], task_id)
+    save_tracker(tracker, tracker_data)
+    push_stamp(repo_root, args.remote, pr["head"]["ref"], task_id, tracker.relative_to(repo_root))
     print(f"stamped {task_id} completed")
     return 0
 
