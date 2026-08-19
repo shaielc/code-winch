@@ -236,6 +236,127 @@ This prevents two opposite errors:
 - falsely declaring old completed work malformed because the planning language evolved;
 - using legacy status to excuse a repository that still violates current invariants.
 
+## 7. Enforce completion closure without overstuffing seams
+
+V2 should prevent two opposite planning failures:
+
+1. **under-scoping a capability** by postponing part of its completion condition to a follow-up task;
+2. **over-scoping a seam** by pulling future refactors, hardening, and extension scaffolding into the task merely because they are nearby.
+
+### Completion closure
+
+A task may not delegate part of its own completion condition to a later task.
+
+For an operator-visible capability, completion includes the minimal maintained hands-on path needed to exercise that capability against the running deployment.
+
+Do not split a capability into:
+
+- one task that implements the internal or HTTP behavior; and
+- a later task whose main purpose is to make that same behavior operable through the maintained CLI.
+
+If the CLI command is the ordinary maintained hands-on way to exercise the capability, it belongs in the same task that introduces the capability.
+
+Raw HTTP calls, direct database inspection, internal test harnesses, or temporary development commands may support verification, but they do not justify deferring the maintained operator path.
+
+A later CLI task is legitimate only when it adds genuinely new operator capability or hardens an already-complete operator surface, for example richer output modes, scripting guarantees, diagnostics, or commands for behavior introduced by that later task.
+
+### Strengthen the seam definition
+
+A V2 seam should leave a complete vertical slice through the running system. It should contain:
+
+- the port or boundary;
+- the implementation needed for the current runtime profile;
+- composition-root wiring;
+- the public interaction surface;
+- the minimal maintained operator/debug command needed to drive it by hand.
+
+Demonstration: a person drives the new behavior through the maintained operator surface against the running deployment.
+
+A seam is not complete if a later task is required merely to expose or operate behavior already implemented by the seam.
+
+### Strengthen the hands-on invariant
+
+I5 should become stronger than "a CLI exists early." It should require immediate reachability of new operator-visible capabilities:
+
+> **I5 — Every new operator-visible capability is immediately reachable through the maintained hands-on surface.**
+>
+> The maintained CLI is not a follow-up integration layer. When a task introduces a new operator-visible capability, that same task adds the minimal CLI path required to exercise it. Later CLI tasks may improve ergonomics or expose genuinely new capabilities, but may not postpone basic operability of an already-completed seam.
+
+### Keep completion work separate from future enablement
+
+A seam task contains everything necessary for its objective to be true, but nothing whose primary purpose is to make later work easier.
+
+Before adding a scope item to a seam, ask:
+
+1. Is this required for the task's observable demonstration?
+2. Is it required to preserve a repository invariant at task completion?
+3. Would the capability be incomplete or misleading without it?
+
+If all three answers are no, the item normally does not belong in the seam.
+
+In particular, extract work whose primary purpose is:
+
+- reducing future merge collisions;
+- restructuring files for future parallelism;
+- introducing extension points for later tasks;
+- adding policy hooks with permissive or no-op behavior for future policies;
+- hardening restart or failure behavior beyond the task's stated capability;
+- adding observability not required to prove the capability;
+- refactoring a working implementation into a more extensible form.
+
+Such work should become a separate capability, hardening, or revision task as appropriate.
+
+### Split test
+
+When considering splitting one proposed task into two, inspect the dependency between them.
+
+The split is invalid if the second task's objective is substantially:
+
+> make the capability introduced by the first task actually usable through the maintained operator surface.
+
+In that case, merge the operator path into the first task.
+
+The split is valid when the second task introduces a distinct observable property, such as:
+
+- a new capability;
+- a new substrate;
+- failure or recovery guarantees;
+- performance or security guarantees;
+- a revision of an already-working implementation;
+- operator ergonomics beyond what is required to drive the existing capability.
+
+### Overstuffed seam test
+
+After drafting a seam brief, classify every scope bullet as one of:
+
+- required behavior;
+- required wiring;
+- required operator reachability;
+- required invariant preservation;
+- future enablement;
+- hardening;
+- refactor/revision.
+
+A seam should normally contain only the first four.
+
+Future enablement, hardening, and revision work should be extracted unless removing it would make the seam's objective false or violate an invariant at task completion.
+
+### Audit smells
+
+An audit should flag a likely invalid split when:
+
+- task A introduces an application/API capability;
+- task B depends directly on A;
+- task B's main purpose is to expose that same capability through the maintained CLI.
+
+This usually means task B is part of task A's completion condition.
+
+An audit should also flag a likely overstuffed seam when scope bullets exist mainly to prepare unrelated later tasks. Typical examples are pre-emptive API-file restructuring, extension registries, permissive policy hooks, unrelated metrics, or failure-mode hardening that can be demonstrated independently.
+
+The combined rule is:
+
+> Do not under-scope the seam by postponing basic operability. Do not over-scope the seam by pulling future refactors and hardening into it.
+
 ## Open schema questions
 
 Before making V2 normative, decide:
@@ -248,4 +369,4 @@ Before making V2 normative, decide:
 - whether `revision` is the final dependency-reason name;
 - whether a materially rewritten pending task retains its ID or is superseded by a new ID, and where the threshold is defined.
 
-The core rule should remain simple: version history explains old work, re-derivation reconciles all unfinished work, and current invariant gaps always produce explicit repair work.
+The core rule should remain simple: version history explains old work, re-derivation reconciles all unfinished work, current invariant gaps always produce explicit repair work, and every completed capability closes its operator-visible loop without absorbing unrelated future work.
