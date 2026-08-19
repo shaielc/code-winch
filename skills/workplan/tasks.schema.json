@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://code-winch.invalid/schemas/workplan-tasks-v2.schema.json",
+  "title": "Code Winch workplan task tracker v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status_values", "tasks"],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "status_values": {
+      "const": [
+        "pending",
+        "in_progress",
+        "blocked",
+        "completed",
+        "superseded",
+        "removed"
+      ]
+    },
+    "tasks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/task" }
+    }
+  },
+  "$defs": {
+    "taskId": { "type": "string", "pattern": "^P[0-5]-[0-9]{3}$" },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "phase",
+        "phase_name",
+        "status",
+        "depends_on",
+        "owner",
+        "blocked_reason",
+        "brief",
+        "workplan_version",
+        "supersedes",
+        "superseded_by",
+        "removal_reason"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/taskId" },
+        "title": { "type": "string", "minLength": 1 },
+        "phase": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "phase_name": { "type": "string", "minLength": 1 },
+        "status": {
+          "enum": [
+            "pending",
+            "in_progress",
+            "blocked",
+            "completed",
+            "superseded",
+            "removed"
+          ]
+        },
+        "depends_on": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/taskId" }
+        },
+        "owner": { "type": ["string", "null"] },
+        "blocked_reason": { "type": ["string", "null"] },
+        "brief": { "type": "string", "pattern": "^phase-[0-5]/.+\\.md$" },
+        "workplan_version": { "type": "integer", "minimum": 1 },
+        "supersedes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/taskId" }
+        },
+        "superseded_by": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/taskId" }
+        },
+        "removal_reason": { "type": ["string", "null"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "blocked" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "blocked_reason": { "type": "string", "minLength": 1 }
+            }
+          },
+          "else": {
+            "properties": { "blocked_reason": { "type": "null" } }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "superseded" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "owner": { "type": "null" },
+              "superseded_by": { "minItems": 1 },
+              "removal_reason": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "removed" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "owner": { "type": "null" },
+              "superseded_by": { "maxItems": 0 },
+              "removal_reason": { "type": "string", "minLength": 1 }
+            }
+          },
+          "else": {
+            "properties": { "removal_reason": { "type": "null" } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": { "enum": ["pending", "in_progress", "blocked", "completed"] }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": { "superseded_by": { "maxItems": 0 } }
+          }
+        }
+      ]
+    }
+  }
+}
