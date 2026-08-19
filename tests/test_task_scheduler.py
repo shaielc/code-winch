@@ -23,54 +23,56 @@ class TaskSchedulerTests(unittest.TestCase):
         self.assertIs(task_scheduler.merged_pull_request({"action": "closed", "pull_request": pull}), pull)
         self.assertIsNone(task_scheduler.merged_pull_request({"action": "opened", "pull_request": pull}))
 
-    def test_task_id_for_pr_accepts_one_known_id(self):
-        pull = {"title": "Implement P0-001", "body": "Task: P0-001", "head": {"ref": "work"}}
-        self.assertEqual(task_scheduler.task_id_for_pr(pull, {"P0-001"}), "P0-001")
+    def test_qualified_pr_identity_must_match_generation(self):
+        pull = {"title": "Implement v2/P1-050", "body": "Task: v2/P1-050", "head": {"ref": "work"}}
+        self.assertEqual(task_scheduler.task_identity_for_pr(pull, {"P1-050"}, "v2"), "P1-050")
+        self.assertIsNone(task_scheduler.task_identity_for_pr(pull, {"P1-050"}, "v3"))
+        bare = {"title": "Implement P1-050", "body": "Task: P1-050", "head": {"ref": "work"}}
+        self.assertIsNone(task_scheduler.task_identity_for_pr(bare, {"P1-050"}, "v2"))
 
-    def test_effective_tracker_never_revives_terminal_planning_history(self):
+    def test_stale_legacy_state_cannot_override_reused_v2_id(self):
         tracker = {
-            "tasks": [
-                {"id": "P0-001", "status": "superseded", "owner": None, "blocked_reason": None},
-                {"id": "P0-002", "status": "removed", "owner": None, "blocked_reason": None},
-            ]
+            "_workplan_dir": "docs/workplan/v2", "_generation": "v2",
+            "tasks": [{"id": "P1-050", "status": "pending", "owner": None, "blocked_reason": None}],
         }
-        state = {
-            "tasks": {
-                "P0-001": {"status": "in_progress", "owner": "worker", "blocked_reason": None},
-                "P0-002": {"status": "pending", "owner": None, "blocked_reason": None},
-            }
-        }
-        effective = task_scheduler.effective_tracker(tracker, state)
-        self.assertEqual([task["status"] for task in effective["tasks"]], ["superseded", "removed"])
-
-    def test_retire_completed_retires_all_terminal_tracker_states(self):
-        tracker = {"tasks": [{"id": "P0-001", "status": "superseded"}, {"id": "P0-002", "status": "removed"}]}
         state = {
             "schema_version": 1,
             "tasks": {
-                "P0-001": {"status": "in_progress", "owner": "a"},
-                "P0-002": {"status": "blocked", "owner": "b"},
+                "P1-050": {"status": "in_progress", "owner": "old-worker", "blocked_reason": None},
+                "v1/P1-050": {"status": "completed", "owner": None, "blocked_reason": None},
             },
         }
-        self.assertTrue(task_scheduler.retire_completed(tracker, state))
-        self.assertEqual(state["tasks"]["P0-001"]["status"], "superseded")
-        self.assertEqual(state["tasks"]["P0-002"]["status"], "removed")
-        self.assertIsNone(state["tasks"]["P0-001"]["owner"])
-        self.assertIsNone(state["tasks"]["P0-002"]["owner"])
+        effective = task_scheduler.effective_tracker(tracker, state)
+        self.assertEqual(effective["tasks"][0]["status"], "pending")
+        self.assertIsNone(effective["tasks"][0]["owner"])
+
+    def test_v2_state_key_does_not_leak_into_v3(self):
+        state = {"schema_version": 1, "tasks": {"v2/P1-050": {"status": "in_progress", "owner": "worker", "blocked_reason": None}}}
+        v2 = {"_workplan_dir": "docs/workplan/v2", "_generation": "v2", "tasks": [{"id": "P1-050", "status": "pending", "owner": None, "blocked_reason": None}]}
+        v3 = {"_workplan_dir": "docs/workplan/v3", "_generation": "v3", "tasks": [{"id": "P1-050", "status": "pending", "owner": None, "blocked_reason": None}]}
+        self.assertEqual(task_scheduler.effective_tracker(v2, state)["tasks"][0]["status"], "in_progress")
+        self.assertEqual(task_scheduler.effective_tracker(v3, state)["tasks"][0]["status"], "pending")
+
+    def test_record_completion_persists_qualified_identity(self):
+        state = {"schema_version": 1, "tasks": {}}
+        pull = {
+            "title": "v2/P1-050", "body": "Task: v2/P1-050", "head": {"ref": "work"},
+            "html_url": "https://example/pr/1", "merged_at": "2026-01-01T00:00:00Z",
+        }
+        self.assertTrue(task_scheduler.record_completions(state, [pull], {"P1-050"}, "v2"))
+        self.assertIn("v2/P1-050", state["tasks"])
+        self.assertNotIn("P1-050", state["tasks"])
+        self.assertEqual(state["tasks"]["v2/P1-050"]["generation"], "v2")
 
     def test_remote_workplan_dir_uses_current_generation(self):
         with patch.object(task_scheduler, "git_show_optional", return_value="v2"):
             self.assertEqual(task_scheduler.remote_workplan_dir(Path("/repo"), "origin", "main"), "docs/workplan/v2")
 
-    def test_remote_workplan_dir_falls_back_to_legacy_root(self):
-        with patch.object(task_scheduler, "git_show_optional", return_value=None):
-            self.assertEqual(task_scheduler.remote_workplan_dir(Path("/repo"), "origin", "main"), "docs/workplan")
-
-    def test_prompt_uses_active_workplan_directory(self):
-        template = Template("Read $workplan_dir/$brief for $id")
+    def test_prompt_uses_qualified_task_identity(self):
+        template = Template("Read $workplan_dir/$brief for $task_key")
         task = {"id": "P1-050", "title": "Runs", "brief": "phase-1/p1-050.md"}
-        prompt = task_scheduler.prompt_for(template, task, "docs/workplan/v2")
-        self.assertEqual(prompt, "Read docs/workplan/v2/phase-1/p1-050.md for P1-050")
+        prompt = task_scheduler.prompt_for(template, task, "docs/workplan/v2", "v2")
+        self.assertEqual(prompt, "Read docs/workplan/v2/phase-1/p1-050.md for v2/P1-050")
 
     def test_task_url_survives_noise_on_dispatch_output(self):
         url = "https://chatgpt.com/codex/tasks/task_e_123"

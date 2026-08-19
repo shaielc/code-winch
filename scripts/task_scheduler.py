@@ -18,7 +18,11 @@ from pathlib import Path
 from string import Template
 from typing import Any
 
-TASK_ID = re.compile(r"(?<![A-Z0-9])P\d+-\d{3}(?![A-Z0-9])", re.IGNORECASE)
+TASK_REF = re.compile(
+    r"(?<![A-Z0-9])(?:(?P<generation>v[1-9][0-9]*|legacy)/)?"
+    r"(?P<task>P\d+-\d{3})(?![A-Z0-9])",
+    re.IGNORECASE,
+)
 TASK_URL = re.compile(r"https?://\S+/codex/tasks/\S+")
 PROMPT_TEMPLATE = Path("scripts/task-prompt.md")
 TERMINAL_TRACKER_STATUSES = {"completed", "superseded", "removed"}
@@ -90,10 +94,31 @@ def acquire_lock(state_file: Path) -> Any:
 
 def git_show_optional(repo_root: Path, spec: str) -> str | None:
     result = subprocess.run(
-        ("git", "show", spec), cwd=repo_root, check=False, text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        ("git", "show", spec),
+        cwd=repo_root,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
     return result.stdout.strip() if result.returncode == 0 else None
+
+
+def workplan_generation(workplan_dir: str) -> str:
+    normalized = workplan_dir.rstrip("/")
+    if normalized == "docs/workplan":
+        return "legacy"
+    generation = Path(normalized).name
+    if not re.fullmatch(r"v[1-9][0-9]*", generation):
+        raise ValueError(f"cannot derive workplan generation from {workplan_dir!r}")
+    return generation
+
+
+def task_key(generation: str, task_id: str) -> str:
+    generation = generation.lower()
+    if generation != "legacy" and not re.fullmatch(r"v[1-9][0-9]*", generation):
+        raise ValueError(f"invalid workplan generation {generation!r}")
+    return f"{generation}/{task_id.upper()}"
 
 
 def remote_workplan_dir(repo_root: Path, remote: str, branch: str) -> str:
@@ -109,9 +134,12 @@ def remote_workplan_dir(repo_root: Path, remote: str, branch: str) -> str:
 def load_tracker(repo_root: Path, remote: str, branch: str) -> dict[str, Any]:
     run("git", "fetch", "--quiet", remote, branch, cwd=repo_root)
     workplan_dir = remote_workplan_dir(repo_root, remote, branch)
-    contents = run("git", "show", f"{remote}/{branch}:{workplan_dir}/tasks.json", cwd=repo_root)
+    contents = run(
+        "git", "show", f"{remote}/{branch}:{workplan_dir}/tasks.json", cwd=repo_root
+    )
     tracker = json.loads(contents)
     tracker["_workplan_dir"] = workplan_dir
+    tracker["_generation"] = workplan_generation(workplan_dir)
     return tracker
 
 
@@ -123,11 +151,33 @@ def local_workplan_dir(repo_root: Path, tracker_file: Path) -> str:
         return tracker_file.parent.as_posix()
 
 
+def tracker_generation(tracker: dict[str, Any]) -> str:
+    generation = str(tracker.get("_generation") or "")
+    if generation:
+        return generation
+    return workplan_generation(str(tracker.get("_workplan_dir", "docs/workplan")))
+
+
+def state_entry(
+    state: dict[str, Any], generation: str, task_id: str
+) -> tuple[str, dict[str, Any] | None]:
+    key = task_key(generation, task_id)
+    entry = state["tasks"].get(key)
+    if entry is not None:
+        return key, entry
+    # Pre-V2 state used bare IDs. Recognize those aliases only while the active
+    # tracker is still the legacy unversioned generation; never let them leak
+    # into a versioned generation that may reuse the same short ID.
+    if generation == "legacy":
+        return task_id, state["tasks"].get(task_id)
+    return key, None
+
+
 def effective_tracker(tracker: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
     effective = copy.deepcopy(tracker)
-    overrides = state["tasks"]
+    generation = tracker_generation(tracker)
     for task in effective["tasks"]:
-        local = overrides.get(task["id"])
+        _, local = state_entry(state, generation, task["id"])
         if local and task["status"] not in TERMINAL_TRACKER_STATUSES:
             task["status"] = local["status"]
             task["owner"] = local.get("owner")
@@ -136,18 +186,25 @@ def effective_tracker(tracker: dict[str, Any], state: dict[str, Any]) -> dict[st
 
 
 def retire_completed(tracker: dict[str, Any], state: dict[str, Any]) -> bool:
-    terminal = {
-        task["id"]: task["status"] for task in tracker["tasks"]
-        if task["status"] in TERMINAL_TRACKER_STATUSES
-    }
-    retired = [
-        task_id for task_id, entry in state["tasks"].items()
-        if task_id in terminal and entry["status"] != terminal[task_id]
-    ]
-    for task_id in retired:
-        state["tasks"][task_id]["status"] = terminal[task_id]
-        state["tasks"][task_id]["owner"] = None
-    return bool(retired)
+    generation = tracker_generation(tracker)
+    changed = False
+    for task in tracker["tasks"]:
+        if task["status"] not in TERMINAL_TRACKER_STATUSES:
+            continue
+        key, entry = state_entry(state, generation, task["id"])
+        if not entry or entry.get("status") == task["status"]:
+            continue
+        entry["status"] = task["status"]
+        entry["owner"] = None
+        entry.setdefault("generation", generation)
+        entry.setdefault("task_id", task["id"])
+        entry.setdefault("task_key", task_key(generation, task["id"]))
+        qualified = task_key(generation, task["id"])
+        if key != qualified:
+            state["tasks"][qualified] = entry
+            del state["tasks"][key]
+        changed = True
+    return changed
 
 
 def merged_pull_request(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -157,26 +214,61 @@ def merged_pull_request(payload: dict[str, Any]) -> dict[str, Any] | None:
     return pull if isinstance(pull, dict) and pull.get("merged_at") else None
 
 
-def task_id_for_pr(pr: dict[str, Any], known_ids: set[str]) -> str | None:
-    text = "\n".join(
+def pr_text(pr: dict[str, Any]) -> str:
+    return "\n".join(
         str(value or "")
         for value in (pr.get("title"), pr.get("body"), pr.get("head", {}).get("ref"))
     )
-    matches = {match.upper() for match in TASK_ID.findall(text)} & known_ids
+
+
+def task_id_for_pr(pr: dict[str, Any], known_ids: set[str]) -> str | None:
+    """Compatibility helper: resolve one known task ID regardless of generation."""
+    matches = {
+        match.group("task").upper()
+        for match in TASK_REF.finditer(pr_text(pr))
+        if match.group("task").upper() in known_ids
+    }
     return next(iter(matches)) if len(matches) == 1 else None
 
 
-def record_completions(state: dict[str, Any], pulls: list[dict[str, Any]], known_ids: set[str]) -> bool:
+def task_identity_for_pr(
+    pr: dict[str, Any], known_ids: set[str], generation: str
+) -> str | None:
+    """Resolve one task only when its persistent PR identity matches the generation."""
+    matches: set[str] = set()
+    for match in TASK_REF.finditer(pr_text(pr)):
+        task_id = match.group("task").upper()
+        if task_id not in known_ids:
+            continue
+        qualifier = (match.group("generation") or "").lower()
+        if generation == "legacy":
+            if qualifier in {"", "legacy"}:
+                matches.add(task_id)
+        elif qualifier == generation.lower():
+            matches.add(task_id)
+    return next(iter(matches)) if len(matches) == 1 else None
+
+
+def record_completions(
+    state: dict[str, Any],
+    pulls: list[dict[str, Any]],
+    known_ids: set[str],
+    generation: str,
+) -> bool:
     changed = False
     for pr in pulls:
-        task_id = task_id_for_pr(pr, known_ids)
+        task_id = task_identity_for_pr(pr, known_ids, generation)
         if not task_id:
             continue
-        current = state["tasks"].get(task_id, {})
+        key = task_key(generation, task_id)
+        current = state["tasks"].get(key, {})
         if current.get("status") == "completed":
             continue
-        state["tasks"][task_id] = {
+        state["tasks"][key] = {
             **current,
+            "task_key": key,
+            "generation": generation,
+            "task_id": task_id,
             "status": "completed",
             "owner": None,
             "blocked_reason": None,
@@ -188,10 +280,15 @@ def record_completions(state: dict[str, Any], pulls: list[dict[str, Any]], known
 
 
 def available_tasks(repo_root: Path, tracker: dict[str, Any]) -> list[dict[str, Any]]:
+    serializable = {key: value for key, value in tracker.items() if not key.startswith("_")}
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as temporary:
-        json.dump(tracker, temporary)
+        json.dump(serializable, temporary)
         temporary.flush()
-        output = run(str(repo_root / "scripts/list-available-tasks.sh"), temporary.name, cwd=repo_root)
+        output = run(
+            str(repo_root / "scripts/list-available-tasks.sh"),
+            temporary.name,
+            cwd=repo_root,
+        )
     return json.loads(output)
 
 
@@ -200,9 +297,19 @@ def load_prompt_template(repo_root: Path, path: Path) -> Template:
     return Template(resolved.read_text())
 
 
-def prompt_for(template: Template, task: dict[str, Any], workplan_dir: str) -> str:
+def prompt_for(
+    template: Template,
+    task: dict[str, Any],
+    workplan_dir: str,
+    generation: str | None = None,
+) -> str:
+    generation = generation or workplan_generation(workplan_dir)
     return template.substitute(
-        id=task["id"], title=task["title"], brief=task["brief"], workplan_dir=workplan_dir
+        id=task["id"],
+        task_key=task_key(generation, task["id"]),
+        title=task["title"],
+        brief=task["brief"],
+        workplan_dir=workplan_dir,
     )
 
 
@@ -213,14 +320,27 @@ def dispatch(
     tasks: list[dict[str, Any]],
     template: Template,
     workplan_dir: str,
+    generation: str,
     environment: str,
     capacity: int,
 ) -> None:
-    active = sum(1 for value in state["tasks"].values() if value["status"] == "in_progress")
+    active = sum(
+        1
+        for key, value in state["tasks"].items()
+        if value.get("status") == "in_progress"
+        and (
+            value.get("generation") == generation
+            or (generation == "legacy" and "/" not in key and not value.get("generation"))
+        )
+    )
     for task in tasks[: max(0, capacity - active)]:
         task_id = task["id"]
-        owner = f"codex-cloud:{task_id}:{int(time.time())}"
-        state["tasks"][task_id] = {
+        key = task_key(generation, task_id)
+        owner = f"codex-cloud:{key}:{int(time.time())}"
+        state["tasks"][key] = {
+            "task_key": key,
+            "generation": generation,
+            "task_id": task_id,
             "status": "in_progress",
             "owner": owner,
             "blocked_reason": None,
@@ -229,21 +349,32 @@ def dispatch(
         save_state(state_file, state)
         try:
             output = run(
-                "codex", "cloud", "exec", "--env", environment,
-                prompt_for(template, task, workplan_dir), cwd=repo_root,
+                "codex",
+                "cloud",
+                "exec",
+                "--env",
+                environment,
+                prompt_for(template, task, workplan_dir, generation),
+                cwd=repo_root,
             )
         except (OSError, subprocess.CalledProcessError) as error:
             detail = failure_detail(error)
-            state["tasks"][task_id] = {
-                "status": "pending", "owner": None, "blocked_reason": None,
-                "launch_error": detail, "updated_at": datetime.now(UTC).isoformat(),
+            state["tasks"][key] = {
+                "task_key": key,
+                "generation": generation,
+                "task_id": task_id,
+                "status": "pending",
+                "owner": None,
+                "blocked_reason": None,
+                "launch_error": detail,
+                "updated_at": datetime.now(UTC).isoformat(),
             }
             save_state(state_file, state)
-            print(f"failed to dispatch {task_id}: {detail}", file=sys.stderr)
+            print(f"failed to dispatch {key}: {detail}", file=sys.stderr)
             continue
-        state["tasks"][task_id]["task_url"] = task_url_from(output) or output
+        state["tasks"][key]["task_url"] = task_url_from(output) or output
         save_state(state_file, state)
-        print(f"dispatched {task_id}: {output}")
+        print(f"dispatched {key}: {output}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -251,35 +382,61 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--env", required=True, help="Codex Cloud environment ID")
     parser.add_argument("--remote", default="origin")
     parser.add_argument("--branch", default="main")
-    parser.add_argument("--repo-root", type=Path, help="directory holding scripts/; defaults to the enclosing git checkout")
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        help="directory holding scripts/; defaults to the enclosing git checkout",
+    )
     parser.add_argument("--state-file", type=Path)
-    parser.add_argument("--tracker-file", type=Path, help="read the tracker from this file instead of the remote default branch")
-    parser.add_argument("--tracker-snapshot", type=Path, help="write the tracker this run scheduled from to this path")
+    parser.add_argument(
+        "--tracker-file",
+        type=Path,
+        help="read the tracker from this file instead of the remote default branch",
+    )
+    parser.add_argument(
+        "--tracker-snapshot",
+        type=Path,
+        help="write the tracker this run scheduled from to this path",
+    )
     parser.add_argument("--prompt-template", type=Path, default=PROMPT_TEMPLATE)
-    parser.add_argument("--task", help="dispatch only this task ID when it is available")
+    parser.add_argument("--task", help="dispatch only this short task ID when it is available")
     parser.add_argument("--max-concurrent", type=int, default=3)
-    parser.add_argument("--event-file", type=Path, help="GitHub Actions event file; omit for a manual run")
+    parser.add_argument(
+        "--event-file", type=Path, help="GitHub Actions event file; omit for a manual run"
+    )
     arguments = parser.parse_args()
     if arguments.repo_root and not arguments.state_file:
         parser.error("--state-file is required when --repo-root is not a git checkout")
     return arguments
 
 
-def schedule(repo_root: Path, args: argparse.Namespace, state_file: Path, pulls: list[dict[str, Any]]) -> None:
+def schedule(
+    repo_root: Path,
+    args: argparse.Namespace,
+    state_file: Path,
+    pulls: list[dict[str, Any]],
+) -> None:
     if args.tracker_file:
         tracker = json.loads(args.tracker_file.read_text())
-        tracker["_workplan_dir"] = str(
+        workplan_dir = str(
             tracker.get("_workplan_dir") or local_workplan_dir(repo_root, args.tracker_file)
+        )
+        tracker["_workplan_dir"] = workplan_dir
+        tracker["_generation"] = str(
+            tracker.get("_generation") or workplan_generation(workplan_dir)
         )
     else:
         tracker = load_tracker(repo_root, args.remote, args.branch)
     if args.tracker_snapshot:
         write_json(args.tracker_snapshot, tracker)
+
+    generation = tracker_generation(tracker)
     state = load_state(state_file)
     known_ids = {task["id"] for task in tracker["tasks"]}
-    changed = record_completions(state, pulls, known_ids)
+    changed = record_completions(state, pulls, known_ids, generation)
     if retire_completed(tracker, state) or changed:
         save_state(state_file, state)
+
     template = load_prompt_template(repo_root, args.prompt_template)
     available = available_tasks(repo_root, effective_tracker(tracker, state))
     if args.task:
@@ -288,16 +445,25 @@ def schedule(repo_root: Path, args: argparse.Namespace, state_file: Path, pulls:
         if not available:
             print(f"{requested} is not currently available; nothing to dispatch")
             return
+
     dispatch(
-        repo_root, state_file, state, available, template,
-        str(tracker.get("_workplan_dir", "docs/workplan")), args.env, args.max_concurrent,
+        repo_root,
+        state_file,
+        state,
+        available,
+        template,
+        str(tracker["_workplan_dir"]),
+        generation,
+        args.env,
+        args.max_concurrent,
     )
 
 
 def main() -> int:
     args = parse_args()
     repo_root = (
-        args.repo_root or Path(run("git", "rev-parse", "--show-toplevel", cwd=Path.cwd()))
+        args.repo_root
+        or Path(run("git", "rev-parse", "--show-toplevel", cwd=Path.cwd()))
     ).resolve()
     state_file = (args.state_file or default_state_file(repo_root)).resolve()
     lock_handle = acquire_lock(state_file)

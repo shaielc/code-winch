@@ -66,7 +66,7 @@ Stay inside both declarations unless repository reality makes a deviation necess
 
 ### Respect the authored workplan version
 
-A task's `workplan_version` determines the planning contract its brief must satisfy. Do not retroactively declare completed historical work malformed because a later workplan version introduced new brief fields.
+A task's `workplan_version` determines the planning contract its brief must satisfy. Load `skills/workplan/contracts/vN.md` for version N; do not substitute the current contract for historical work.
 
 This does not grandfather repository behavior: current repository invariants still have to hold, and current gaps belong to explicit current-version repair tasks.
 
@@ -99,13 +99,14 @@ Then run everything the active brief lists under **Verification**. Those checks 
 
 ## Pull requests
 
-- Include `Task: <ID>` in the body, and no other task ID.
+- For a versioned generation, include `Task: <generation>/<ID>` in the body (for example `Task: v2/P1-050`) and no other task identity. Legacy unversioned plans continue to use `Task: <ID>`.
 - Do **not** edit execution status fields in the active tracker while implementing a task. Automation stamps `completed` when the pull request is approved.
-- `superseded` and `removed` are planning dispositions owned by workplan re-derivation, not implementation completion states.
 - Report what you ran, what the demonstration showed, surface deviations, and anything deferred together with its owning task ID.
 
 ## Planning ownership
 
-Use `skills/workplan/SKILL.md` for plan creation, extension, re-derivation, updates, and graph audits. Use `skills/task/SKILL.md` for one task's implementation or implementation audit.
+Use `skills/workplan/SKILL.md` for plan creation, extension, clean-slate re-derivation, updates, and graph audits. Use `skills/task/SKILL.md` for one task's implementation or implementation audit.
 
-The distinction is intentional: a task implementation may correctly satisfy its authored brief while a workplan audit still finds that the brief itself is incorrectly decomposed. The task skill reports that as a plan defect; the workplan skill decides whether to rewrite, split, supersede, merge/replace, or remove the task.
+A clean-slate re-derivation archives the old generation and derives remaining work from HEAD plus completed history only. It does not expose unfinished task identities or briefs from the previous generation to the deriving agent.
+
+The distinction remains intentional: a task implementation may correctly satisfy its authored brief while a workplan audit still finds that the brief itself is incorrectly decomposed. The task skill reports that as a plan defect; the workplan skill owns graph repair.

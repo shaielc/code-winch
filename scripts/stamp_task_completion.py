@@ -10,7 +10,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from task_scheduler import failure_detail, run, task_id_for_pr
+from task_scheduler import (
+    failure_detail,
+    run,
+    task_identity_for_pr,
+    task_key,
+    workplan_generation,
+)
 
 WORKPLAN_ROOT = Path("docs/workplan")
 BOT_NAME = "github-actions[bot]"
@@ -26,12 +32,18 @@ def active_workplan_dir(repo_root: Path) -> Path:
         raise ValueError(f"invalid active workplan generation {generation!r}")
     path = WORKPLAN_ROOT / generation
     if not (repo_root / path / "tasks.json").is_file():
-        raise ValueError(f"active workplan tracker does not exist at {path / 'tasks.json'}")
+        raise ValueError(
+            f"active workplan tracker does not exist at {path / 'tasks.json'}"
+        )
     return path
 
 
 def tracker_path(repo_root: Path) -> Path:
     return active_workplan_dir(repo_root) / "tasks.json"
+
+
+def tracker_generation(repo_root: Path) -> str:
+    return workplan_generation(active_workplan_dir(repo_root).as_posix())
 
 
 def load_tracker(path: Path) -> dict[str, Any]:
@@ -85,10 +97,16 @@ def push_head(repo_root: Path, remote: str, head_ref: str) -> None:
     run("git", "push", remote, f"HEAD:refs/heads/{head_ref}", cwd=repo_root)
 
 
-def push_stamp(repo_root: Path, remote: str, head_ref: str, task_id: str, tracker: Path) -> None:
+def push_stamp(
+    repo_root: Path,
+    remote: str,
+    head_ref: str,
+    identity: str,
+    tracker: Path,
+) -> None:
     configure_identity(repo_root)
     run("git", "add", str(tracker), cwd=repo_root)
-    run("git", "commit", "-m", f"chore: mark {task_id} completed", cwd=repo_root)
+    run("git", "commit", "-m", f"chore: mark {identity} completed", cwd=repo_root)
     push_head(repo_root, remote, head_ref)
 
 
@@ -97,7 +115,7 @@ def catch_up_with_base(
     args: argparse.Namespace,
     pr: dict[str, Any],
     payload: dict[str, Any],
-    task_id: str,
+    identity: str,
 ) -> int:
     base = f"{args.remote}/{args.branch}"
     if is_fork(pr, payload):
@@ -120,10 +138,13 @@ def catch_up_with_base(
     try:
         push_head(repo_root, args.remote, pr["head"]["ref"])
     except subprocess.CalledProcessError as error:
-        print(f"error: could not push the {base} merge: {failure_detail(error)}", file=sys.stderr)
+        print(
+            f"error: could not push the {base} merge: {failure_detail(error)}",
+            file=sys.stderr,
+        )
         return 1
 
-    print(f"merged {base}; approve again to stamp {task_id} completed")
+    print(f"merged {base}; approve again to stamp {identity} completed")
     return 0
 
 
@@ -141,6 +162,7 @@ def main() -> int:
     args = parse_args()
     repo_root = Path(run("git", "rev-parse", "--show-toplevel", cwd=Path.cwd()))
     tracker = repo_root / tracker_path(repo_root)
+    generation = tracker_generation(repo_root)
 
     payload = json.loads(args.event_file.read_text())
     pr = payload.get("pull_request")
@@ -158,27 +180,34 @@ def main() -> int:
         for task in tracker_data["tasks"]
         if task.get("status") not in {"superseded", "removed"}
     }
-    task_id = task_id_for_pr(pr, executable)
+    task_id = task_identity_for_pr(pr, executable, generation)
     if not task_id:
+        example = (
+            "Task: P0-000"
+            if generation == "legacy"
+            else f"Task: {generation}/P0-000"
+        )
         print(
-            "error: this pull request must reference exactly one executable task ID in its "
-            "title, body, or branch name. Add `Task: P0-000` to the body, or apply the "
+            "error: this pull request must reference exactly one task identity for "
+            f"the active generation. Add `{example}` to the body, or apply the "
             f"`{args.skip_label}` label if it does not implement a workplan task.",
             file=sys.stderr,
         )
         return 1
 
+    identity = task_key(generation, task_id)
+
     if args.check_only:
-        print(f"{task_id} resolved; it will be stamped completed once approved")
+        print(f"{identity} resolved; it will be stamped completed once approved")
         return 0
 
     task = next(item for item in tracker_data["tasks"] if item["id"] == task_id)
     if task["status"] == "completed":
-        print(f"{task_id} is already completed in the tracker")
+        print(f"{identity} is already completed in the tracker")
         return 0
 
     if not contains_base(repo_root, args.remote, args.branch):
-        return catch_up_with_base(repo_root, args, pr, payload, task_id)
+        return catch_up_with_base(repo_root, args, pr, payload, identity)
 
     task["status"] = "completed"
     task["owner"] = None
@@ -186,15 +215,22 @@ def main() -> int:
 
     if is_fork(pr, payload):
         print(
-            f"error: {task_id} needs a tracker update but the branch lives in a fork, so "
-            f"it cannot be pushed. Set the status manually in {tracker.relative_to(repo_root)}.",
+            f"error: {identity} needs a tracker update but the branch lives in a "
+            f"fork, so it cannot be pushed. Set the status manually in "
+            f"{tracker.relative_to(repo_root)}.",
             file=sys.stderr,
         )
         return 1
 
     save_tracker(tracker, tracker_data)
-    push_stamp(repo_root, args.remote, pr["head"]["ref"], task_id, tracker.relative_to(repo_root))
-    print(f"stamped {task_id} completed")
+    push_stamp(
+        repo_root,
+        args.remote,
+        pr["head"]["ref"],
+        identity,
+        tracker.relative_to(repo_root),
+    )
+    print(f"stamped {identity} completed")
     return 0
 
 
