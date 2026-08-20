@@ -11,6 +11,8 @@ this repository regardless of which one it is.
 ```
 skills/
 ├── README.md
+├── shared/
+│   └── <reference>.md
 └── <skill-name>/
     └── SKILL.md
 ```
@@ -19,12 +21,21 @@ skills/
 
 | Skill | Audience | Use it when |
 |---|---|---|
-| [`workplan`](workplan/SKILL.md) | planning agent | Creating, extending, re-deriving at a phase gate, updating, or auditing `docs/workplan/` |
+| [`workplan`](workplan/SKILL.md) | planning agent | Creating, extending, re-deriving at a phase gate, updating, or auditing the plan in `docs/workplan/` |
+| [`task`](task/SKILL.md) | implementing agent | Implementing, finishing, reviewing, or auditing one task from `docs/workplan/` |
 
-Audience matters. A planning skill is for whoever writes the plan; an
-implementing agent picking up a single task usually needs only the parts of it
-that constrain how a task is finished, not the whole document. Say who a skill
-is for when you add one.
+Audience matters. Say who a skill is for when you add one: an agent should be
+able to tell from the table whether a skill is addressed to it before loading
+anything.
+
+## Shared reference material
+
+`shared/` holds documents that more than one skill depends on. A skill links to
+what it needs and does not restate it.
+
+| Document | Defines |
+|---|---|
+| [`shared/workplan-model.md`](shared/workplan-model.md) | The workplan's layout, its seven invariants, the four task shapes, dependency-edge reasons, owned surfaces, brief anatomy, and the frozen tracker schema |
 
 ## Getting an agent to use them
 
@@ -34,22 +45,21 @@ Point at the path:
 
 > Follow `skills/workplan/SKILL.md` and audit the plan for coverage gaps.
 
+> Follow `skills/task/SKILL.md` and implement P1-054.
+
 This always works and needs nothing configured. It is the fallback when an
 agent has no skill mechanism, or when you want a skill used once without wiring
 it in permanently.
 
 ### Dispatched task agents
 
-`scripts/task-prompt.md` instructs every dispatched implementer to read
-`docs/workplan/$brief` and **all applicable `AGENTS.md` files**. No `AGENTS.md`
-exists in this repository yet, so that instruction currently resolves to
-nothing.
+`scripts/task-prompt.md` instructs every dispatched implementer to read its
+brief, `skills/task/SKILL.md`, and all applicable `AGENTS.md` files. The root
+`AGENTS.md` points here too, so an agent that lands in the repository by any
+other route finds the same instructions.
 
-Creating a root `AGENTS.md` that points here is what wires skills into
-dispatched work. It should reference the parts an implementer needs — the
-invariants a finished task must preserve, what counts as a demonstration, and
-the rule that nothing is deferred without an owning task ID — rather than
-loading a planning skill wholesale into an implementation prompt.
+Keep that wiring narrow. A dispatched implementer is pointed at the skill
+addressed to it, not at every skill in this directory.
 
 ### Claude Code
 
@@ -60,21 +70,24 @@ from the target.
 ```sh
 mkdir -p .claude/skills
 ln -s ../../skills/workplan .claude/skills/workplan
+ln -s ../../skills/task .claude/skills/task
 echo '.claude/' >> .gitignore
 ```
 
-It is then invocable as `/workplan`, and Claude loads it on its own when the
-work matches its description. Edits to `SKILL.md` are picked up live through the
-link; creating `.claude/skills/` for the first time needs one restart before the
-directory is watched.
+They are then invocable as `/workplan` and `/task`, and Claude loads one on its
+own when the work matches its description. Edits to `SKILL.md` are picked up
+live through the link; creating `.claude/skills/` for the first time needs one
+restart before the directory is watched.
 
-Add one `ln -s` line per skill.
+Add one `ln -s` line per skill. `shared/` is not symlinked — skills reference it
+by repository path.
 
 ## Writing a new skill
 
 One directory per skill, `SKILL.md` inside, directory name matching the
 frontmatter `name`. Supporting files — templates, reference material — sit
-alongside it and are linked from the body.
+alongside it and are linked from the body; material two skills both need goes in
+`shared/` instead.
 
 ```markdown
 ---
@@ -92,3 +105,7 @@ Write the body as instructions, not as an essay about the domain: what to do,
 what to check, what to produce, and what "done" looks like. Prefer templates,
 procedures, and checklists over explanation. If a paragraph does not change
 what an agent does, cut it.
+
+Each skill describes its own job in the affirmative. A skill that defines itself
+by what a neighbouring skill covers instead is unreadable on its own and stales
+the moment that neighbour changes.
