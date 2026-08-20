@@ -465,6 +465,63 @@ Neither skill should absorb the other's responsibility:
 - `task` does not repair plan decomposition while implementing or auditing a task;
 - `workplan` does not substitute a graph audit for implementation evidence that belongs to a task audit.
 
+## 9. A failing invariant is a task, not a finding
+
+Extracted from §1's *Historical invariant repair* and step 3 of §5, both of
+which are otherwise set aside. This idea stands on its own: it needs no per-task
+versioning and no re-derivation procedure.
+
+The seven invariants hold of the plan at HEAD, and HEAD moves. An invariant
+established once can stop being true — a composition root gains a seam nothing
+registers into, a fake profile rots, the standing suite is quietly excluded from
+CI, a deferral's owning task is closed without the work being done.
+
+Today the gate procedure says to check I1–I7 against the real repository, and
+then says nothing about what happens when one fails. A plan can record that the
+system no longer deploys and open the next phase anyway.
+
+The rule: whenever an invariant is unsatisfied — never established, no longer
+established, or only partly established — the plan gains one or more tasks whose
+objective is to restore it. Recording the failure in an audit, a changelog, or a
+report does not discharge it. Only a task with an ID does. This is I6's
+discipline applied to invariants rather than to deferrals.
+
+Beyond the ordinary brief anatomy, a repair task would name:
+
+- which invariant failed;
+- the evidence at HEAD showing the gap — a command and its output, or a
+  `file:line`, not a description of the shortfall;
+- what becomes observable once it is restored;
+- the acceptance criteria that prove restoration, checkable against the
+  repository;
+- the dependencies without which the repair would be hollow.
+
+Where it would land if adopted:
+
+- a subsection of the shared model closing *The seven invariants*;
+- a gate-procedure step after the invariant check, so a noted failure does not
+  close the gate;
+- audit mode, where an unowned invariant failure becomes a blocking finding
+  rather than an observation;
+- the task skill, where an invariant failing for reasons older than the task
+  under audit is reported as a plan defect rather than folded into that task's
+  verdict.
+
+### Open questions
+
+- Do repair tasks take the ordinary four shapes, with the shape following from
+  what becomes observable, or does repair want a fifth shape? Forcing "the
+  system deploys again" into *capability* is defensible — the behavior is
+  genuinely absent at HEAD — but it reads oddly beside a first-time capability.
+- Does a repair task get an edge to whatever broke the invariant? A `revision`
+  edge fits when one task's implementation caused the regression, but an
+  invariant that was never established has nothing to point at.
+- Is "unfinished work already owns this invariant" a judgment the gate makes, or
+  is the repair task opened regardless and closed as a duplicate?
+- Does a repair task differ from an ordinary hardening task in anything but the
+  reason it was written? If not, the idea is a rule about the gate rather than a
+  new kind of task.
+
 ## Open schema questions
 
 Before making V2 normative, decide:
