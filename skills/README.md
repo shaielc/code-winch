@@ -9,6 +9,9 @@ skills/
 │   └── SKILL.md
 └── workplan/
     ├── SKILL.md
+    ├── contracts/
+    │   ├── v1.md
+    │   └── v2.md
     └── tasks.schema.json
 ```
 
@@ -23,9 +26,9 @@ The ownership boundary is intentional: `workplan` decides whether task boundarie
 
 ## Active workplan generations
 
-When `docs/workplan/CURRENT` exists, it names the active generation under `docs/workplan/<generation>/`. Agents and automation must read that generation's `tasks.json`, `tasks.schema.json`, README, and briefs. Repositories without `CURRENT` use the legacy unversioned `docs/workplan/` layout.
+When `docs/workplan/CURRENT` exists, it names the active generation under `docs/workplan/<generation>/`. Agents and automation read that generation's `tasks.json`, `tasks.schema.json`, README, and briefs. Repositories without `CURRENT` use the legacy unversioned `docs/workplan/` layout.
 
-`skills/workplan/tasks.schema.json` is the normative V2 tracker schema copied into newly seeded V2 generations.
+`skills/workplan/tasks.schema.json` is the normative V2 tracker schema used by V2 generations. Immutable planning contracts live under `skills/workplan/contracts/`.
 
 ## Getting an agent to use them
 
@@ -33,7 +36,7 @@ Point directly at the relevant skill when the agent has no native skill mechanis
 
 > Follow `skills/workplan/SKILL.md` and audit the plan.
 
-> Follow `skills/task/SKILL.md` and implement P1-050.
+> Follow `skills/task/SKILL.md` and implement the selected active task.
 
 Dispatched task agents are instructed by `scripts/task-prompt.md` to read the active brief, `skills/task/SKILL.md`, and applicable `AGENTS.md` files.
 

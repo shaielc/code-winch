@@ -1,0 +1,25 @@
+name: Workplan tooling tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  workplan-tooling:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run re-derivation regression suite
+        run: python3 -m unittest discover -s tests -p 'test_prepare_workplan_rederivation.py' -v
+
+      - name: Run task automation regression suites
+        run: |
+          python3 -m unittest discover -s tests -p 'test_task_scheduler.py' -v
+          python3 -m unittest discover -s tests -p 'test_stamp_task_completion.py' -v

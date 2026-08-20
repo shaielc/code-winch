@@ -1,36 +1,34 @@
 ---
 name: workplan
-description: Create, extend, re-derive, update, or audit an implementation workplan as a versioned task graph. Use for `/workplan create`, `/workplan extend`, `/workplan rederive`, `/workplan update`, and `/workplan audit`. Owns plan decomposition, invariant coverage, generations, dependency reasons, collisions, and clean-slate re-derivation; does not audit one implementation against one task brief.
+description: Create, extend, re-derive, update, or audit an implementation workplan as a versioned task graph. Owns plan decomposition, invariant coverage, dependency reasons, collisions, and generation-scoped planning; does not audit one implementation against one task brief.
 ---
 
 # Workplan
 
 A workplan is a versioned implementation graph derived from the design baseline and the repository at HEAD. It must remain truthful as implementation accumulates.
 
-The ownership boundary is strict:
-
 > **`workplan` evaluates whether the plan and each brief's place in the graph are correct. `task` evaluates one implementation against its authored brief.**
 
 ## Active generation and contracts
 
-If `docs/workplan/CURRENT` exists, it contains the active generation name such as `v2`; all active tracker, README, schema, and brief paths live under `docs/workplan/<generation>/`. Otherwise use legacy unversioned `docs/workplan/`.
+If `docs/workplan/CURRENT` exists, read the generation it names under `docs/workplan/<generation>/`; otherwise use the legacy unversioned `docs/workplan/` layout.
 
-`schema_version` says how to parse the tracker. `workplan_version` says which planning contract a task was authored under. They are different concepts.
-
-Normative planning contracts are immutable files:
+`schema_version` describes the tracker format. `workplan_version` identifies the planning contract under which a task was authored. Normative contracts are immutable:
 
 - `skills/workplan/contracts/v1.md`
 - `skills/workplan/contracts/v2.md`
 
-A task audit must resolve `workplan_version: N` to `skills/workplan/contracts/vN.md`. Do not judge a completed V1 task by V2 representation rules.
+A task audit resolves `workplan_version: N` to `skills/workplan/contracts/vN.md`.
 
 ## Modes
 
-1. **Create** — derive the first complete plan from design documents and HEAD.
-2. **Extend** — add genuinely new work to an active plan.
-3. **Re-derive** — create a clean-slate next generation from completed implementation history only.
+1. **Create** — derive a complete plan from design documents and HEAD.
+2. **Extend** — add genuinely new work to the active generation.
+3. **Re-derive** — derive the remaining implementation graph from HEAD, the design baseline, and the completed implementation facts present in the active generation.
 4. **Update** — change status, ownership, blocking information, or within-generation planning disposition truthfully.
 5. **Audit** — inspect the plan as a system without modifying it.
+
+For re-derivation, treat completed implementation records as facts about what exists. Do not infer unimplemented work from absent future-plan assertions. Re-check the design set and repository invariants directly, then derive the remaining task boundaries from current reality.
 
 ## Two layers of conformance
 
@@ -44,28 +42,26 @@ Current repository invariants cannot be grandfathered by historical task version
 - **I4 — Standing scenario parity:** substrate swaps prove the same standing scenarios.
 - **I5 — Immediate operator reachability:** every new operator-visible capability is reachable through the maintained hands-on surface in the same task that introduces it.
 - **I6 — Owned deferrals:** no TODO, stub, or postponed behavior exists without an owning task or explicit architectural decision trigger.
-- **I7 — Real width:** dependency and collision structure permits meaningful parallel work rather than only nominal availability.
+- **I7 — Real width:** dependency and collision structure permits meaningful parallel work rather than nominal availability only.
 
-If an invariant fails at HEAD, the active plan must contain explicit current-version repair work. Historical versioning explains old task conformance; it never excuses a current invariant gap.
+If an invariant fails at HEAD, the active plan contains explicit current-version repair work.
 
 ### Planning-contract conformance
 
-Judge each task using the contract recorded in `workplan_version`.
-
-V2 tasks follow the rules below.
+Judge each task using the contract recorded in `workplan_version`. A completed V1 task is not malformed merely because V2 later introduced different representation rules.
 
 ## Task shapes and completion closure
 
-Every executable task is one of:
+Every executable V2 task is one of:
 
 - **Seam** — introduces a boundary plus implementation, wiring, public interaction surface, and minimal maintained operator/debug path.
 - **Swap** — replaces an implementation behind an existing seam while preserving scenario parity.
 - **Capability** — adds a distinct observable behavior and its complete operator-visible loop.
 - **Hardening** — adds an independently observable reliability, security, recovery, performance, or correctness guarantee.
 
-A task may not delegate part of its own completion condition to a later task. If task B's main purpose is to make capability A usable through the maintained CLI, B belongs in A.
+A task may not delegate part of its own completion condition to a later task. If another task's main purpose would be to make this capability usable through the maintained operator surface, that operator path belongs here.
 
-Do not overstuff a seam with future refactors, unrelated hardening, extension scaffolding, or collision-avoidance restructuring. Classify scope as required behavior, wiring, operator reachability, invariant preservation, future enablement, hardening, or revision; a seam normally contains only the first four.
+Do not overstuff seams with future refactors, unrelated hardening, extension scaffolding, or collision-avoidance restructuring. A seam normally contains required behavior, required wiring, required operator reachability, and required invariant preservation only.
 
 ## Dependencies
 
@@ -157,48 +153,25 @@ Or: `None.`
 
 ## V2 tracker contract
 
-New V2 generations use `skills/workplan/tasks.schema.json`, copied into the generation as `tasks.schema.json`.
+V2 generations use the tracker schema in their own `tasks.schema.json`.
 
-Each V2 task contains the legacy execution fields plus `workplan_version`, `supersedes`, `superseded_by`, and `removal_reason`.
+Each V2 task contains the execution fields plus `workplan_version`, `supersedes`, `superseded_by`, and `removal_reason`.
 
-V2 status values are `pending`, `in_progress`, `blocked`, `completed`, `superseded`, and `removed`.
+V2 status values are `pending`, `in_progress`, `blocked`, `completed`, `superseded`, and `removed`. `superseded` and `removed` are terminal planning-history states, not successful dependency completion.
 
-`superseded` and `removed` are terminal planning-history states, not successful dependency completion. Executable dependencies must become `completed`.
+Task IDs are scoped to the active workplan generation. Human-facing commands may use the short ID after resolving the active generation; persistent automation identity uses `<generation>/<ID>`.
 
-Task IDs are scoped to a workplan generation. A short ID such as `P1-050` may therefore mean different work in different generations. Human-facing commands may use the short ID after resolving the active generation; persistent automation identity must use `<generation>/<ID>`, for example `v2/P1-050`.
+## Re-derivation requirements
 
-## Clean-slate re-derivation
+When deriving the remaining graph:
 
-Re-derivation deliberately does **not** reconcile the previous unfinished plan. Its purpose is to avoid anchoring the new planner on obsolete task boundaries.
-
-Use `scripts/prepare_workplan_rederivation.py prepare`.
-
-The procedure is:
-
-1. Record the repository baseline SHA.
-2. Archive the entire current generation immutably.
-3. Create the next generation containing only completed implementation history and the V2 schema.
-4. Create a derivation branch containing only that new generation. No unfinished task ID, title, brief, dependency graph, or disposition report from the previous generation may be present there.
-5. Derive all remaining work from HEAD, the design baseline, completed implementation history, and the current workplan contract.
-6. Check all repository invariants at HEAD and add explicit repair work for failures.
-7. Derive task boundaries fresh; old unfinished IDs are free to be reused because IDs are generation-scoped.
-8. Declare V2 dependencies, Write sets, Contract surfaces, demonstrations, acceptance criteria, and deferrals.
-9. Recompute critical path, average width, write collisions, and contract collisions.
-10. Run `scripts/prepare_workplan_rederivation.py harvest`.
-
-`harvest` is a fail-closed boundary. Before copying the new generation back it validates:
-
-- `tasks.json` against that generation's JSON Schema;
-- unique task IDs;
-- every referenced brief file exists;
-- every dependency exists;
-- the dependency graph is acyclic;
-- terminal/replacement relationships are reciprocal and valid;
-- completed historical task records carried into the generation are unchanged.
-
-It then harvests only the newly derived generation; it never merges the sanitized derivation branch.
-
-The old generation remains available for historical inspection, but it is not an input to the re-deriving agent.
+1. Read HEAD and the full design baseline.
+2. Treat the completed implementation records in the active tracker as established facts.
+3. Check I1–I7 directly against repository state and add explicit repair tasks for failures.
+4. Derive all remaining task boundaries from current architecture and behavior.
+5. Declare dependency reasons, Write sets, Contract surfaces, demonstrations, verification, acceptance criteria, and owned deferrals.
+6. Recompute critical path, average width, write collisions, and contract collisions.
+7. Validate the tracker against the active generation schema, verify every brief path and dependency, and ensure README summaries match the graph.
 
 ## Audit mode
 
