@@ -111,12 +111,21 @@ Automated parity is the floor, not the ceiling. Every brief also carries a
 whose behavior cannot be observed by hand is a task whose behavior cannot be
 observed.
 
-### I5 — A maintained hands-on surface exists early
+### I5 — Every operator-visible capability is immediately reachable by hand
 
-An operator/debug CLI is built in the first phase and kept working through
-every phase. It is the guaranteed way to drive the system by hand, independent
-of API churn and of whatever state the product UI is in. Each phase's briefs
-state which CLI commands reach the new behavior.
+An operator/debug CLI is built in the first phase and kept working through every
+phase. It is the guaranteed way to drive the system by hand, independent of API
+churn and of whatever state the product UI is in.
+
+The CLI is not a follow-up integration layer. When a task introduces an
+operator-visible capability, that same task adds the minimal command needed to
+exercise it. A later CLI task may improve ergonomics, or expose a capability it
+introduces itself; it may not carry the basic operability of a seam that already
+claims to be finished.
+
+Raw HTTP calls, direct database inspection, internal test harnesses, and
+throwaway development commands are all fine as verification. None of them is the
+maintained hands-on path, so none of them licenses deferring it.
 
 This is not a substitute for the product's real interaction surface; it is what
 guarantees interaction exists at all while that surface is being built.
@@ -169,16 +178,22 @@ the same task that introduces it.
 
 Every task is one of four shapes, stated in the brief header.
 
-**Seam** — introduces a port or boundary, its fake/in-memory implementation,
-its registration in the composition root, and its reachability from the CLI or
-API. Demonstration: the standing scenario passes with the new seam in the path.
+**Seam** — introduces a port or boundary and leaves a complete vertical slice
+through the running system: the boundary, the implementation the current runtime
+profile needs, composition-root wiring, the public interaction surface, and the
+minimal maintained command that drives it by hand. Demonstration: the standing
+scenario passes with the new seam in the path, and a person drives the new
+behavior through the maintained operator surface against the running deployment.
+A seam is not complete if a later task is needed merely to expose or operate
+behavior this one already implemented.
 
 **Swap** — replaces one implementation behind an existing seam with a real one.
 Demonstration: the standing scenario passes unchanged against the new
 substrate; the fake profile still passes too.
 
 **Capability** — adds genuinely new observable behavior. Demonstration: a new
-scenario, added to the standing suite.
+scenario, added to the standing suite, and the behavior driven by hand through
+the maintained operator surface.
 
 **Hardening** — adds adversarial or negative guarantees. Demonstration: the
 attack or failure is attempted and visibly refused. Security-sensitive work
@@ -189,6 +204,50 @@ code no runtime configuration reaches; merge it into the task that first reaches
 it, even at the cost of a larger task. Small tasks are what keep a plan legible
 and that value survives the merge — reported progress on unreachable code does
 not.
+
+## Completion closure
+
+A task may not delegate part of its own completion condition to a later task.
+For an operator-visible capability, completion includes the minimal maintained
+hands-on path needed to exercise it against the running deployment — I5.
+
+The opposite failure costs as much. A task that absorbs future refactors,
+extension points, and hardening because they are nearby is not more complete; it
+is a larger merge, a longer critical path, and a demonstration that has drifted
+from its objective.
+
+The two are one rule with two edges:
+
+> Do not under-scope a task by postponing basic operability. Do not over-scope
+> it by pulling future refactors and hardening into it.
+
+### What belongs in a task
+
+Before adding a scope item, three questions:
+
+1. Is it required for the task's observable demonstration?
+2. Is it required to keep a repository invariant true at completion?
+3. Would the capability be incomplete or misleading without it?
+
+Three noes means the item belongs somewhere else. In particular, extract work
+whose primary purpose is:
+
+- reducing future merge collisions;
+- restructuring files for future parallelism;
+- introducing extension points for later tasks;
+- adding policy hooks with permissive or no-op behavior for future policies;
+- hardening restart or failure behavior beyond the task's stated capability;
+- adding observability not required to prove the capability;
+- refactoring a working implementation into a more extensible form.
+
+Extracted work becomes its own capability, hardening, or revision task.
+
+Architecture is the exception worth naming, because it resembles the first two
+entries. Append-only wiring, one file per command, and pre-allocated migration
+numbers are properties of the design set rather than favors one task does for
+another. A task implements its own registration under that architecture as
+required wiring; a task that builds the registry so *other* tasks will not
+collide is doing extracted work.
 
 ## Dependency edges
 

@@ -47,13 +47,16 @@ only at the end of it.
 
 **Make the code reachable in this task.** A seam is not finished by defining a
 port and an implementation: register it in the composition root and make it
-reachable from the CLI or API, so the **Runtime reachability** section describes
-something true. Code no runtime configuration reaches is not finished, however
-well it is tested.
+reachable, so the **Runtime reachability** section describes something true.
+Code no runtime configuration reaches is not finished, however well it is
+tested. Where the capability is operator-visible, reachable means through the
+maintained CLI: `curl` and a database client prove the behavior exists, not that
+it is operable (I5).
 
 **Deliver what the shape promises.**
 
-- *Seam* — the standing scenario passes with the new seam in the path.
+- *Seam* — the standing scenario passes with the new seam in the path, and a
+  person drives the new behavior by hand through the maintained CLI.
 - *Swap* — the standing scenario passes unchanged against the new substrate,
   and the fake profile still passes too.
 - *Capability* — a new scenario, added to the standing suite.

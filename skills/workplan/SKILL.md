@@ -58,6 +58,31 @@ Deferrals name an ID that exists in `tasks.json` at the moment the deferral is
 written. Writing a deferral therefore sometimes means creating the owning task
 first.
 
+### The split test
+
+When a proposed task looks like it should be two, inspect the dependency between
+the halves.
+
+The split is invalid if the second half's objective is substantially *make the
+capability the first half introduces usable through the maintained operator
+surface*. That is the first half's completion condition wearing a task ID. Merge
+the operator path back in.
+
+The split is valid when the second half introduces a distinct observable
+property: a new capability, a new substrate, failure or recovery guarantees,
+performance or security guarantees, a revision of an implementation that already
+works, or operator ergonomics beyond what is needed to drive the existing
+capability.
+
+### The overstuffed-seam test
+
+After drafting a seam brief, classify every scope bullet as one of: required
+behavior, required wiring, required operator reachability, required invariant
+preservation, future enablement, hardening, or refactor.
+
+A seam normally contains only the first four. Extract the rest unless removing
+it would make the objective false or break an invariant at completion.
+
 ## Width is designed, not hoped for
 
 Concurrency is derived from dependency edges, write sets, and contract surfaces,
@@ -159,6 +184,11 @@ Report, without changing the plan:
   contract-collision sets per phase. A contract collision between two
   concurrently-available tasks is a blocking finding; a write collision is
   reported as a cost.
+- **Completion closure** — a task whose main purpose is to expose through the
+  maintained CLI a capability an earlier task introduced, and which depends
+  directly on that task. Report the pair: this is the earlier task's completion
+  condition filed under a separate ID. Report the mirror case too — scope
+  bullets that exist mainly to prepare later tasks.
 - **Round trips** — every user-facing interaction that is modelled or rendered
   is also actionable. A payload kind that can be displayed but not submitted, or
   a state transition the documentation promises but no API exposes, is a round
@@ -190,6 +220,10 @@ fix, not a style preference.
   foundation task into the first phase and leave dashboards and runbooks late.
 - A capability that is modelled and rendered in one phase but only actionable in
   a much later one. Ship the round trip in one task.
+- A task whose purpose is to make an earlier task's capability reachable by hand.
+- Scope bullets that exist mainly to prepare later tasks: pre-emptive file
+  restructuring, extension registries, permissive policy hooks, unrelated
+  metrics, or failure-mode hardening that could be demonstrated on its own.
 - Identical prose sections across every brief.
 - A first phase whose tasks are all infrastructure and whose only user-visible
   result is at the end.
@@ -214,4 +248,6 @@ fix, not a style preference.
 - Critical path, average width, and both collision sets are recorded per phase.
 - No two concurrently-available tasks share a contract surface.
 - The first task produces a system that starts and deploys.
+- No task defers part of its own completion condition; every operator-visible
+  capability is drivable by hand in the task that introduces it.
 - Every task fits one of the four shapes.
