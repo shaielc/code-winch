@@ -9,8 +9,8 @@ This skill covers the plan as an artifact: the briefs, the tracker, and the
 index that ties them together.
 
 Read `skills/shared/workplan-model.md` first. It defines the layout, the four
-properties, the seven invariants, the four task shapes, dependency-edge
-reasons, owned surfaces, brief anatomy, and the frozen tracker schema.
+properties, the seven invariants, the four task shapes, dependency-edge reasons,
+write sets and contract surfaces, brief anatomy, and the frozen tracker schema.
 Everything below is how to apply that model when the plan changes or is judged.
 
 ## Modes
@@ -19,7 +19,9 @@ Establish which mode applies before doing anything else.
 
 1. **Create** — no plan exists. Read the full design set, derive phases, write
    every brief and the tracker.
-2. **Extend** — add tasks to a plan in flight. Append IDs; never renumber.
+2. **Extend** — add tasks to a plan in flight. Append IDs; never renumber. This
+   is where revision tasks arrive: a defect found while implementing, a failed
+   task audit, a write collision that needed more than a rebase.
 3. **Re-derive** — a phase gate just closed. Rewrite the next phase's briefs
    against the code that now exists. See *Gate procedure*.
 4. **Update** — status, ownership, or blocked reason changed. See *Keeping
@@ -44,8 +46,10 @@ carry the most weight, and that a draft most often leaves thin:
 - **Runtime reachability** — never empty. A task that cannot name the
   composition root, profile, and command that reach its code fits none of the
   four shapes; merge it into the task that first reaches it.
-- **Owned surfaces** — the file, directory, and contract list is what makes
-  concurrency derivable. A brief without it is asserting width instead of
+- **Write set and Contract surfaces** — the two together are what makes
+  concurrency derivable, and they are not interchangeable: an overlapping write
+  set is a merge warning, an overlapping contract surface is a missing
+  dependency edge. A brief that declares neither is asserting width instead of
   showing it.
 - **Demonstration** — commands a person can actually run, and what they should
   see. Not a formality, and not a restatement of the test names.
@@ -56,9 +60,10 @@ first.
 
 ## Width is designed, not hoped for
 
-Concurrency is derived from dependency edges and owned surfaces, in the same way
-availability is derived from status. Both declarations are defined in the shared
-model; what follows is how to shape a plan so they produce width.
+Concurrency is derived from dependency edges, write sets, and contract surfaces,
+in the same way availability is derived from status. Those declarations are
+defined in the shared model; what follows is how to shape a plan so they produce
+width.
 
 ### Design the spine so it does not collide
 
@@ -89,9 +94,18 @@ opens with one is a chain whatever its task count.
 
 At every gate, compute and record per phase: the **critical path** (longest
 dependency chain), the **average width** (task count over critical path length),
-and the **collision set** (pairs of concurrently-available tasks with
-overlapping owned surfaces). Report the numbers and justify any chain that is
-long relative to its phase; do not adopt a target width in the abstract.
+the **write-collision set** (pairs of concurrently-available tasks with
+overlapping write sets), and the **contract-collision set** (pairs sharing a
+contract surface).
+
+Report the two collision sets separately, because they mean different things. A
+write collision is a cost to acknowledge — those two will rebase. A contract
+collision between concurrently-available tasks is a defect to fix before the
+phase opens: the edge is missing, or one task's surface needs narrowing, or the
+two are one task.
+
+Report the numbers and justify any chain that is long relative to its phase; do
+not adopt a target width in the abstract.
 
 ## Gate procedure
 
@@ -107,7 +121,7 @@ When a phase closes, before opening the next:
    next phase's briefs were written against a hypothesis about what this phase
    would produce.
 5. **Rewrite, split, or drop the next phase's briefs** to match. Re-check every
-   dependency edge against the three reasons — an edge defensible on paper is
+   dependency edge against the four reasons — an edge defensible on paper is
    often unnecessary once the code exists, and a missing one is usually obvious
    by then. Recompute critical path, width, and collisions for the phase.
 6. **Record the diff and its reason** in a short changelog section of
@@ -137,9 +151,14 @@ Report, without changing the plan:
   runtime. List the orphans.
 - **Invariants** — I1 through I7, each with the evidence checked.
 - **Graph** — no unknown references, no forward references, no cycles. Every
-  edge carries one of the three reasons; list the unjustified ones, since each
-  is width the plan is giving away.
-- **Width** — critical path, average width, and collision set per phase.
+  edge carries one of the four reasons; list the unjustified ones, since each is
+  width the plan is giving away. List `revision` edges in phases that have not
+  opened separately: a revision planned before the implementation exists is work
+  scheduled to be done twice.
+- **Width** — critical path, average width, and the write- and
+  contract-collision sets per phase. A contract collision between two
+  concurrently-available tasks is a blocking finding; a write collision is
+  reported as a cost.
 - **Round trips** — every user-facing interaction that is modelled or rendered
   is also actionable. A payload kind that can be displayed but not submitted, or
   a state transition the documentation promises but no API exposes, is a round
@@ -183,13 +202,16 @@ fix, not a style preference.
 ## Before finishing
 
 - Every brief has a non-empty **Runtime reachability** section and declares its
-  **owned surfaces**.
+  **write set** and its **contract surfaces**.
 - Every brief has a **Demonstration** with commands a person can actually run.
-- Every dependency edge names compile, contract, or semantic in one clause.
+- Every dependency edge names compile, contract, semantic, or revision in one
+  clause, and no `revision` edge was written before the implementation it
+  revises exists.
 - Every deferral names an ID that exists in `tasks.json`.
 - `tasks.json` validates against the frozen schema; `README.md` tables agree
   with it; every `brief` path resolves.
 - The dependency graph has no unknown references, forward references, or cycles.
-- Critical path, average width, and the collision set are recorded per phase.
+- Critical path, average width, and both collision sets are recorded per phase.
+- No two concurrently-available tasks share a contract surface.
 - The first task produces a system that starts and deploys.
 - Every task fits one of the four shapes.
