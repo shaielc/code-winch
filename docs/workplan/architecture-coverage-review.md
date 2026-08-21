@@ -7,7 +7,7 @@ recommendations; it is not itself a task and does not change any contract.
 
 **Reviewed:** 2026-08-14, against 47 tasks (19 completed, 28 pending).
 
-**Resolved:** 2026-08-14 by the re-derivation recorded in
+**Resolved:** 2026-08-14 by the plan rewrite recorded in
 [`README.md`](README.md#changelog). Every gap below now has an owner. The
 review stands as written — it is a point-in-time record, not a living document —
 and this table is the only thing added to it.

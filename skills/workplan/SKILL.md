@@ -33,11 +33,6 @@ Establish which mode applies before doing anything else.
    system actually is in `docs/state.md` and remove `docs/workplan/`. See *Close
    procedure*.
 
-There is no re-derivation mode. A plan is not rewritten against the code it
-produced; it is closed, and the next one is created against the design set and
-the record the close leaves behind. Rewriting a plan in place preserves its
-decomposition long after the decomposition is what went wrong.
-
 Whichever mode applies, check the seven invariants explicitly. They hold of the
 plan as a whole, so a plan can violate one while every individual brief reads
 well.

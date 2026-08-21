@@ -174,7 +174,7 @@ that gap**, and the phase gate is not met until they land.
 
 ## Parallelism
 
-Measured over pending tasks at the 2026-08-14 re-derivation. Critical path is
+Measured over pending tasks on 2026-08-14. Critical path is
 the longest dependency chain inside the phase; average width is pending tasks
 divided by that path.
 
@@ -276,7 +276,7 @@ It depends on P1-049 rather than running beside it. Quality work on a file
 another task is still moving gets rewritten, and this is not work to do ahead of
 time. Phase 1's critical path is unchanged at 3; average width rises to 2.7.
 
-### 2026-08-14 — re-derivation of Phases 2–5 and a Phase 1 gap-closure wave
+### 2026-08-14 — Phases 2–5 rewritten and a Phase 1 gap-closure wave
 
 Prompted by [`architecture-coverage-review.md`](architecture-coverage-review.md)
 and by reading the code at `HEAD` rather than the design documents.
