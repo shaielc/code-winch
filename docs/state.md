@@ -113,23 +113,34 @@ rejection, and orphan cleanup are covered by
 `TestForcedStopLeavesNoDescendant`, `TestRejectionsAreStableAndContentFree`, and
 `TestCleanupKillsChildAndToleratesRetries`.
 
-### The browser slice renders a run and survives reconnection
+### The browser app builds and is served
 
-`web/` builds a React SPA the daemon serves from `WINCH_STATIC_DIR`. It reads a
-snapshot over HTTP, resumes a WebSocket with `after_sequence`, projects ANSI
-without producing markup, disables controls the run's capabilities do not
-support, and sends input and stop.
+`web/` builds a React SPA that the daemon serves from `WINCH_STATIC_DIR`, and
+its five gates pass:
 
     $ cd web && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build
     All matched files use Prettier code style!
     Test Files  2 passed (2) / Tests  3 passed (3)
     ✓ built in 625ms
 
-`web/src/app/App.test.tsx` drives reconnection without duplicates, input, stop,
-capability display, and disabled resize. `web/src/renderers/ansi.test.ts` shows
-an OSC-8 `javascript:` link and an inline `<script>` are neutralized to inert
-text. The page reaches the daemon over the same origin under the CSP declared in
-`web/index.html`.
+The running daemon serves it at the same origin as the API, with the CSP from
+`web/index.html` intact and the CSRF token injected into the document:
+
+    $ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/
+    200
+
+**Its runtime behavior was not observed.** No browser was opened against this
+build, and none could usefully be: the app's only entry is a form that opens a
+run by ID (`web/src/app/App.tsx:30-40`) and no run can be created, so the
+snapshot fetch it issues answers 404. What is verified is the code's behavior
+under jsdom with the network faked. `web/src/app/App.test.tsx:5-20,50-71`
+replaces `WebSocket` with a `FakeSocket` class and stubs `fetch` outright;
+against those doubles it asserts
+resume with `after_sequence`, a re-delivered event not duplicating output,
+input, stop, capability display, and a disabled resize control.
+`web/src/renderers/ansi.test.ts` shows an OSC-8 `javascript:` link and an inline
+`<script>` reduced to inert text. Three tests, none of which has ever touched a
+daemon.
 
 ### Durable storage holds runs, events, input commands, an outbox, and workflows
 
