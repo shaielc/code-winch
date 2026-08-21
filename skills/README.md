@@ -21,7 +21,7 @@ skills/
 
 | Skill | Audience | Use it when |
 |---|---|---|
-| [`workplan`](workplan/SKILL.md) | planning agent | Creating, extending, re-deriving at a phase gate, updating, or auditing the plan in `docs/workplan/` |
+| [`workplan`](workplan/SKILL.md) | planning agent | Creating, extending, updating, or auditing the plan in `docs/workplan/`, or closing it into `docs/state.md` |
 | [`task`](task/SKILL.md) | implementing agent | Implementing, finishing, reviewing, or auditing one task from `docs/workplan/` |
 
 Audience matters. Say who a skill is for when you add one: an agent should be

@@ -41,6 +41,7 @@ still produce a system nobody can start.
 | `docs/workplan/tasks.json` | Machine-readable tracker — status, ownership, dependencies |
 | `docs/workplan/tasks.schema.json` | Schema for the tracker |
 | `docs/workplan/post-mortems/` | Records of plan failures — defects whose root cause is a seam between briefs rather than an implementation |
+| `docs/state.md` | Written when a plan closes: what was done, what went wrong, what is not implemented. Outlives `docs/workplan/`, which the close removes |
 
 An existing plan's conventions win: match its ID scheme, directory layout, and
 brief structure rather than the illustrative ones here.

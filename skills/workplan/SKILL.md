@@ -1,6 +1,6 @@
 ---
 name: workplan
-description: Write and review the implementation workplan in docs/workplan/ — its task briefs, its dependency graph, and its tracker. Use when deriving a plan from the design set, adding tasks to a plan already in flight, re-deriving the next phase at a gate, correcting status or ownership, widening a plan that has become serial, or auditing the plan for coverage gaps, unjustified dependency edges, and unreachable code. Assumes a design-document set exists (at minimum docs/architecture.md and docs/decisions/).
+description: Write and review the implementation workplan in docs/workplan/ — its task briefs, its dependency graph, and its tracker. Use when deriving a plan from the design set, adding tasks to a plan already in flight, correcting status or ownership, widening a plan that has become serial, auditing the plan for coverage gaps, unjustified dependency edges, and unreachable code, or closing a finished plan into a statement of what the system now is. Assumes a design-document set exists (at minimum docs/architecture.md and docs/decisions/).
 ---
 
 # Workplan
@@ -18,16 +18,25 @@ Everything below is how to apply that model when the plan changes or is judged.
 Establish which mode applies before doing anything else.
 
 1. **Create** — no plan exists. Read the full design set, derive phases, write
-   every brief and the tracker.
+   every brief and the tracker. Where a previous plan was closed, read
+   `docs/state.md` first: it says what already exists, what broke last time, and
+   what is still missing. Creating against the design set alone re-plans work
+   that is already done.
 2. **Extend** — add tasks to a plan in flight. Append IDs; never renumber. This
    is where revision tasks arrive: a defect found while implementing, a failed
    task audit, a write collision that needed more than a rebase.
-3. **Re-derive** — a phase gate just closed. Rewrite the next phase's briefs
-   against the code that now exists. See *Gate procedure*.
-4. **Update** — status, ownership, or blocked reason changed. See *Keeping
+3. **Update** — status, ownership, or blocked reason changed. See *Keeping
    status true*.
-5. **Audit** — report coverage gaps, invariant violations, and unreachable code
+4. **Audit** — report coverage gaps, invariant violations, and unreachable code
    without changing the plan.
+5. **Close** — the plan is finished or is being abandoned. Record what the
+   system actually is in `docs/state.md` and remove `docs/workplan/`. See *Close
+   procedure*.
+
+There is no re-derivation mode. A plan is not rewritten against the code it
+produced; it is closed, and the next one is created against the design set and
+the record the close leaves behind. Rewriting a plan in place preserves its
+decomposition long after the decomposition is what went wrong.
 
 Whichever mode applies, check the seven invariants explicitly. They hold of the
 plan as a whole, so a plan can violate one while every individual brief reads
@@ -37,8 +46,8 @@ well.
 
 Briefs are drafts until their phase opens. Writing all of them up front is
 correct — it is what makes the whole-system map useful — but a brief written
-before its phase's dependencies exist is a hypothesis, and the gate is where it
-gets tested against reality.
+before its phase's dependencies exist is a hypothesis, and contact with the code
+is where it gets tested against reality.
 
 Every brief follows the anatomy in the shared model. The three sections that
 carry the most weight, and that a draft most often leaves thin:
@@ -117,7 +126,8 @@ opens with one is a chain whatever its task count.
 
 ### Report it
 
-At every gate, compute and record per phase: the **critical path** (longest
+Whenever the plan is created, extended, or audited, compute and record per
+phase: the **critical path** (longest
 dependency chain), the **average width** (task count over critical path length),
 the **write-collision set** (pairs of concurrently-available tasks with
 overlapping write sets), and the **contract-collision set** (pairs sharing a
@@ -132,25 +142,60 @@ two are one task.
 Report the numbers and justify any chain that is long relative to its phase; do
 not adopt a target width in the abstract.
 
-## Gate procedure
+## Close procedure
 
-When a phase closes, before opening the next:
+Close ends a plan. It reads what happened, writes the record to `docs/state.md`,
+and removes `docs/workplan/`. It writes no briefs and no tracker: the next plan
+is created against the design set and this record.
 
-1. **Prove the exit statement.** The phase's exit condition from the roadmap is
-   demonstrated by an automated end-to-end or integration scenario, not by a
-   happy-path UI walkthrough.
-2. **Check the invariants at HEAD.** I1–I7, against the real repository. Start
+Close happens because someone asked for it, never as a consequence of an audit
+finding the plan in bad shape. An audit that finds problems reports them; only a
+decision to end the plan runs this.
+
+1. **Settle every task.** Status, brief, and whether the acceptance criteria
+   hold at HEAD. A `completed` status is a claim about the repository — check it
+   against the repository, not against the pull request that closed it. Sample
+   nothing; the point of a close is that the whole tracker gets resolved.
+2. **Read every post-mortem.** Each one names a plan rule that would have caught
+   its defect, and those rules are the most valuable thing the plan produced.
+   They must be restated in the report, because the directory is about to go.
+3. **Read the code that exists**, not the briefs' account of it. What runs, what
+   is registered in the composition root, what the standing suite actually
+   covers, what a person can reach by hand.
+4. **Check the invariants at HEAD.** I1–I7 against the real repository. Start
    the system. Run the fake profile by hand. Run the standing scenario suite.
-3. **Audit the statuses.** See below.
-4. **Re-read the code that now exists.** Not the design docs — the code. The
-   next phase's briefs were written against a hypothesis about what this phase
-   would produce.
-5. **Rewrite, split, or drop the next phase's briefs** to match. Re-check every
-   dependency edge against the four reasons — an edge defensible on paper is
-   often unnecessary once the code exists, and a missing one is usually obvious
-   by then. Recompute critical path, width, and collisions for the phase.
-6. **Record the diff and its reason** in a short changelog section of
-   `README.md`. A brief that changed silently teaches nobody anything.
+5. **Find what no task claimed.** Stubs, TODOs, unimplemented branches, and
+   unreachable error paths whether or not a brief named them; promises in the
+   design set that never became a task at all.
+6. **Write `docs/state.md`.** See below.
+7. **Remove `docs/workplan/` in the same commit** that adds the report, so the
+   two replace each other in one step. Git keeps the old plan; the working tree
+   should not go on presenting a plan nobody is executing.
+
+### The report
+
+`docs/state.md` is a statement about the system, not a plan. It has three parts,
+and someone writing the next plan should need nothing else from the one that
+closed.
+
+**What was done.** The capabilities that exist and are reachable, each with the
+evidence: the command that drives it and the profile it runs under. Group by
+capability rather than by task ID — the next plan does not inherit this one's
+decomposition, and organising the record around it smuggles that decomposition
+forward.
+
+**What went wrong.** Every post-mortem's rule, restated so it survives the
+directory being removed. Tasks marked complete that were not. Seams that leaked.
+Invariants that were established and then lost, and what lost them.
+
+**What is not implemented.** Every design-set promise with no working code
+behind it, every stub and unreachable branch still in the tree, and every
+deferral whose owning task never landed. State each as a gap in the system
+rather than as a task: naming the work is the next plan's job, and a state
+document that reads like a backlog will be treated as one.
+
+Every claim carries a command with its output or a `file:line`. A close report
+whose claims cannot be rechecked is worth less than the tracker it replaced.
 
 ## Keeping status true
 
@@ -204,6 +249,10 @@ record names the briefs involved, explains why no single one is wrong on its
 face, and states what plan rule would have caught it. Ordinary implementation
 bugs do not belong there.
 
+Those rules outlive the plan that produced them. Close restates every one of
+them in `docs/state.md` before the directory goes, which is the only reason
+removing it is safe.
+
 ## Smells
 
 Concrete patterns that have produced broken plans. Treat each as a defect to
@@ -235,6 +284,8 @@ fix, not a style preference.
 
 ## Before finishing
 
+In close mode, only the last item applies. In every other mode:
+
 - Every brief has a non-empty **Runtime reachability** section and declares its
   **write set** and its **contract surfaces**.
 - Every brief has a **Demonstration** with commands a person can actually run.
@@ -251,3 +302,6 @@ fix, not a style preference.
 - No task defers part of its own completion condition; every operator-visible
   capability is drivable by hand in the task that introduces it.
 - Every task fits one of the four shapes.
+- A close left `docs/state.md` in place of `docs/workplan/`: every post-mortem
+  rule restated, every claim carrying a command or a `file:line`, no section
+  written as a backlog, and both changes in one commit.
