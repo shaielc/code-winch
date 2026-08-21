@@ -21,7 +21,7 @@ skills/
 
 | Skill | Audience | Use it when |
 |---|---|---|
-| [`workplan`](workplan/SKILL.md) | planning agent | Creating, extending, re-deriving at a phase gate, updating, or auditing the plan in `docs/workplan/` |
+| [`workplan`](workplan/SKILL.md) | planning agent | Creating, extending, updating, or auditing the plan in `docs/workplan/`, or closing it into `docs/state.md` |
 | [`task`](task/SKILL.md) | implementing agent | Implementing, finishing, reviewing, or auditing one task from `docs/workplan/` |
 
 Audience matters. Say who a skill is for when you add one: an agent should be
@@ -35,7 +35,7 @@ what it needs and does not restate it.
 
 | Document | Defines |
 |---|---|
-| [`shared/workplan-model.md`](shared/workplan-model.md) | The workplan's layout, its seven invariants, the four task shapes, dependency-edge reasons, owned surfaces, brief anatomy, and the frozen tracker schema |
+| [`shared/workplan-model.md`](shared/workplan-model.md) | The workplan's layout, its seven invariants, the four task shapes, dependency-edge reasons, write sets and contract surfaces, brief anatomy, and the frozen tracker schema |
 
 ## Getting an agent to use them
 

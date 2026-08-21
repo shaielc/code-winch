@@ -41,6 +41,7 @@ still produce a system nobody can start.
 | `docs/workplan/tasks.json` | Machine-readable tracker — status, ownership, dependencies |
 | `docs/workplan/tasks.schema.json` | Schema for the tracker |
 | `docs/workplan/post-mortems/` | Records of plan failures — defects whose root cause is a seam between briefs rather than an implementation |
+| `docs/state.md` | Written when a plan closes: what was done, what went wrong, what is not implemented. Outlives `docs/workplan/`, which the close removes |
 
 An existing plan's conventions win: match its ID scheme, directory layout, and
 brief structure rather than the illustrative ones here.
@@ -50,6 +51,10 @@ brief structure rather than the illustrative ones here.
 These realize the four properties. They hold of the plan as a whole rather than
 of any one task — a plan can violate one while every individual brief reads
 well — and every task is responsible for leaving them intact at HEAD.
+
+A plan derived over code that already exists inherits whatever state these are
+in. Where one does not hold, restoring it is a task in the new plan, not a
+precondition the plan is entitled to assume.
 
 ### I1 — The system runs from the first task
 
@@ -111,12 +116,21 @@ Automated parity is the floor, not the ceiling. Every brief also carries a
 whose behavior cannot be observed by hand is a task whose behavior cannot be
 observed.
 
-### I5 — A maintained hands-on surface exists early
+### I5 — Every operator-visible capability is immediately reachable by hand
 
-An operator/debug CLI is built in the first phase and kept working through
-every phase. It is the guaranteed way to drive the system by hand, independent
-of API churn and of whatever state the product UI is in. Each phase's briefs
-state which CLI commands reach the new behavior.
+An operator/debug CLI is built in the first phase and kept working through every
+phase. It is the guaranteed way to drive the system by hand, independent of API
+churn and of whatever state the product UI is in.
+
+The CLI is not a follow-up integration layer. When a task introduces an
+operator-visible capability, that same task adds the minimal command needed to
+exercise it. A later CLI task may improve ergonomics, or expose a capability it
+introduces itself; it may not carry the basic operability of a seam that already
+claims to be finished.
+
+Raw HTTP calls, direct database inspection, internal test harnesses, and
+throwaway development commands are all fine as verification. None of them is the
+maintained hands-on path, so none of them licenses deferring it.
 
 This is not a substitute for the product's real interaction surface; it is what
 guarantees interaction exists at all while that surface is being built.
@@ -138,14 +152,27 @@ an ID rather than a shrug.
 
 ### I7 — The plan stays wide
 
-Every dependency edge is justified in writing, and every task declares the
-surfaces it writes, so that concurrency is derived rather than asserted.
+Every dependency edge is justified in writing, and every task declares both the
+files it writes and the contracts it defines, so that concurrency is derived
+rather than asserted.
 
 Width needs two independent things, and both must hold: a task must be
-*available* — its dependencies are complete — and *non-colliding* — no other
-available task writes the same files or contracts. A plan can satisfy the first
-and fail the second. Ten available tasks that all edit the composition root are,
-in practice, one task. *Dependency edges* and *Owned surfaces* below are the
+*available* — its dependencies are complete — and *non-colliding*. A plan can
+satisfy the first and fail the second. Ten available tasks that all edit the
+composition root are, in practice, one task.
+
+The two kinds of collision are not the same defect and do not get the same
+response:
+
+- a **contract collision** — two tasks that would change the meaning of the same
+  externally significant contract — is resolved in the graph. One of them
+  depends on the other. Two concurrently available tasks sharing a contract
+  surface is a plan defect, not a scheduling inconvenience.
+- a **write collision** — two available tasks whose concrete write sets overlap
+  — is a warning about merge contention. It creates no edge. It is reported so
+  that whoever dispatches both knows they will rebase.
+
+*Dependency edges*, *Write set*, and *Contract surfaces* below are the
 mechanism.
 
 ## Task shapes
@@ -156,16 +183,22 @@ the same task that introduces it.
 
 Every task is one of four shapes, stated in the brief header.
 
-**Seam** — introduces a port or boundary, its fake/in-memory implementation,
-its registration in the composition root, and its reachability from the CLI or
-API. Demonstration: the standing scenario passes with the new seam in the path.
+**Seam** — introduces a port or boundary and leaves a complete vertical slice
+through the running system: the boundary, the implementation the current runtime
+profile needs, composition-root wiring, the public interaction surface, and the
+minimal maintained command that drives it by hand. Demonstration: the standing
+scenario passes with the new seam in the path, and a person drives the new
+behavior through the maintained operator surface against the running deployment.
+A seam is not complete if a later task is needed merely to expose or operate
+behavior this one already implemented.
 
 **Swap** — replaces one implementation behind an existing seam with a real one.
 Demonstration: the standing scenario passes unchanged against the new
 substrate; the fake profile still passes too.
 
 **Capability** — adds genuinely new observable behavior. Demonstration: a new
-scenario, added to the standing suite.
+scenario, added to the standing suite, and the behavior driven by hand through
+the maintained operator surface.
 
 **Hardening** — adds adversarial or negative guarantees. Demonstration: the
 attack or failure is attempted and visibly refused. Security-sensitive work
@@ -177,17 +210,67 @@ it, even at the cost of a larger task. Small tasks are what keep a plan legible
 and that value survives the merge — reported progress on unreachable code does
 not.
 
+## Completion closure
+
+A task may not delegate part of its own completion condition to a later task.
+For an operator-visible capability, completion includes the minimal maintained
+hands-on path needed to exercise it against the running deployment — I5.
+
+The opposite failure costs as much. A task that absorbs future refactors,
+extension points, and hardening because they are nearby is not more complete; it
+is a larger merge, a longer critical path, and a demonstration that has drifted
+from its objective.
+
+The two are one rule with two edges:
+
+> Do not under-scope a task by postponing basic operability. Do not over-scope
+> it by pulling future refactors and hardening into it.
+
+### What belongs in a task
+
+Before adding a scope item, three questions:
+
+1. Is it required for the task's observable demonstration?
+2. Is it required to keep a repository invariant true at completion?
+3. Would the capability be incomplete or misleading without it?
+
+Three noes means the item belongs somewhere else. In particular, extract work
+whose primary purpose is:
+
+- reducing future merge collisions;
+- restructuring files for future parallelism;
+- introducing extension points for later tasks;
+- adding policy hooks with permissive or no-op behavior for future policies;
+- hardening restart or failure behavior beyond the task's stated capability;
+- adding observability not required to prove the capability;
+- refactoring a working implementation into a more extensible form.
+
+Extracted work becomes its own capability, hardening, or revision task.
+
+Architecture is the exception worth naming, because it resembles the first two
+entries. Append-only wiring, one file per command, and pre-allocated migration
+numbers are properties of the design set rather than favors one task does for
+another. A task implements its own registration under that architecture as
+required wiring; a task that builds the registry so *other* tasks will not
+collide is doing extracted work.
+
 ## Dependency edges
 
-Each dependency records its reason beside the ID in the brief header. Three
-reasons are legitimate:
+Each dependency records its reason beside the ID in the brief header. Four
+reasons are legitimate, and the fourth is not like the other three:
 
 - **compile** — the task cannot build without a type, interface, or generated
   artifact the other produces;
-- **contract** — both tasks would otherwise define the same contract surface:
-  the same API path, schema, port, or migration;
+- **contract** — the two tasks' declared **contract surfaces** overlap: the same
+  API operation, schema component, port signature, persisted aggregate,
+  configuration key, registry namespace, or migration slot. Every contract
+  collision becomes an edge; *Contract surfaces* below decides which task comes
+  first;
 - **semantic** — this task's demonstration is impossible until the other's
-  behavior exists.
+  behavior exists;
+- **revision** — this task's object *is* implementation the other task creates
+  or substantially rewrites, so doing it first would revise code that does not
+  survive. Found rather than planned; see below.
 
 An edge whose reason cannot be written in one clause is not a real edge. In
 particular, edges resting on "it logically comes after" (ordering intuition),
@@ -203,16 +286,98 @@ should depend on the fake instead, and be swapped later.
 
 Dependencies are completion prerequisites, not suggested reading.
 
-## Owned surfaces
+### Revision edges are found, not planned
 
-Each brief lists the files, directories, and contracts it writes. Two tasks with
-disjoint owned surfaces may run concurrently whatever phase they sit in; two
-tasks with overlapping surfaces are serialized in practice regardless of what
-the graph says.
+The first three reasons are properties of the plan and are derivable while
+writing it. `revision` is not. It records something learned after work started:
+a defect found while implementing, an audit that failed, a write collision whose
+reconciliation turned out to need more than a rebase.
+
+A revision edge in a freshly derived phase is therefore a defect in the
+derivation, not a well-ordered plan. If the planner already knows an
+implementation will want hardening, restructuring, or better tests, that work
+belongs in the task that writes the implementation. Planning a revision ahead of
+time is planning to do the work twice.
+
+Revision tasks are added in extend mode, after the fact, and the brief says what
+was found. The edge holds only when the dependent names the implementation or
+test surfaces the prerequisite produced and its objective is specifically to
+revise those surfaces.
+
+This is also what closes a plan defect. When a task cannot finish because the
+implementation it builds on is wrong, the remedy is neither absorbing the fix
+silently nor leaving a TODO: it is a revision task, whose ID is what makes the
+deferral owned under I6.
+
+`revision` launders none of the illegitimate reasons. "Easier to do later",
+"avoids rework in general", "same subsystem", "nicer development order", and
+"the prerequisite might influence the design" are still not edges. The edge says
+the object of this task does not meaningfully exist in its intended form before
+that task — not that this order is preferable.
+
+## Write set
+
+The concrete files and directories a task writes. This models merge contention
+and nothing else.
+
+```text
+Write set:
+- cmd/winch/credential.go
+- internal/application/credential.go
+- internal/adapters/postgres/migrations/007_*.sql
+```
+
+Name the files actually expected. A directory is a legitimate entry when the
+task genuinely owns it — creates it, or rewrites most of it — but not as
+shorthand for files the planner could have listed.
+
+Two available tasks whose write sets overlap are a **write collision**. That is
+a warning, not an edge: both proceed, and whoever takes the second one rebases.
+Report the pairs so the cost is visible; do not add a dependency to make the
+report clean. Where reconciling the overlap turns out to need real work rather
+than a merge, that work is its own task, carrying a `revision` edge to what it
+reconciles.
 
 Surfaces that attract every task at once, and so deserve attention early: the
 composition root, the standing scenario suite, ordered migration numbers, a
 single API specification file, and any central registry, switch, or factory.
+
+## Contract surfaces
+
+The externally significant contracts and namespaces whose *meaning* the task
+defines or changes, regardless of which files carry them.
+
+```text
+Contract surfaces:
+- API: POST /api/v1/credentials
+- schema: RunSpec.credential_refs
+- migration namespace: credentials
+```
+
+The kinds that count:
+
+- an HTTP resource or operation;
+- an OpenAPI or event-schema component;
+- a port or interface signature;
+- a persisted aggregate or one of its state transitions;
+- a configuration key;
+- a driver, profile, or registry namespace;
+- a migration slot or schema-ownership boundary.
+
+Two tasks sharing a contract surface have a **contract collision**, and a
+contract collision is a dependency edge. The direction is not a coin flip: the
+task that **defines** the surface comes first, and the task that extends,
+implements, or consumes it takes the edge with reason `contract`.
+
+If both tasks would define the same surface there is no direction to pick, and
+that is the plan being wrong rather than the rule failing. Either one task owns
+the surface and the other narrows its own, or the two are one task.
+
+What the two declarations model is the whole distinction: a write set predicts a
+rebase, a contract surface predicts a disagreement about meaning. Two tasks can
+share a file with no contract collision — appending independent handlers to one
+registry — and can collide on a contract while sharing no file at all, which is
+exactly the case a write set misses.
 
 ## Brief anatomy
 
@@ -226,7 +391,7 @@ up-front depth was padding.
 
 **Phase:** <N> — <phase name>
 **Shape:** seam | swap | capability | hardening
-**Dependencies:** <ID> (compile | contract | semantic: <one clause>), … or None
+**Dependencies:** <ID> (compile | contract | semantic | revision: <one clause>), … or None
 
 ## Objective
 
@@ -246,11 +411,15 @@ Which composition root, profile, and command reach this code once the task is
 done. Never empty — a task that cannot fill this in fits none of the four
 shapes and should be merged into the one that reaches it.
 
-## Owned surfaces
+## Write set
 
-Files, directories, and contracts this task writes. Concurrency is derived from
-this list, not asserted: a task with no overlap here can run alongside any other
-available task.
+Concrete files and directories this task writes. Overlap with another available
+task is a merge warning, not an edge.
+
+## Contract surfaces
+
+Contracts and namespaces whose meaning this task defines or changes. Overlap
+with another task is a dependency edge, not a warning. Or: `None.`
 
 ## Demonstration
 

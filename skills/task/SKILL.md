@@ -1,6 +1,6 @@
 ---
 name: task
-description: Carry one workplan task from its brief to a finished, demonstrated change, or judge whether a task that claims completion actually holds. Use when picking up a task ID from docs/workplan/, implementing or finishing the change for one, reviewing the pull request that implements one, or auditing a single task's acceptance criteria against HEAD. Keeps attention on that one brief — its shape, its owned surfaces, its demonstration, and its verification.
+description: Carry one workplan task from its brief to a finished, demonstrated change, or judge whether a task that claims completion actually holds. Use when picking up a task ID from docs/workplan/, implementing or finishing the change for one, reviewing the pull request that implements one, or auditing a single task's acceptance criteria against HEAD. Keeps attention on that one brief — its shape, its declared surfaces, its demonstration, and its verification.
 ---
 
 # Task
@@ -33,8 +33,9 @@ they carry the repository's boundaries and its verification commands.
    `tasks.json`. A `completed` status is a claim: if the type, contract, or
    behavior the edge names is missing at HEAD, the dependency is not done. Stop
    and report that rather than building the missing piece inside this task.
-4. **Read Owned surfaces.** That list is the write boundary, and other tasks are
-   in flight against the same tree.
+4. **Read the Write set and Contract surfaces.** The write set is this change's
+   boundary, and other tasks are in flight against the same tree. The contract
+   surfaces are what only this task may redefine.
 5. **Run the demonstration commands as they stand.** Seeing the current behavior
    before the change is what makes the change observable afterwards.
 
@@ -46,13 +47,16 @@ only at the end of it.
 
 **Make the code reachable in this task.** A seam is not finished by defining a
 port and an implementation: register it in the composition root and make it
-reachable from the CLI or API, so the **Runtime reachability** section describes
-something true. Code no runtime configuration reaches is not finished, however
-well it is tested.
+reachable, so the **Runtime reachability** section describes something true.
+Code no runtime configuration reaches is not finished, however well it is
+tested. Where the capability is operator-visible, reachable means through the
+maintained CLI: `curl` and a database client prove the behavior exists, not that
+it is operable (I5).
 
 **Deliver what the shape promises.**
 
-- *Seam* — the standing scenario passes with the new seam in the path.
+- *Seam* — the standing scenario passes with the new seam in the path, and a
+  person drives the new behavior by hand through the maintained CLI.
 - *Swap* — the standing scenario passes unchanged against the new substrate,
   and the fake profile still passes too.
 - *Capability* — a new scenario, added to the standing suite.
@@ -64,9 +68,11 @@ supported way to run the product. Keep them controllable — scripted transcript
 injectable latency, failure, malformed output — and state in their documentation
 what they do not prove.
 
-**Stay inside the owned surfaces.** An edit outside them is usually scope creep.
-Where one is genuinely unavoidable, make it minimal and say why in the pull
-request.
+**Stay inside the declared surfaces.** A write outside the write set is usually
+scope creep; where one is genuinely unavoidable, make it minimal and say why in
+the pull request. Changing a contract the brief does not declare is the more
+serious deviation — another task owns that surface and is working against the
+meaning you changed. Report it rather than absorbing it.
 
 **Update the design set with contract changes.** An API path, event or protocol
 schema, port signature, or migration that changes takes its design document
@@ -77,6 +83,11 @@ update — or a new or superseding ADR — in the same change.
 write it. If no such task exists, either finish the work or add the task and say
 so in the pull request. Acceptance criteria are not satisfied by code that
 defers them.
+
+Where what you found is that an implementation another task produced needs
+reworking, the task you add takes a `revision` edge to that task and its brief
+says what was found. That is the reason `revision` exists — it is written when
+the problem is discovered, not when the plan is drawn.
 
 ### Verify
 
@@ -102,7 +113,8 @@ whatever happened.
 
 - The pull request body contains `Task: <ID>` and no other task ID.
 - Report what you ran, what the demonstration showed, every deferral with its
-  owning task ID, and any edit outside the owned surfaces with its reason.
+  owning task ID, and any write outside the write set or change to an undeclared
+  contract surface, with its reason.
 - Leave status fields in `docs/workplan/tasks.json` alone. Automation stamps
   `completed` when the pull request is approved.
 
@@ -126,8 +138,9 @@ output, or a `file:line`. A claim with neither is unmet.
    an orphan.
 4. **Verification** — every check the brief lists exists and passes now, not
    only when the pull request merged.
-5. **Owned surfaces** — the change stayed inside them, and any edit outside is
-   named and justified.
+5. **Write set and contract surfaces** — the change stayed inside the declared
+   write set and touched no contract the brief does not declare. Any deviation
+   is named and justified.
 6. **Deferrals** — each TODO, stub, unimplemented branch, and unreachable error
    path the task introduced carries an ID that exists in `tasks.json`. Search
    the diff for `TODO`, `unimplemented`, "for now", "later", and "subsequent
@@ -143,7 +156,9 @@ complete lists the specific criteria that fail and what would satisfy each.
 When the cause is the brief rather than the code — a seam between two briefs, an
 assumption one brief made about another's output, an invariant no task owns —
 name it as a plan defect and say which briefs are involved.
-`docs/workplan/post-mortems/` is where those are recorded.
+`docs/workplan/post-mortems/` is where those are recorded. When the cause is
+instead the code of an already-completed task, the remedy is a revision task
+against it, which belongs to the `workplan` skill rather than to this one.
 
 ## Before finishing
 
@@ -153,7 +168,7 @@ name it as a plan defect and say which briefs are involved.
 - The repository gates and every check under **Verification** pass, or the
   exceptions are stated.
 - Every deferral names a task ID that exists in `tasks.json`.
-- Writes stayed inside the owned surfaces.
+- Writes stayed inside the write set; no undeclared contract surface changed.
 - Contract changes carry their design document or ADR update.
 - The system starts and deploys at HEAD.
 - `Task: <ID>` is in the pull request body; no status field was edited.
