@@ -1,24 +1,29 @@
 # AGENTS.md
 
-Instructions for any agent working in this repository. One task, one pull
-request.
+Instructions for any agent working in this repository. One unit of work, one
+pull request.
+
+No implementation plan is in flight. [`docs/state.md`](docs/state.md) is the
+authoritative account of what runs and what does not; read it before assuming a
+capability exists.
 
 An `AGENTS.md` deeper in the tree adds to or narrows these rules for its own
 subtree.
 
 ## Start here
 
-- **Your brief** — `docs/workplan/<phase>/<id>-*.md`. Authoritative for scope,
-  acceptance criteria, and required verification. Its dependencies are
-  completion prerequisites, not suggested reading.
+- **System state** — [`docs/state.md`](docs/state.md). What is reachable, what
+  is built but unwired, and what has no code. Every claim in it carries the
+  command or `file:line` that shows it.
 - **Design baseline** — `docs/architecture.md`, `docs/code-structure.md`,
   `docs/contracts.md`, `docs/security.md`, `docs/roadmap.md`, and the ADRs in
   `docs/decisions/`.
-- **How to run a task** — `skills/task/SKILL.md`. How to orient in a brief,
-  what its shape must demonstrate, how to verify it, and how to judge whether it
-  is complete. It expands on the rules below.
-- **Planning rules** — `skills/workplan/SKILL.md`. Read it when you are changing
-  the plan itself.
+- **How to run a task** — `skills/task/SKILL.md`. Applies once a plan exists in
+  `docs/workplan/`: how to orient in a brief, what its shape must demonstrate,
+  and how to judge whether it is complete. It expands on the rules below.
+- **Planning rules** — `skills/workplan/SKILL.md`. Read it when deriving the next
+  plan from the design set and `docs/state.md`, or when changing a plan in
+  flight.
 
 ## Rules that bind every task
 
@@ -62,11 +67,12 @@ Contract suites are necessary and not sufficient. Beyond them:
 
 ### Defer nothing without an owner
 
-No TODO, stub, unimplemented branch, or "handled in a later task" without a task
-ID that exists in `docs/workplan/tasks.json` at the time you write it. If no
-such task exists, either finish the work or add the task and say so in the pull
-request. A brief's acceptance criteria are not satisfied by code that defers
-them.
+No TODO, stub, unimplemented branch, or "handled later" without a named owner.
+With a plan in flight that owner is a task ID that exists in
+`docs/workplan/tasks.json` at the time you write it; with no plan in flight,
+either finish the work or record the gap in `docs/state.md` under *what is not
+implemented* and say so in the pull request. Acceptance criteria are not
+satisfied by code that defers them.
 
 ### Test adversarially where it matters
 
@@ -116,26 +122,19 @@ a ceiling.
 
 ## Pull requests
 
-- Include `Task: <ID>` in the body, and no other task ID.
-- Do **not** edit status fields in `docs/workplan/tasks.json`. Automation stamps
-  `completed` when the pull request is approved.
+- When a plan is in flight, include `Task: <ID>` in the body and no other task
+  ID, and do **not** edit status fields in `docs/workplan/tasks.json` —
+  automation stamps `completed` when the pull request is approved.
 - Report what you ran, what the demonstration showed, and anything you deferred
-  together with its owning task ID.
+  together with its owner.
 
 ## Current state
 
-Some of the foundations these rules refer to are still being introduced. Each
-now has an owning task:
+Some foundations these rules refer to do not exist yet. The daemon has a
+composition root, configuration, and telemetry, and `winch dev run` drives a
+harness by hand; the run use cases are unbound, the fake profile is not
+controllable, there is no standing end-to-end scenario suite, and the operator
+CLI covers `dev run` only. `docs/state.md` records each of these with evidence.
 
-| Foundation | Owner |
-|---|---|
-| Composition root, configuration, telemetry | P1-048 |
-| Local runner and `winch dev run` | P1-049 |
-| Run use cases reachable over HTTP | P1-050 |
-| Maintained operator CLI | P1-049, P1-051 |
-| Controllable fake runtime profile | P1-052 |
-| Standing end-to-end scenario suite | P1-053 |
-
-The rules above bind as each lands; until then, do not add code that makes them
-harder to establish. `docs/workplan/wiring-plan.md` has the original diagnosis
-of what was missing and why.
+The rules above bind as each foundation lands. Until then, do not add code that
+makes them harder to establish.
