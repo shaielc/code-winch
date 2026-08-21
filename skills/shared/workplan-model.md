@@ -52,6 +52,10 @@ These realize the four properties. They hold of the plan as a whole rather than
 of any one task — a plan can violate one while every individual brief reads
 well — and every task is responsible for leaving them intact at HEAD.
 
+A plan derived over code that already exists inherits whatever state these are
+in. Where one does not hold, restoring it is a task in the new plan, not a
+precondition the plan is entitled to assume.
+
 ### I1 — The system runs from the first task
 
 A composition root exists and produces a startable process before any domain

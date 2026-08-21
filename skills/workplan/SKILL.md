@@ -21,7 +21,7 @@ Establish which mode applies before doing anything else.
    every brief and the tracker. Where a previous plan was closed, read
    `docs/state.md` first: it says what already exists, what broke last time, and
    what is still missing. Creating against the design set alone re-plans work
-   that is already done.
+   that is already done. See *Creating a plan over existing code*.
 2. **Extend** — add tasks to a plan in flight. Append IDs; never renumber. This
    is where revision tasks arrive: a defect found while implementing, a failed
    task audit, a write collision that needed more than a rebase.
@@ -91,6 +91,47 @@ preservation, future enablement, hardening, or refactor.
 
 A seam normally contains only the first four. Extract the rest unless removing
 it would make the objective false or break an invariant at completion.
+
+## Creating a plan over existing code
+
+A plan is rarely written against an empty repository. After a close, and any
+time one is derived for a system that already runs, the code arrives with some
+invariants held and others not.
+
+Check I1–I7 against that code before deriving phases. Start the system. Run the
+fake profile by hand. Run the standing scenario suite, or find that there is not
+one. `docs/state.md` says what the last plan believed; the repository says what
+is true.
+
+**Every invariant that fails becomes a task in the new plan.** Not a note in the
+README, not a caveat inside some brief, not an assumption that a task will get
+to it on the way past — a task with an ID, in a phase, with acceptance criteria
+that prove the invariant holds again. A plan that inherits a system which does
+not deploy, and does not contain the task that makes it deploy, is built on a
+claim it never checked.
+
+I1 and I2 failures go in the first phase. Every other task's demonstration
+assumes a system that starts and deploys, so a plan that schedules those repairs
+late has no demonstrable task before them.
+
+A repair brief fills the ordinary anatomy, with three sections carrying the
+weight:
+
+- **Objective** — the invariant restored, stated as observable behavior.
+- **Acceptance criteria** — checkable against the repository, including the
+  invariant's own evidence: the command and the output that show it holding.
+- **Traces to** — the invariant, and the section of `docs/state.md` that
+  recorded the gap.
+
+Repair tasks take the ordinary four shapes. The shape follows from what becomes
+observable, not from the fact that something is being restored: a repair that
+makes the system deploy again is demonstrated the way the first task of a
+greenfield plan would demonstrate it.
+
+The gaps `docs/state.md` records under *what is not implemented* are a different
+input and get ordinary treatment. Those are missing capabilities, derived from
+the design set like any other. An invariant failure is not a missing capability
+— it is the plan's own floor giving way, which is why it goes first.
 
 ## Width is designed, not hoped for
 
@@ -281,6 +322,8 @@ fix, not a style preference.
 - A dependency edge whose only justification is ordering intuition.
 - A central switch, registry, or specification file every task must edit to make
   its own work reachable.
+- A plan created over a system that does not start, with no task that makes it
+  start.
 
 ## Before finishing
 
@@ -299,6 +342,8 @@ In close mode, only the last item applies. In every other mode:
 - Critical path, average width, and both collision sets are recorded per phase.
 - No two concurrently-available tasks share a contract surface.
 - The first task produces a system that starts and deploys.
+- Every invariant failing in the code the plan was created over has a task that
+  restores it, and any I1 or I2 repair is in the first phase.
 - No task defers part of its own completion condition; every operator-visible
   capability is drivable by hand in the task that introduces it.
 - Every task fits one of the four shapes.
