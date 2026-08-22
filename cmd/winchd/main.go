@@ -156,8 +156,8 @@ func staticHandler(dir, csrf string) (http.Handler, bool) {
 	return handler, true
 }
 
-// unavailableBackend keeps the run routes mounted but inert until P1-050 binds
-// the real use cases. Reads answer not-found truthfully — no run can exist yet;
+// unavailableBackend keeps the run routes mounted but inert until the real use
+// cases are bound. Reads answer not-found truthfully — no run can exist yet;
 // creation reports an internal error rather than blaming the caller's body.
 type unavailableBackend struct{}
 

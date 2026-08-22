@@ -45,7 +45,7 @@ Point at the path:
 
 > Follow `skills/workplan/SKILL.md` and audit the plan for coverage gaps.
 
-> Follow `skills/task/SKILL.md` and implement P1-054.
+> Follow `skills/task/SKILL.md` and implement `<task ID>`.
 
 This always works and needs nothing configured. It is the fallback when an
 agent has no skill mechanism, or when you want a skill used once without wiring
