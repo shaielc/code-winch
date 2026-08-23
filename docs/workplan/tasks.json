@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "status_values": ["pending", "in_progress", "blocked", "completed"],
+  "tasks": [
+    {
+      "id": "P0-001",
+      "title": "Repair CI test gates",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-001-repair-ci-test-gates.md"
+    },
+    {
+      "id": "P0-002",
+      "title": "Ship operator CLI in build and deployment",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-002-ship-operator-cli.md"
+    },
+    {
+      "id": "P0-003",
+      "title": "Controllable fake harness profile",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-003-controllable-fake-harness.md"
+    },
+    {
+      "id": "P0-004",
+      "title": "Exercise complete fake run in CI",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": ["P0-002"],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-004-fake-run-in-ci.md"
+    },
+    {
+      "id": "P0-005",
+      "title": "Sanitize post-close plan references",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-005-sanitize-plan-references.md"
+    }
+  ]
+}
