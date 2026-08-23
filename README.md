@@ -13,19 +13,22 @@ multi-agent workflows.
 - [Harness and event contracts](docs/contracts.md)
 - [Sandbox and security model](docs/security.md)
 - [Delivery roadmap](docs/roadmap.md)
-- [Implementation workplan](docs/workplan/README.md)
+- [System state](docs/state.md)
 - [Architecture decisions](docs/decisions/README.md)
 - [Task runner deployment](runner/README.md)
 
 ## Project status
 
-The Go workspace, an intentionally empty daemon composition root, and a
-bootstrapped web workspace are in place; domain, adapter, and product behavior
-have not been implemented yet. See [`web/README.md`](web/README.md) for the web
-workspace's deterministic development and generated-client checks. The
-documents distinguish initial interfaces from later deployment choices so that
-the first vertical slice does not prematurely require Docker, a workflow
-engine, or a particular coding-agent provider.
+[`docs/state.md`](docs/state.md) is the authoritative account of what runs, what
+went wrong, and what has no working code behind it. In short: the daemon starts,
+migrates, and serves an authenticated HTTP API and the browser app, and
+`winch dev run` drives a harness under a local PTY by hand — but the run use
+cases that would join them are unbound, so no run can be created through the
+product. No implementation plan is in flight.
+
+See [`web/README.md`](web/README.md) for the web workspace's deterministic
+development and generated-client checks, and
+[`deployments/README.md`](deployments/README.md) for the local stack.
 
 ## Go development
 

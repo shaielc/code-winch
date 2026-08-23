@@ -22,7 +22,8 @@ Establish which mode applies before doing anything else.
    `docs/state.md` first: it says what already exists, what broke last time, and
    what is still missing. Creating against the design set alone re-plans work
    that is already done. See *Creating a plan over existing code*.
-2. **Extend** — add tasks to a plan in flight. Append IDs; never renumber. This
+2. **Extend** — add tasks to a plan in flight. Append IDs from the plan-wide
+   counter, whatever phase they land in; never renumber. This
    is where revision tasks arrive: a defect found while implementing, a failed
    task audit, a write collision that needed more than a rebase.
 3. **Update** — status, ownership, or blocked reason changed. See *Keeping
@@ -30,8 +31,8 @@ Establish which mode applies before doing anything else.
 4. **Audit** — report coverage gaps, invariant violations, and unreachable code
    without changing the plan.
 5. **Close** — the plan is finished or is being abandoned. Record what the
-   system actually is in `docs/state.md` and remove `docs/workplan/`. See *Close
-   procedure*.
+   system actually is in `docs/state.md` and strip `docs/workplan/` back to an
+   empty tracker. See *Close procedure*.
 
 Whichever mode applies, check the seven invariants explicitly. They hold of the
 plan as a whole, so a plan can violate one while every individual brief reads
@@ -181,8 +182,8 @@ not adopt a target width in the abstract.
 ## Close procedure
 
 Close ends a plan. It reads what happened, writes the record to `docs/state.md`,
-and removes `docs/workplan/`. It writes no briefs and no tracker: the next plan
-is created against the design set and this record.
+and strips `docs/workplan/` back to an empty tracker. It writes no briefs: the
+next plan is created against the design set and this record.
 
 Close happens because someone asked for it, never as a consequence of an audit
 finding the plan in bad shape. An audit that finds problems reports them; only a
@@ -194,7 +195,7 @@ decision to end the plan runs this.
    nothing; the point of a close is that the whole tracker gets resolved.
 2. **Read every post-mortem.** Each one names a plan rule that would have caught
    its defect, and those rules are the most valuable thing the plan produced.
-   They must be restated in the report, because the directory is about to go.
+   They must be restated in the report, because `post-mortems/` is about to go.
 3. **Read the code that exists**, not the briefs' account of it. What runs, what
    is registered in the composition root, what the standing suite actually
    covers, what a person can reach by hand.
@@ -204,9 +205,59 @@ decision to end the plan runs this.
    unreachable error paths whether or not a brief named them; promises in the
    design set that never became a task at all.
 6. **Write `docs/state.md`.** See below.
-7. **Remove `docs/workplan/` in the same commit** that adds the report, so the
-   two replace each other in one step. Git keeps the old plan; the working tree
-   should not go on presenting a plan nobody is executing.
+7. **Empty the plan in the same commit** that adds the report, so the two replace
+   each other in one step. Git keeps the old plan; the working tree should not go
+   on presenting a plan nobody is executing. Remove the briefs, the phase
+   directories, `README.md`, and `post-mortems/`. Keep two files:
+
+   - `docs/workplan/tasks.schema.json`, unchanged. It is the definition of the ID
+     scheme and the tracker's shape, and it is what the next plan is written
+     against. A close that deletes it deletes the format its own report cites.
+   - `docs/workplan/tasks.json`, emptied to `{"schema_version": 1, "tasks": []}`.
+     The dispatch automation opens this file unconditionally and validates it, so
+     an absent or shapeless tracker fails every pull request rather than
+     reporting no available tasks.
+
+   The empty tracker is the closed state, not a stub to fill in. Create mode
+   writes the next plan's tasks into it.
+8. **Sanitize the references.** See below.
+
+### Sanitizing the references
+
+The plan is cited from outside itself: by the automation that dispatches it, by
+the contributor documentation that explains how to pick a task up, by code
+comments that name an owning task, and by deferrals that name the ID meant to
+resolve them. Once the briefs are gone every one of those is dangling — nothing
+can resolve a task ID any more, and nothing can open a brief path. A close that
+leaves them behind hands the next plan a tree that describes a plan that no
+longer exists.
+
+Sweep the whole tree, not only `docs/`. Two searches find nearly all of it: the
+ID pattern, and the string `docs/workplan/`. Read the surrounding sentence in
+each hit rather than pattern-replacing, and check at least contributor
+documentation (`AGENTS.md`, `README.md`), CI workflows, dispatch scripts and
+their prompts, decision records, and comments in source.
+
+Each hit resolves one of three ways.
+
+- **It carried something.** A deferral naming an owning task, a code comment
+  naming the task that removes a stub, a workflow-slot comment naming who
+  allocated it. What the reference was holding is a gap in the system, so it
+  belongs in *What is not implemented* under a description of the gap. Then the
+  reference goes.
+- **It points at the plan as a place.** A brief path, a link into
+  `docs/workplan/README.md`, a "start here" that routes a contributor to the
+  tracker. Repoint it at `docs/state.md` or delete it, whichever leaves a true
+  sentence.
+- **It is machinery.** Scripts, workflows, and control panels that read the
+  tracker keep working against the empty one and report nothing available; that
+  is the whole reason the tracker survives. Leave them alone, and confirm the
+  claim rather than assuming it — run the availability query and the status gate
+  against the emptied tracker and see them succeed with an empty result.
+
+The check is that no task ID and no `docs/workplan/` brief path survives outside
+git history, and that every document describing how to pick up work either
+describes the empty state truthfully or is gone.
 
 ### The report
 
@@ -221,7 +272,7 @@ decomposition, and organising the record around it smuggles that decomposition
 forward.
 
 **What went wrong.** Every post-mortem's rule, restated so it survives the
-directory being removed. Tasks marked complete that were not. Seams that leaked.
+briefs being removed. Tasks marked complete that were not. Seams that leaked.
 Invariants that were established and then lost, and what lost them.
 
 **What is not implemented.** Every design-set promise with no working code
@@ -286,7 +337,7 @@ face, and states what plan rule would have caught it. Ordinary implementation
 bugs do not belong there.
 
 Those rules outlive the plan that produced them. Close restates every one of
-them in `docs/state.md` before the directory goes, which is the only reason
+them in `docs/state.md` before `post-mortems/` goes, which is the only reason
 removing it is safe.
 
 ## Smells
@@ -333,6 +384,8 @@ In close mode, only the last item applies. In every other mode:
 - Every deferral names an ID that exists in `tasks.json`.
 - `tasks.json` validates against the frozen schema; `README.md` tables agree
   with it; every `brief` path resolves.
+- Every ID is unique and matches `P<phase>-<NNN>`, the counter runs plan-wide
+  with no reuse, and no ID was reissued to follow a task that changed phase.
 - The dependency graph has no unknown references, forward references, or cycles.
 - Critical path, average width, and both collision sets are recorded per phase.
 - No two concurrently-available tasks share a contract surface.
@@ -342,6 +395,9 @@ In close mode, only the last item applies. In every other mode:
 - No task defers part of its own completion condition; every operator-visible
   capability is drivable by hand in the task that introduces it.
 - Every task fits one of the four shapes.
-- A close left `docs/state.md` in place of `docs/workplan/`: every post-mortem
-  rule restated, every claim carrying a command or a `file:line`, no section
-  written as a backlog, and both changes in one commit.
+- A close left `docs/state.md` in place of the plan: every post-mortem rule
+  restated, every claim carrying a command or a `file:line`, no section written
+  as a backlog, and both changes in one commit. `docs/workplan/` retains its
+  schema and an empty tracker and nothing else, the availability query and the
+  status gate both succeed against that tracker, and no task ID or brief path
+  survives anywhere in the tree.

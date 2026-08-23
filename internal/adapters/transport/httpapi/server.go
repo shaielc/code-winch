@@ -312,8 +312,8 @@ func (s *server) problem(w http.ResponseWriter, r *http.Request, status int, cod
 	s.writeJSON(w, status, Problem{Type: "https://code-winch.dev/problems/" + strings.ReplaceAll(code, "_", "-"), Title: title, Status: status, Code: code, Detail: detail, RequestId: id.requestID})
 }
 
-// Actors are free-form configuration and are content under docs/security.md §5;
-// the durable audit trail that records them is P2-026.
+// Actors are free-form configuration and are content under docs/security.md §5,
+// so this logs the command without them; no durable audit trail exists yet.
 func (s *server) audit(r *http.Request, operation string, runID RunId) {
 	id := r.Context().Value(requestKey{}).(identity)
 	s.cfg.Logger.LogAttrs(r.Context(), slog.LevelInfo, "run command accepted", slog.String("operation", operation), slog.String("request_id", id.requestID), slog.String("run_id", runID))

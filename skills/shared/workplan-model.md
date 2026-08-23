@@ -41,7 +41,7 @@ still produce a system nobody can start.
 | `docs/workplan/tasks.json` | Machine-readable tracker — status, ownership, dependencies |
 | `docs/workplan/tasks.schema.json` | Schema for the tracker |
 | `docs/workplan/post-mortems/` | Records of plan failures — defects whose root cause is a seam between briefs rather than an implementation |
-| `docs/state.md` | Written when a plan closes: what was done, what went wrong, what is not implemented. Outlives `docs/workplan/`, which the close removes |
+| `docs/state.md` | Written when a plan closes: what was done, what went wrong, what is not implemented. Outlives the plan, which the close strips back to an empty tracker |
 
 An existing plan's conventions win: match its ID scheme, directory layout, and
 brief structure rather than the illustrative ones here.
@@ -472,13 +472,20 @@ Consequences to respect:
   goes stale.
 - `blocked_reason` is a non-empty string when status is `blocked`, and `null`
   otherwise. The schema enforces this.
+- IDs are `P<phase>-<NNN>`: the phase number, then a three-digit counter that
+  starts at `001` and runs across the whole plan, never restarting per phase.
+  `P0-001` is the first task of a new plan; if phase 0 ends at `P0-014`, phase 1
+  opens at `P1-015`. The phase number is open-ended — a plan derives as many
+  phases as its design set needs, and `tasks.schema.json` must not cap them.
 - IDs are append-only. Merged pull requests, dispatch history, and cross-brief
   references all cite them; renumbering silently invalidates that record. A task
   inserted logically "between" two others still gets the next free number.
-- The ID pattern permits phases 0–5 only. A seventh phase requires a schema
-  change, which is out of bounds — fold the work into an existing phase or raise
-  it as a decision.
-- `brief` paths are `phase-N/<slug>.md` and must resolve to a real file.
+- `brief` paths are `phase-N/<id>-<slug>.md` and must resolve to a real file.
+  The ID leads the filename so a phase directory lists in creation order.
+- An ID's phase prefix is frozen at creation; the `phase` field is authoritative.
+  Moving a task between phases changes the field and the brief's directory and
+  leaves the ID alone, so a stale prefix is expected and is not a defect. Never
+  reissue an ID to match a move.
 - Status fields are stamped by automation when a pull request is approved
   (`scripts/stamp_task_completion.py`). An implementing change does not edit
   them.

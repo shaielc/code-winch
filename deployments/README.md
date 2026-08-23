@@ -16,8 +16,8 @@ listener. `GET /api/v1/health` returns `{"status":"ok"}`. Shutdown signals close
 live event subscribers and give HTTP requests the configured bounded drain
 period.
 
-The `/api/v1/runs*` routes are mounted but not yet bound to run use cases, which
-is P1-050. Until then they answer `404` for reads and `500` for creation, and no
+The `/api/v1/runs*` routes are mounted but not yet bound to run use cases. Until
+they are, the routes answer `404` for reads and `500` for creation, and no
 harness process is launched.
 
 ## Services
@@ -36,7 +36,7 @@ bootstrap API.
 
 Requests authenticate with `Authorization: Bearer $WINCH_TOKEN`. The handler
 also accepts a `winch_session` cookie scoped to `/api/v1`, but nothing issues
-one yet — browser session establishment arrives with P1-050.
+one yet — no code establishes a browser session.
 
 ## Configuration
 
@@ -141,8 +141,8 @@ reachable from anything but loopback.
 
 `fake-harness` is a deterministic stand-in for a coding-agent CLI that needs no
 vendor account. It is built from `cmd/fake-harness` and installed on `PATH` in
-the daemon image, so the harness adapter can launch it by name once P1-050 binds
-the runner. Nothing launches it today, but you can drive it by hand:
+the daemon image, so the harness adapter can launch it by name once the runner
+is bound. Nothing launches it today, but you can drive it by hand:
 
 ```sh
 docker compose -f deployments/compose.yml exec winchd fake-harness

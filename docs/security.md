@@ -49,25 +49,25 @@ apply before data is persisted or exported.
 ## 3. Threat and mitigation register
 
 The owner is accountable for accepting the residual risk and completing the
-mapped workplan task. A task reference means the control is planned rather than
-already implemented.
+mitigation. This register states the control that is intended, not whether it
+exists; `docs/state.md` records which of these hold at HEAD.
 
 | ID | Surface and abuse case | Mitigation and verification | Follow-up / residual owner |
 |---|---|---|---|
-| T01 | Browser: session theft, CSRF, ID guessing, or WebSocket hijack controls another user's run. | Secure cookies or short-lived tokens; authorize every object; validate CSRF and WebSocket origin; reauthorize streams; rate/size limits. | P1-017, P1-018, P2-026 — control-plane owner |
-| T02 | Browser: a user is misled about effective isolation, credentials, or network access. | Display resolved capabilities before launch; reject rather than silently weaken policy; label `local-trusted` as unisolated. | P3-030, P3-033 — product/security owner |
-| T03 | Control plane: duplicate, stale, or reordered input/events corrupt durable history. | One writer, idempotency keys, transactional outbox, gap-free sequence, lease fencing, replay tests. | P1-012, P1-015, P1-016, P5-043 — application owner |
-| T04 | Control plane/storage: unauthorized reads, exports, deletion, or sensitive log/trace labels leak content. | Object authorization; sensitivity policy; content-free audit/telemetry; stable errors that do not reveal existence; canary tests. | P1-017, P2-026, P2-027, P5-047 — control-plane owner |
-| T05 | Runner: forged commands/events, a stale runner, or a lost host assumes execution ownership. | Authenticated, rotated runner identity; bounded versioned protocol; command IDs; lease epochs/tokens; reconciliation and revocation. | P1-020, P5-041, P5-042, P5-043, P5-046 — runner owner |
-| T06 | Runner/host: hostile child processes exhaust resources, survive stop, or access host sockets/devices. | Ownership labels, stop escalation, orphan cleanup; container limits; no privileged mode, host namespaces, devices, or Docker socket. | P1-013, P3-029, P5-046 — runner owner |
-| T07 | Sandbox: repository instructions or generated commands escape, persist, or attack another run. | Disposable per-run workspace; least-privilege named profiles; rootless non-root container baseline; stronger driver required for hostile multi-tenancy. | P3-028, P3-029, P3-030 — sandbox/security owner; **accepted residual:** containers and the local driver are not hard hostile multi-tenant boundaries |
-| T08 | Repository: traversal, symlink, submodule, or malicious archive accesses files outside the approved root. | Canonicalize beneath approved root; reject traversal/symlink escapes; safe extraction; mount only after policy evaluation; adversarial tests. | P3-028 — sandbox owner |
-| T09 | Network: a harness exfiltrates data, reaches cloud metadata/internal services, or abuses DNS/rebinding. | Deny egress by default; dedicated network; domain/port policy plus resolved-IP checks; block link-local/metadata; content-free audit facts. | P3-031 — network/security owner; **accepted residual:** DNS/IP/SNI controls cannot fully identify end-to-end TLS content |
-| T10 | Secrets: plaintext credentials enter database, events, artifacts, logs, process environment, or browser. | Store opaque references only; scoped short-lived injection; avoid environment variables; redact before persistence; cleanup; secret canaries. | P1-017, P2-026, P3-032 — security owner |
-| T11 | Harness/parser: malformed, oversized, or adversarial provider output crashes parsing or bypasses approval semantics. | Bounded incremental parsing; schema validation/fuzzing; structured approval; raw terminal input separately authorized; safe diagnostic fallback. | P1-014, P2-021, P2-024, P2-025 — adapter owner |
-| T12 | Renderer: ANSI/Markdown/HTML/URL content executes script, spoofs UI, fetches data, or consumes excessive resources. | Interpret rather than inject output; sanitize; restrictive CSP; safe links; bounded projections; isolate untrusted server renderers. | P1-019, P2-022, P2-023, P3-033 — web/renderer owner |
-| T13 | Supply chain: compromised dependencies or images execute in control plane/runner. | Pin image digest and provenance; scan dependencies/images; produce SBOM; restrict adapter and renderer loading. | P3-029; shared-deployment launch blocker LB08 — release/security owner |
-| T14 | Lifecycle: retention worker, export, deletion, backup, or renderer cache leaves unauthorized copies. | One sensitivity policy across stores; authorized integrity-manifested exports; retryable deletion ledger; cache invalidation; backup expiry verification. | P2-023, P2-027, P5-046 — data owner |
+| T01 | Browser: session theft, CSRF, ID guessing, or WebSocket hijack controls another user's run. | Secure cookies or short-lived tokens; authorize every object; validate CSRF and WebSocket origin; reauthorize streams; rate/size limits. | control-plane owner |
+| T02 | Browser: a user is misled about effective isolation, credentials, or network access. | Display resolved capabilities before launch; reject rather than silently weaken policy; label `local-trusted` as unisolated. | product/security owner |
+| T03 | Control plane: duplicate, stale, or reordered input/events corrupt durable history. | One writer, idempotency keys, transactional outbox, gap-free sequence, lease fencing, replay tests. | application owner |
+| T04 | Control plane/storage: unauthorized reads, exports, deletion, or sensitive log/trace labels leak content. | Object authorization; sensitivity policy; content-free audit/telemetry; stable errors that do not reveal existence; canary tests. | control-plane owner |
+| T05 | Runner: forged commands/events, a stale runner, or a lost host assumes execution ownership. | Authenticated, rotated runner identity; bounded versioned protocol; command IDs; lease epochs/tokens; reconciliation and revocation. | runner owner |
+| T06 | Runner/host: hostile child processes exhaust resources, survive stop, or access host sockets/devices. | Ownership labels, stop escalation, orphan cleanup; container limits; no privileged mode, host namespaces, devices, or Docker socket. | runner owner |
+| T07 | Sandbox: repository instructions or generated commands escape, persist, or attack another run. | Disposable per-run workspace; least-privilege named profiles; rootless non-root container baseline; stronger driver required for hostile multi-tenancy. | sandbox/security owner; **accepted residual:** containers and the local driver are not hard hostile multi-tenant boundaries |
+| T08 | Repository: traversal, symlink, submodule, or malicious archive accesses files outside the approved root. | Canonicalize beneath approved root; reject traversal/symlink escapes; safe extraction; mount only after policy evaluation; adversarial tests. | sandbox owner |
+| T09 | Network: a harness exfiltrates data, reaches cloud metadata/internal services, or abuses DNS/rebinding. | Deny egress by default; dedicated network; domain/port policy plus resolved-IP checks; block link-local/metadata; content-free audit facts. | network/security owner; **accepted residual:** DNS/IP/SNI controls cannot fully identify end-to-end TLS content |
+| T10 | Secrets: plaintext credentials enter database, events, artifacts, logs, process environment, or browser. | Store opaque references only; scoped short-lived injection; avoid environment variables; redact before persistence; cleanup; secret canaries. | security owner |
+| T11 | Harness/parser: malformed, oversized, or adversarial provider output crashes parsing or bypasses approval semantics. | Bounded incremental parsing; schema validation/fuzzing; structured approval; raw terminal input separately authorized; safe diagnostic fallback. | adapter owner |
+| T12 | Renderer: ANSI/Markdown/HTML/URL content executes script, spoofs UI, fetches data, or consumes excessive resources. | Interpret rather than inject output; sanitize; restrictive CSP; safe links; bounded projections; isolate untrusted server renderers. | web/renderer owner |
+| T13 | Supply chain: compromised dependencies or images execute in control plane/runner. | Pin image digest and provenance; scan dependencies/images; produce SBOM; restrict adapter and renderer loading. | shared-deployment launch blocker LB08 — release/security owner |
+| T14 | Lifecycle: retention worker, export, deletion, backup, or renderer cache leaves unauthorized copies. | One sensitivity policy across stores; authorized integrity-manifested exports; retryable deletion ledger; cache invalidation; backup expiry verification. | data owner |
 
 ## 4. Security profiles
 
@@ -122,7 +122,7 @@ resource ID, request/completion time, policy version, and partial failures.
 Credential deletion means revocation at the provider plus removal of the
 reference. Partial deletion is retried and visible to operators; success is not
 claimed until every mutable store acknowledges it and immutable-copy expiry is
-recorded. P2-027 owns implementation and fake-time/crash-replay verification.
+recorded. Implementations are verified under fake time and crash replay.
 
 ### Telemetry, errors, and audit fields
 
@@ -137,9 +137,9 @@ Public errors have a stable code, safe summary, retryability, correlation ID,
 and an actionable next step. Detailed causes remain in access-controlled
 content-safe diagnostics. Authorization failures do not distinguish absent
 from forbidden resources. Redaction occurs before persistence or export, and a
-redaction failure drops/quarantines the field rather than logging it. P1-017,
-P2-026, P3-032, and P5-047 own API mapping, audit, secret canaries, and telemetry
-enforcement respectively.
+redaction failure drops/quarantines the field rather than logging it. API error
+mapping, the audit trail, secret canaries, and telemetry enforcement are each
+bound by these rules.
 
 ## 6. Container baseline
 
