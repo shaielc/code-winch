@@ -101,7 +101,7 @@ Malformed output mode:
 
 | Deferred | Owning task |
 |---|---|
-| Daemon-backed runs using the fake profile | Phase 1 (not yet planned) |
+| Daemon-backed runs using the fake profile | P0-008 |
 | Controllable in-memory store profile | Phase 1 (not yet planned) |
 
 ## Traces to

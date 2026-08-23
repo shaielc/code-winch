@@ -21,8 +21,8 @@ gate scans only this repository's Go packages.
 
 ## Non-goals
 
-- Adding an end-to-end scenario suite (`test/e2e`, `make e2e`) — owned by Phase
-  1 once run routes bind.
+- Adding an end-to-end scenario suite (`test/e2e`, `make e2e`) — owned by
+  P0-007.
 - Changing integration test assertions beyond what is required to run them in CI.
 - Running integration tests inside `make check` on developer machines without a
   database (keep the existing `make test-integration` split).
@@ -76,7 +76,7 @@ Simulate CI locally (or observe a workflow run on a pull request for this task):
 
 | Deferred | Owning task |
 |---|---|
-| End-to-end scenario suite and `make e2e` | Phase 1 (not yet planned) |
+| End-to-end scenario suite and `make e2e` | P0-007 |
 
 ## Traces to
 

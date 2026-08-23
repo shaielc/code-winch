@@ -21,7 +21,8 @@ The maintained operator CLI (`winch`) is produced by `make build` and installed 
 
 - New CLI subcommands beyond what already exists (`dev run`).
 - Publishing `winch` as a separate image or package.
-- Wiring run use cases through the CLI — HTTP binding is Phase 1.
+- Wiring run use cases through the CLI — daemon-backed subcommands land in P0-006
+  through P0-011.
 
 ## Runtime reachability
 
@@ -75,7 +76,7 @@ Inside a running compose stack (after `docker compose up`):
 
 | Deferred | Owning task |
 |---|---|
-| CLI commands for daemon-backed runs (`create`, `start`, …) | Phase 1 (not yet planned) |
+| CLI `run` subcommands (`create`, `start`, …) | P0-006 through P0-011 |
 
 ## Traces to
 

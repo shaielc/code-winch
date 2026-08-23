@@ -75,7 +75,7 @@ The test log should show a successful fake run, for example:
 
 | Deferred | Owning task |
 |---|---|
-| Standing API scenario `create → start → stream → input → stop` | Phase 1 (not yet planned) |
+| Standing API scenario `create → start → stream → input → stop` | P0-007 |
 
 ## Traces to
 

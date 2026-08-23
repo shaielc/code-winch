@@ -56,6 +56,72 @@
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-005-sanitize-plan-references.md"
+    },
+    {
+      "id": "P0-006",
+      "title": "Create and read runs",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": ["P0-001"],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-006-create-and-read-runs.md"
+    },
+    {
+      "id": "P0-007",
+      "title": "Standing end-to-end scenario suite",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": ["P0-001", "P0-011"],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-007-standing-e2e-suite.md"
+    },
+    {
+      "id": "P0-008",
+      "title": "Start run execution",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": ["P0-003", "P0-006"],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-008-start-run-execution.md"
+    },
+    {
+      "id": "P0-009",
+      "title": "Send input and drain outbox",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": ["P0-008"],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-009-send-input-and-drain-outbox.md"
+    },
+    {
+      "id": "P0-010",
+      "title": "Live WebSocket event stream",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": ["P0-009"],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-010-live-websocket-stream.md"
+    },
+    {
+      "id": "P0-011",
+      "title": "Stop run",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": ["P0-010"],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-011-stop-run.md"
     }
   ]
 }
