@@ -12,17 +12,31 @@ outbox rows enqueued but not yet delivered.
 
 ## Scope
 
-- Register harness (`fake`) and sandbox (`local`) drivers in the composition-root
-  registry.
+- Construct the `fake` harness and `local` sandbox drivers directly in
+  `cmd/winchd`. Phase 0 supports exactly this pair, so no name-to-driver
+  registry is built (`docs/code-structure.md:119` keeps registration explicit in
+  the composition root either way).
+- Validate the run's persisted `harnessProfile`/`sandboxProfile` against that
+  pair and refuse anything else with a stable, content-free error, so an
+  unsupported request is rejected rather than silently run unisolated
+  (ADR-0003).
 - Construct `supervisor.Supervisor` and `runner/local.Runner`, wiring runner
   observations to `Supervisor.Observe` and durable `EventStore` append (which also
   enqueues outbox records per the existing postgres adapter).
 - Implement `StartRun` and `ListRunEvents` on the delegating backend.
 - Add `winch run start` and `winch run events` (HTTP poll; no WebSocket client).
-- Extend the standing `make e2e` scenario with start and polled events.
+- Add the **`create → start → poll events → get`** scenario in
+  `test/e2e/start_test.go`: start a created run, let the fake harness exit on
+  its own, assert ordered, gap-free events from the polling endpoint, and read
+  the run back to assert its terminal state.
 
 ## Non-goals
 
+- A driver registry, name-to-driver resolution, or any second harness or
+  sandbox. Phase 0 ships one supported pair and says so.
+- **Any e2e step beyond `create → start → poll events → get`.** No input, no
+  WebSocket, and no stop command — the scenario's run ends because its
+  transcript ends.
 - Starting the outbox worker or any `OutboxPublisher` implementation.
 - `EventStream.Publish` or WebSocket streaming.
 - `SendRunInput`, `StopRun`, or outbox backlog draining.
@@ -39,6 +53,7 @@ outbox rows enqueued but not yet delivered.
 - `cmd/winchd/main.go` (registry registration only — no wholesale rewrite)
 - `internal/application/` (start use case)
 - `cmd/winch/` (`start`, `events` subcommands)
+- `test/e2e/start_test.go`
 - Tests for start transitions and durable event append
 
 ## Contract surfaces
@@ -73,6 +88,8 @@ intent exists but no worker drains it yet.
 - [ ] `StartRun` drives a fake harness to completion through supervisor and
   local runner.
 - [ ] `ListRunEvents` returns gap-free, ordered events from PostgreSQL.
+- [ ] Starting a run whose persisted profiles are not `fake`/`local` is refused
+  with a stable error code, and no harness process is launched.
 - [ ] Outbox rows are created on append but no worker runs in the daemon process.
 - [ ] `winch run start` and `winch run events` demonstrate the behavior.
 - [ ] I1 and I2 still hold.

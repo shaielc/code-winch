@@ -63,10 +63,21 @@
       "phase": 0,
       "phase_name": "Foundation repair",
       "status": "pending",
-      "depends_on": [],
+      "depends_on": ["P0-001"],
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-006-create-and-read-runs.md"
+    },
+    {
+      "id": "P0-007",
+      "title": "Finalize phase 0",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": ["P0-001", "P0-009", "P0-010", "P0-011"],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-007-finalize-phase-0.md"
     },
     {
       "id": "P0-008",

@@ -19,11 +19,15 @@ publish intent with polling as the demonstration surface — no WebSocket yet.
   `EventStream.Publish`** — for example a no-op or metrics-only publisher whose
   sole job is to let the worker mark outbox rows complete.
 - Add `winch run input`.
-- Extend the standing `make e2e` scenario with input and an outbox-backlog
-  drain assertion.
+- Add the **`create → start → input → poll events`** scenario in
+  `test/e2e/input_test.go`: start a run whose transcript blocks on input, send
+  input, poll `GET /runs/{runId}/events` until the harness response appears, and
+  assert the outbox backlog drains to zero.
 
 ## Non-goals
 
+- **Any e2e step beyond `create → start → input → poll events`.** No WebSocket
+  assertions and no stop command; the scenario asserts delivery by polling.
 - `EventStream.Publish` or WebSocket subscribers.
 - `winch run stream` or any WebSocket client.
 - `StopRun` (P0-011).
@@ -40,6 +44,7 @@ publish intent with polling as the demonstration surface — no WebSocket yet.
 - `cmd/winchd/main.go` (worker lifecycle)
 - `internal/application/` (input use case, publisher adapter)
 - `cmd/winch/` (`input` subcommand)
+- `test/e2e/input_test.go`
 - Tests for input acceptance and outbox drain
 
 ## Contract surfaces

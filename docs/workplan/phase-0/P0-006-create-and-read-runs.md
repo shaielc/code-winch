@@ -2,7 +2,7 @@
 
 **Phase:** 0 — Foundation repair
 **Shape:** seam
-**Dependencies:** None
+**Dependencies:** P0-001 (semantic: this task's durability claim is only checkable in CI once the Go workflow has a PostgreSQL service; without it the storage tests skip)
 
 ## Objective
 
@@ -21,15 +21,20 @@ the run is persisted but does not execute.
   delegating backend, shared clock/ID sources) without starting processes or
   background workers.
 - Add `winch run create` and `winch run get`.
-- Create `test/e2e/` and a `make e2e` target with the first scenario steps:
-  create a run through the daemon API and read it back (subsequent run tasks
-  extend the same scenario file).
+- Create `test/e2e/`, a `make e2e` target, and the shared scenario harness later
+  scenarios reuse: daemon startup, database setup, and an API client.
+- Add the **`create → get`** scenario in `test/e2e/create_test.go`: create a run
+  through the daemon API, read it back, and assert it is persisted in state
+  `created` with no events.
 
 ## Non-goals
 
 - Supervisor, runner, harness/sandbox drivers, outbox worker, or
   `EventStream.Publish`.
 - `StartRun`, `SendRunInput`, `StopRun`, or event listing.
+- **Any e2e step beyond `create → get`.** Start, events, input, stream, and stop
+  are each added by the task that introduces them (P0-008 through P0-011);
+  the assembled round trip and the CI gate are P0-007.
 - Browser session cookies.
 
 ## Runtime reachability
@@ -43,7 +48,7 @@ the run is persisted but does not execute.
 - `cmd/winchd/main.go`
 - `internal/application/` (run create/get use cases)
 - `cmd/winch/` (run create/get subcommands)
-- `test/e2e/` (initial scenario: create and get)
+- `test/e2e/` (new directory: shared scenario harness and `create_test.go`)
 - `Makefile` (`make e2e` target)
 - Tests for create/get persistence and API mapping
 
@@ -76,7 +81,7 @@ the run is persisted but does not execute.
 - [ ] `POST /api/v1/runs` returns 201 and the run row exists in PostgreSQL.
 - [ ] `GET /api/v1/runs/{runId}` returns the persisted run.
 - [ ] `winch run create` and `winch run get` exercise the same behavior.
-- [ ] `test/e2e/` exists; `make e2e` passes through create and get.
+- [ ] `test/e2e/` exists and `make e2e` runs the `create → get` scenario.
 - [ ] Stubbed backend methods name P0-008, P0-009, P0-010, or P0-011 as owners.
 - [ ] I1 and I2 still hold.
 

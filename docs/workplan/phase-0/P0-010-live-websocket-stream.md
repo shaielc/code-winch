@@ -17,10 +17,15 @@ delivery fans out through `EventStream.Publish` after durable commit.
   (`GET /api/v1/runs/{runId}/events/stream`).
 - Add `winch run stream` (WebSocket client with bearer auth and resume via
   `after_sequence` if the API supports it).
-- Extend the standing `make e2e` scenario with WebSocket stream assertions.
+- Add the **`create → start → stream`** scenario in `test/e2e/stream_test.go`:
+  subscribe over WebSocket before the harness produces output, and assert live
+  events arrive without polling and agree with what the polling endpoint
+  returns afterwards.
 
 ## Non-goals
 
+- **Any e2e step beyond `create → start → stream`.** No input step and no stop
+  command.
 - `SendRunInput` or `StopRun` changes beyond what streaming requires.
 - Browser session cookies or web UI work.
 - New event kinds or renderers.
@@ -37,6 +42,7 @@ delivery fans out through `EventStream.Publish` after durable commit.
   publisher adapter)
 - `cmd/winchd/main.go` (publisher registration swap)
 - `cmd/winch/` (`stream` subcommand)
+- `test/e2e/stream_test.go`
 - Tests proving publish follows durable commit and subscribers receive events
 
 ## Contract surfaces

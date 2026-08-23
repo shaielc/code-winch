@@ -44,6 +44,7 @@ failure, malformed output, or early exit at runtime without editing source code.
 ## Write set
 
 - `cmd/fake-harness/main.go`
+- `cmd/winch/main.go` (transcript and injection flags on `dev run`)
 - `internal/adapters/harness/fake/fake.go`
 - `internal/platform/config/` (only if a configuration key is the chosen surface)
 - `deployments/README.md` (fake profile controls)
@@ -102,7 +103,7 @@ Malformed output mode:
 | Deferred | Owning task |
 |---|---|
 | Daemon-backed runs using the fake profile | P0-008 |
-| Controllable in-memory store profile | Phase 1 (not yet planned) |
+| Controllable in-memory store profile | Phase 1 — registered in [`../phase-1/README.md`](../phase-1/README.md) |
 
 ## Traces to
 
