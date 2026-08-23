@@ -19,6 +19,8 @@ publish intent with polling as the demonstration surface — no WebSocket yet.
   `EventStream.Publish`** — for example a no-op or metrics-only publisher whose
   sole job is to let the worker mark outbox rows complete.
 - Add `winch run input`.
+- Extend the standing `make e2e` scenario with input and an outbox-backlog
+  drain assertion.
 
 ## Non-goals
 
@@ -66,6 +68,7 @@ exposed debug endpoint introduced in this task if needed):
 ## Verification
 
 - `make check` and `make test-integration` pass.
+- `make e2e` passes through the input and outbox-drain steps.
 - Existing outbox worker unit tests still pass.
 
 ## Acceptance criteria

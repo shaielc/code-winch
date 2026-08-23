@@ -19,6 +19,7 @@ outbox rows enqueued but not yet delivered.
   enqueues outbox records per the existing postgres adapter).
 - Implement `StartRun` and `ListRunEvents` on the delegating backend.
 - Add `winch run start` and `winch run events` (HTTP poll; no WebSocket client).
+- Extend the standing `make e2e` scenario with start and polled events.
 
 ## Non-goals
 
@@ -64,6 +65,7 @@ intent exists but no worker drains it yet.
 ## Verification
 
 - `make check` and `make test-integration` pass.
+- `make e2e` passes through create, get, start, and polled events.
 - Contract suites for fake harness and local sandbox still pass.
 
 ## Acceptance criteria

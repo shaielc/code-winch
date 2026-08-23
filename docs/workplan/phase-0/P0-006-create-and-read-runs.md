@@ -2,7 +2,7 @@
 
 **Phase:** 0 — Foundation repair
 **Shape:** seam
-**Dependencies:** P0-001 (semantic: PostgreSQL integration must gate CI before the storage-bound run seam merges)
+**Dependencies:** None
 
 ## Objective
 
@@ -21,6 +21,9 @@ the run is persisted but does not execute.
   delegating backend, shared clock/ID sources) without starting processes or
   background workers.
 - Add `winch run create` and `winch run get`.
+- Create `test/e2e/` and a `make e2e` target with the first scenario steps:
+  create a run through the daemon API and read it back (subsequent run tasks
+  extend the same scenario file).
 
 ## Non-goals
 
@@ -40,6 +43,8 @@ the run is persisted but does not execute.
 - `cmd/winchd/main.go`
 - `internal/application/` (run create/get use cases)
 - `cmd/winch/` (run create/get subcommands)
+- `test/e2e/` (initial scenario: create and get)
+- `Makefile` (`make e2e` target)
 - Tests for create/get persistence and API mapping
 
 ## Contract surfaces
@@ -62,6 +67,8 @@ the run is persisted but does not execute.
 
 - `make check` passes.
 - `make test-integration` passes with `PG_TEST_DATABASE_URL` set.
+- `make e2e` passes locally through the create/get steps (daemon + PostgreSQL
+  required).
 - `unavailableBackend` is removed; create/get no longer return 500 for binding.
 
 ## Acceptance criteria
@@ -69,6 +76,7 @@ the run is persisted but does not execute.
 - [ ] `POST /api/v1/runs` returns 201 and the run row exists in PostgreSQL.
 - [ ] `GET /api/v1/runs/{runId}` returns the persisted run.
 - [ ] `winch run create` and `winch run get` exercise the same behavior.
+- [ ] `test/e2e/` exists; `make e2e` passes through create and get.
 - [ ] Stubbed backend methods name P0-008, P0-009, P0-010, or P0-011 as owners.
 - [ ] I1 and I2 still hold.
 

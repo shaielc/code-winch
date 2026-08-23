@@ -76,7 +76,7 @@ Simulate CI locally (or observe a workflow run on a pull request for this task):
 
 | Deferred | Owning task |
 |---|---|
-| End-to-end scenario suite and `make e2e` | P0-007 |
+| End-to-end scenario suite and `make e2e` | P0-006 through P0-011 (iteratively; CI gate in P0-011) |
 
 ## Traces to
 

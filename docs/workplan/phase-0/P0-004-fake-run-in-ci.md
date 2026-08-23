@@ -2,7 +2,7 @@
 
 **Phase:** 0 — Foundation repair
 **Shape:** hardening
-**Dependencies:** P0-002 (semantic: CI must build `winch` before this test can invoke it)
+**Dependencies:** P0-002 (semantic: CI must build `winch` before this test can invoke it), P0-003 (semantic: the CI run must exercise the controllable fake harness profile this task gates)
 
 ## Objective
 
@@ -14,7 +14,7 @@ previous plan marked complete but never enforced.
 - Add an automated test (Go `exec` test, scripted workflow step, or dedicated
   package under `test/`) that builds or uses the shipped `winch` and
   `fake-harness` binaries and drives `winch dev run --harness fake --sandbox
-  local` with a short stdin script through successful exit.
+  local` with a P0-003 scripted transcript through successful exit.
 - Wire the test into the default CI path (`make check` or the workflow step added
   in P0-001) without requiring PostgreSQL or the daemon.
 - Assert stop escalation: no `fake-harness` descendant remains after the run
@@ -22,7 +22,8 @@ previous plan marked complete but never enforced.
 
 ## Non-goals
 
-- Driving runs through the HTTP API or WebSocket (Phase 1).
+- Driving runs through the HTTP API or WebSocket — the standing daemon scenario
+  grows iteratively in P0-006 through P0-011 (`make e2e`).
 - Replacing contract tests in `test/contract/` — this supplements them with a
   process-level check of the shipped binaries.
 - Browser or `web/` testing.
@@ -75,7 +76,7 @@ The test log should show a successful fake run, for example:
 
 | Deferred | Owning task |
 |---|---|
-| Standing API scenario `create → start → stream → input → stop` | P0-007 |
+| Standing API scenario `create → start → stream → input → stop` | P0-006 through P0-011 (`make e2e`, iteratively) |
 
 ## Traces to
 

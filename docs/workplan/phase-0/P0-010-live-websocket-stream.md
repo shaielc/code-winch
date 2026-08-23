@@ -17,6 +17,7 @@ delivery fans out through `EventStream.Publish` after durable commit.
   (`GET /api/v1/runs/{runId}/events/stream`).
 - Add `winch run stream` (WebSocket client with bearer auth and resume via
   `after_sequence` if the API supports it).
+- Extend the standing `make e2e` scenario with WebSocket stream assertions.
 
 ## Non-goals
 
@@ -58,6 +59,7 @@ Disconnect and reconnect with `after_sequence` if supported:
 ## Verification
 
 - `make check` and `make test-integration` pass.
+- `make e2e` passes through the WebSocket stream step.
 - Existing `httpapi` stream tests still pass.
 
 ## Acceptance criteria

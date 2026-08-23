@@ -41,7 +41,7 @@
       "phase": 0,
       "phase_name": "Foundation repair",
       "status": "pending",
-      "depends_on": ["P0-002"],
+      "depends_on": ["P0-002", "P0-003"],
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-004-fake-run-in-ci.md"
@@ -63,21 +63,10 @@
       "phase": 0,
       "phase_name": "Foundation repair",
       "status": "pending",
-      "depends_on": ["P0-001"],
+      "depends_on": [],
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-006-create-and-read-runs.md"
-    },
-    {
-      "id": "P0-007",
-      "title": "Standing end-to-end scenario suite",
-      "phase": 0,
-      "phase_name": "Foundation repair",
-      "status": "pending",
-      "depends_on": ["P0-001", "P0-011"],
-      "owner": null,
-      "blocked_reason": null,
-      "brief": "phase-0/P0-007-standing-e2e-suite.md"
     },
     {
       "id": "P0-008",
@@ -118,7 +107,7 @@
       "phase": 0,
       "phase_name": "Foundation repair",
       "status": "pending",
-      "depends_on": ["P0-010"],
+      "depends_on": ["P0-008"],
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-011-stop-run.md"
