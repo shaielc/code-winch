@@ -122,6 +122,83 @@
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-011-stop-run.md"
+    },
+    {
+      "id": "P0-012",
+      "title": "Ship controllable in-memory store profile",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-012-ship-memory-store-profile.md"
+    },
+    {
+      "id": "P0-013",
+      "title": "Revise create/read for memory store profile",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": ["P0-006", "P0-012"],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-013-revise-create-read-for-memory.md"
+    },
+    {
+      "id": "P0-014",
+      "title": "Revise start execution for memory store profile",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": ["P0-008", "P0-013"],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-014-revise-start-for-memory.md"
+    },
+    {
+      "id": "P0-015",
+      "title": "Revise input and outbox for memory store profile",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": ["P0-009", "P0-014"],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-015-revise-input-outbox-for-memory.md"
+    },
+    {
+      "id": "P0-016",
+      "title": "Revise WebSocket stream for memory store profile",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": ["P0-010", "P0-015"],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-016-revise-stream-for-memory.md"
+    },
+    {
+      "id": "P0-017",
+      "title": "Revise stop run for memory store profile",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": ["P0-011", "P0-014"],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-017-revise-stop-for-memory.md"
+    },
+    {
+      "id": "P0-018",
+      "title": "Revise phase 0 closure for memory-backed e2e",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": ["P0-007", "P0-016", "P0-017", "P0-012"],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-018-revise-finalize-for-memory-e2e.md"
     }
   ]
 }
