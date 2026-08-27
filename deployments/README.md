@@ -70,6 +70,8 @@ copying secrets into the repository.
 
 Every Make target is marked `[host]` or `[docker]`. `[host]` targets run on this
 machine and need `go`, `node`, or `golangci-lint` installed — CI uses those.
+The Go workflow supplies PostgreSQL and runs both `make check` and the host
+`make test-integration` target on every push and pull request.
 `[docker]` targets need Docker only: the `runner` container supplies the Go
 toolchain and `postgres` supplies the database. With no Go toolchain installed,
 the `[docker]` group is the way in, and no target asks you to type a
@@ -92,7 +94,7 @@ edits:
 ```sh
 make runner-image      # build the toolchain image (needs registry access)
 make test-env          # start the runner and create the winch_test database
-make test-integration  # go test -tags integration ./... inside the runner
+make runner-integration # go test -tags integration ./... inside the runner
 make test-env-down     # stop the runner and drop winch_test; the daemon keeps running
 ```
 
@@ -120,10 +122,17 @@ owned by your host user while the container runs as root, and without it git
 refuses to report VCS status and `go build` fails.
 
 Integration tests are behind the `integration` build tag and skip unless
-`PG_TEST_DATABASE_URL` is set; the profile sets it to a `winch_test` database
-alongside `winch` on the same server. That separation matters: the test helper
-runs `DROP SCHEMA public CASCADE` before each migration, so pointing this
-variable at `winch` would destroy the daemon's database.
+`PG_TEST_DATABASE_URL` is set. With a host PostgreSQL, run them directly with:
+
+```sh
+PG_TEST_DATABASE_URL='postgres://winch@127.0.0.1:55432/winch_test?sslmode=disable' \
+  make test-integration
+```
+
+The Docker profile sets the same variable to a `winch_test` database alongside
+`winch` on the same server. That separation matters: the test helper runs
+`DROP SCHEMA public CASCADE` before each migration, so pointing this variable
+at `winch` would destroy the daemon's database.
 
 ## Security posture
 
