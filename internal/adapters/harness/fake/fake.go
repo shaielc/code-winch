@@ -9,6 +9,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os/exec"
+	"path/filepath"
+	"time"
 
 	"github.com/shaielc/code-winch/internal/application"
 	"github.com/shaielc/code-winch/pkg/protocol"
@@ -16,16 +19,67 @@ import (
 
 const AdapterID = "fake"
 
-type Driver struct{}
+type Config struct {
+	Executable    string
+	Transcript    string
+	Delay         time.Duration
+	ForceFailure  bool
+	MalformedLine bool
+	EarlyExit     bool
+}
+
+type Driver struct{ Config Config }
 
 func (Driver) Describe(context.Context) (application.HarnessDescriptor, error) {
 	return application.HarnessDescriptor{ID: AdapterID, Version: "1.0.0", InputModes: []string{"json-lines"}, OutputModes: []string{"json-lines"}, Capabilities: map[string]bool{"structured-events": true}}, nil
 }
-func (Driver) BuildLaunch(_ context.Context, spec application.RunSpec, _ application.ResolvedCredentials) (application.LaunchSpec, error) {
+func (d Driver) BuildLaunch(_ context.Context, spec application.RunSpec, _ application.ResolvedCredentials) (application.LaunchSpec, error) {
 	if spec.RunID.IsZero() {
 		return application.LaunchSpec{}, errors.New("fake harness: code=INVALID_RUN field=run_id")
 	}
-	return application.LaunchSpec{Command: "fake-harness", Args: []string{"--run-id", spec.RunID.String()}}, nil
+	command, err := resolveExecutable(d.Config.Executable)
+	if err != nil {
+		return application.LaunchSpec{}, err
+	}
+	if d.Config.Delay < 0 {
+		return application.LaunchSpec{}, errors.New("fake harness: code=INVALID_CONFIG field=delay")
+	}
+	args := []string{"--run-id", spec.RunID.String()}
+	if d.Config.Transcript != "" {
+		args = append(args, "--transcript", d.Config.Transcript)
+	}
+	if d.Config.Delay != 0 {
+		args = append(args, "--delay", d.Config.Delay.String())
+	}
+	if d.Config.ForceFailure {
+		args = append(args, "--force-failure")
+	}
+	if d.Config.MalformedLine {
+		args = append(args, "--malformed-line")
+	}
+	if d.Config.EarlyExit {
+		args = append(args, "--early-exit")
+	}
+	return application.LaunchSpec{Command: command, Args: args}, nil
+}
+
+func resolveExecutable(configured string) (string, error) {
+	if configured != "" {
+		absolute, err := filepath.Abs(configured)
+		if err != nil {
+			return "", fmt.Errorf("fake harness: code=INVALID_CONFIG field=executable: %w", err)
+		}
+		return absolute, nil
+	}
+	resolved, err := exec.LookPath("fake-harness")
+	if err != nil {
+		return "", errors.New("fake harness: code=EXECUTABLE_NOT_FOUND field=executable")
+	}
+	absolute, err := filepath.Abs(resolved)
+	if err != nil {
+		return "", fmt.Errorf("fake harness: code=EXECUTABLE_NOT_FOUND field=executable: %w", err)
+	}
+	return absolute, nil
 }
 func (Driver) NewCodec(context.Context, application.RunSpec) (application.HarnessCodec, error) {
 	return &Codec{}, nil
