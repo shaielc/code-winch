@@ -10,10 +10,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // record mirrors the fake harness codec's wire format. The codec rejects
@@ -48,31 +50,80 @@ Any other text is echoed.`
 
 func main() {
 	runID := flag.String("run-id", "", "run identifier supplied by the harness adapter")
+	transcript := flag.String("transcript", "", "play commands from this file before reading standard input")
+	delay := flag.Duration("delay", 0, "wait this long before each transcript command and injected action")
+	forceFailure := flag.Bool("force-failure", false, "exit with status 1 after transcript playback")
+	malformedLine := flag.Bool("malformed-line", false, "emit a deliberately invalid JSON-lines record")
+	earlyExit := flag.Bool("early-exit", false, "exit successfully after startup and injected actions, without reading standard input")
 	flag.Parse()
 	if *runID == "" {
 		fmt.Fprintln(os.Stderr, "fake harness: code=INVALID_RUN field=run_id")
 		os.Exit(2)
 	}
-	os.Exit(run(*runID, os.Stdin, os.Stdout))
-}
-
-func run(runID string, in *os.File, out *os.File) int {
+	if *delay < 0 {
+		fmt.Fprintln(os.Stderr, "fake harness: code=INVALID_CONFIG field=delay")
+		os.Exit(2)
+	}
 	// A terminated harness must still produce a final observation, otherwise a
 	// stop looks identical to a crash from the run's event history.
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		<-signals
-		emit(out, operational("fake harness received a termination signal"))
+		emit(os.Stdout, operational("fake harness received a termination signal"))
 		os.Exit(0)
 	}()
+	os.Exit(run(config{runID: *runID, transcript: *transcript, delay: *delay, forceFailure: *forceFailure, malformedLine: *malformedLine, earlyExit: *earlyExit}, os.Stdin, os.Stdout))
+}
 
-	emit(out, operational(fmt.Sprintf("fake harness ready: run_id=%s", runID)))
+type config struct {
+	runID         string
+	transcript    string
+	delay         time.Duration
+	forceFailure  bool
+	malformedLine bool
+	earlyExit     bool
+}
+
+func run(cfg config, in io.Reader, out io.Writer) int {
+	emit(out, operational(fmt.Sprintf("fake harness ready: run_id=%s", cfg.runID)))
 	emit(out, operational(usage))
+	if cfg.transcript != "" {
+		file, err := os.Open(cfg.transcript)
+		if err != nil {
+			emit(out, diagnostic("FAKE_HARNESS_TRANSCRIPT_FAILED"))
+			return 1
+		}
+		code, done := play(file, out, cfg.delay)
+		_ = file.Close()
+		if done {
+			return code
+		}
+	}
+	if cfg.malformedLine {
+		time.Sleep(cfg.delay)
+		_, _ = io.WriteString(out, "fake-harness-malformed-record\n")
+		return 1
+	}
+	if cfg.forceFailure {
+		time.Sleep(cfg.delay)
+		emit(out, operational("fake harness forced failure"))
+		return 1
+	}
+	if cfg.earlyExit {
+		time.Sleep(cfg.delay)
+		emit(out, operational("fake harness exiting early"))
+		return 0
+	}
+	code, _ := play(in, out, 0)
+	return code
+}
 
+func play(in io.Reader, out io.Writer, delay time.Duration) (int, bool) {
 	scanner := bufio.NewScanner(in)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	for scanner.Scan() {
+		time.Sleep(delay)
 		text, ok := parse(scanner.Bytes())
 		if !ok {
 			emit(out, diagnostic("FAKE_HARNESS_MALFORMED_COMMAND"))
@@ -80,19 +131,19 @@ func run(runID string, in *os.File, out *os.File) int {
 		}
 		code, done := respond(out, text)
 		if done {
-			return code
+			return code, true
 		}
 	}
 	if err := scanner.Err(); err != nil && !errors.Is(err, os.ErrClosed) {
 		emit(out, diagnostic("FAKE_HARNESS_READ_FAILED"))
-		return 1
+		return 1, true
 	}
 	emit(out, operational("fake harness reached end of input"))
-	return 0
+	return 0, false
 }
 
 // respond reports the exit code and whether the harness should stop reading.
-func respond(out *os.File, text string) (int, bool) {
+func respond(out io.Writer, text string) (int, bool) {
 	switch field, rest := split(text); field {
 	case "":
 		return 0, false
@@ -147,7 +198,7 @@ func diagnostic(code string) record {
 
 // emit writes one record per line. Write failures are unrecoverable here: the
 // harness has no other channel on which to report them.
-func emit(out *os.File, value record) {
+func emit(out io.Writer, value record) {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return

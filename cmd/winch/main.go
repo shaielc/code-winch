@@ -22,20 +22,29 @@ const devRunID = "00000000-0000-0000-0000-000000000001"
 
 func main() {
 	if len(os.Args) < 3 || os.Args[1] != "dev" || os.Args[2] != "run" {
-		fmt.Fprintln(os.Stderr, "usage: winch dev run --harness fake --sandbox local [--stop-after duration]")
+		fmt.Fprintln(os.Stderr, "usage: winch dev run --harness fake --sandbox local [fake controls]")
 		os.Exit(2)
 	}
 	fs := flag.NewFlagSet("dev run", flag.ExitOnError)
 	harness := fs.String("harness", "fake", "harness driver")
 	sandbox := fs.String("sandbox", "local", "sandbox driver")
 	stopAfter := fs.Duration("stop-after", 0, "stop the harness after this duration")
+	fakeBinary := fs.String("fake-binary", "", "path to the fake-harness executable (default: resolve on PATH)")
+	fakeTranscript := fs.String("fake-transcript", "", "path to a scripted fake-harness transcript")
+	fakeDelay := fs.Duration("fake-delay", 0, "delay each scripted fake-harness action")
+	fakeFailure := fs.Bool("fake-force-failure", false, "make the fake harness exit unsuccessfully")
+	fakeMalformed := fs.Bool("fake-malformed-line", false, "make the fake harness emit an invalid JSON-lines record")
+	fakeEarlyExit := fs.Bool("fake-early-exit", false, "make the fake harness exit before reading interactive input")
 	_ = fs.Parse(os.Args[3:])
 	if *harness != "fake" || *sandbox != "local" {
 		fmt.Fprintln(os.Stderr, "winch dev run: code=UNSUPPORTED_DRIVER")
 		os.Exit(2)
 	}
 	ctx := context.Background()
-	runner := runnerlocal.New(sandboxlocal.New(), harnessfake.Driver{})
+	runner := runnerlocal.New(sandboxlocal.New(), harnessfake.Driver{Config: harnessfake.Config{
+		Executable: *fakeBinary, Transcript: *fakeTranscript, Delay: *fakeDelay,
+		ForceFailure: *fakeFailure, MalformedLine: *fakeMalformed, EarlyExit: *fakeEarlyExit,
+	}})
 	executionID := "dev-execution"
 	lease := "dev-lease"
 	var command atomic.Uint64
@@ -63,6 +72,7 @@ func main() {
 			}
 		}
 	}()
+	exitCode := 0
 	for observation := range runner.Observations() {
 		switch observation.Type {
 		case "start":
@@ -71,12 +81,16 @@ func main() {
 			printEvent(observation.Event)
 		case "exit":
 			fmt.Printf("[exit] successful=%t code=%s\n", observation.Exit.Successful, observation.Exit.Code)
+			if !observation.Exit.Successful {
+				exitCode = 1
+			}
 			_ = runner.Cleanup(ctx, executionID)
 			// Close ends the loop by closing the channel, so the range drains
 			// anything already queued instead of abandoning it.
 			runner.Close()
 		}
 	}
+	os.Exit(exitCode)
 }
 func printEvent(event *application.UnsequencedEvent) {
 	var payload struct {

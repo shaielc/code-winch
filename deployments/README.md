@@ -150,12 +150,21 @@ reachable from anything but loopback.
 
 `fake-harness` is a deterministic stand-in for a coding-agent CLI that needs no
 vendor account. It is built from `cmd/fake-harness` and installed on `PATH` in
-the daemon image, so the harness adapter can launch it by name once the runner
-is bound. Nothing launches it today, but you can drive it by hand:
+the daemon image. The adapter resolves that installed name to an absolute path
+before launch; `winch dev run --fake-binary /path/to/fake-harness` can select an
+explicit development build. You can drive the profile through the operator CLI:
 
 ```sh
 docker compose -f deployments/compose.yml exec winchd fake-harness
 ```
+
+`winch dev run --help` documents the runtime controls. `--fake-transcript FILE`
+plays the file's commands before interactive input, and `--fake-delay 500ms`
+delays each scripted command. `--fake-force-failure`, `--fake-malformed-line`,
+and `--fake-early-exit` inject a nonzero exit, an invalid JSON-lines record
+(followed by a nonzero exit), or
+an exit before interactive input. The corresponding `fake-harness` flags omit
+the `fake-` prefix when invoking the fixture directly.
 
 It reads one JSON command per line — `{"id":"<id>","text":"<text>"}`, the format
 the fake harness codec encodes — and also accepts bare text so it stays usable
@@ -171,3 +180,7 @@ when attached directly to its PTY:
 
 It also emits an observation on `SIGTERM`, so a forced stop is distinguishable
 from a crash in the run's event history.
+
+This profile proves deterministic runner, codec, and process-lifecycle behavior.
+It does **not** exercise a real provider, make network requests, or prove
+credential discovery, transport, or handling.

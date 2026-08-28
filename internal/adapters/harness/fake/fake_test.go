@@ -2,6 +2,9 @@ package fake_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -22,7 +25,33 @@ func runSpec(t *testing.T) application.RunSpec {
 }
 
 func TestHarnessContract(t *testing.T) {
-	harnesscontract.Run(t, func(*testing.T) application.HarnessDriver { return fake.Driver{} }, runSpec(t), []byte("{\"kind\":\"assistant.message.delta\",\"payload\":{\"text\":\"hello\"}}\n"))
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	harnesscontract.Run(t, func(*testing.T) application.HarnessDriver {
+		return fake.Driver{Config: fake.Config{Executable: executable}}
+	}, runSpec(t), []byte("{\"kind\":\"assistant.message.delta\",\"payload\":{\"text\":\"hello\"}}\n"))
+}
+
+func TestBuildLaunchResolvesInstalledBinaryAndPassesControls(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "fake-harness")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	launch, err := (fake.Driver{Config: fake.Config{
+		Transcript: "/tmp/commands.txt", Delay: 500 * time.Millisecond,
+		ForceFailure: true, MalformedLine: true, EarlyExit: true,
+	}}).BuildLaunch(context.Background(), runSpec(t), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantArgs := []string{"--run-id", runSpec(t).RunID.String(), "--transcript", "/tmp/commands.txt", "--delay", "500ms", "--force-failure", "--malformed-line", "--early-exit"}
+	if launch.Command != binary || !reflect.DeepEqual(launch.Args, wantArgs) {
+		t.Fatalf("launch = %#v; want command %q args %#v", launch, binary, wantArgs)
+	}
 }
 
 func TestCompleteRunUsesFakeTime(t *testing.T) {
