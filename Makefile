@@ -72,11 +72,14 @@ lint:
 test:
 	$(GO) test ./...
 
-## build: [host] Build the daemon and operator CLI into BUILD_DIR.
+## build: [host] Build the daemon, operator CLI, and fake harness into BUILD_DIR.
 build:
 	mkdir -p "$(BUILD_DIR)"
 	$(GO) build -o "$(BUILD_DIR)/winchd" ./cmd/winchd
 	$(GO) build -o "$(BUILD_DIR)/winch" ./cmd/winch
+# `winch dev run` launches the harness by bare name from PATH, so a host build
+# that omits it leaves the operator CLI unable to run its only command.
+	$(GO) build -o "$(BUILD_DIR)/fake-harness" ./cmd/fake-harness
 
 ## run: [host] Start the daemon with configuration resolved from file and environment.
 ## Serves the API alone unless web-build has produced web/dist.
