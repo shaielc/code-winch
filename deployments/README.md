@@ -20,11 +20,32 @@ The `/api/v1/runs*` routes are mounted but not yet bound to run use cases. Until
 they are, the routes answer `404` for reads and `500` for creation, and no
 harness process is launched.
 
+## Operator CLI
+
+The daemon image also installs the maintained `winch` operator CLI on `PATH`.
+Invoke it in the running stack without installing Go on the host:
+
+```sh
+docker compose -f deployments/compose.yml exec winchd winch --help
+```
+
+The currently available `dev run` command is standalone and drives the local
+sandbox and fake harness directly inside the container. For example:
+
+```sh
+printf 'echo hello\nexit\n' | \
+  docker compose -f deployments/compose.yml exec -T winchd \
+  winch dev run --harness fake --sandbox local
+```
+
+Host builds place both operator and daemon binaries at `bin/winch` and
+`bin/winchd` by default. Set `BUILD_DIR` to choose another output directory.
+
 ## Services
 
 | Service | Image | Published | Notes |
 |---|---|---|---|
-| `winchd` | Go daemon + web assets + fake harness | `127.0.0.1:8080` | Serves the SPA and `/api/v1` from one origin |
+| `winchd` | Go daemon + operator CLI + web assets + fake harness | `127.0.0.1:8080` | Serves the SPA and `/api/v1` from one origin |
 | `postgres` | `postgres:17-alpine` | internal only | Data persists in the `postgres-data` volume |
 | `runner` | Go toolchain, the daemon image's build stage | not published | `test` profile only; see [Running the tests](#running-the-tests) |
 

@@ -1,5 +1,6 @@
 GO ?= go
 GOLANGCI_LINT ?= golangci-lint
+BUILD_DIR ?= bin
 
 COMPOSE ?= docker compose -f deployments/compose.yml
 IN_RUNNER = $(COMPOSE) exec -T runner
@@ -77,11 +78,14 @@ test:
 test-integration:
 	$(GO) test -tags integration ./internal/adapters/postgres/...
 
-## build: [host] Build the daemon.
+## build: [host] Build the daemon, operator CLI, and fake harness into BUILD_DIR.
 build:
-	@output="$$(mktemp)"; \
-	trap 'rm -f "$$output"' EXIT; \
-	$(GO) build -o "$$output" ./cmd/winchd
+	mkdir -p "$(BUILD_DIR)"
+	$(GO) build -o "$(BUILD_DIR)/winchd" ./cmd/winchd
+	$(GO) build -o "$(BUILD_DIR)/winch" ./cmd/winch
+# `winch dev run` launches the harness by bare name from PATH, so a host build
+# that omits it leaves the operator CLI unable to run its only command.
+	$(GO) build -o "$(BUILD_DIR)/fake-harness" ./cmd/fake-harness
 
 ## run: [host] Start the daemon with configuration resolved from file and environment.
 ## Serves the API alone unless web-build has produced web/dist.
