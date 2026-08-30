@@ -5,6 +5,7 @@ BUILD_DIR ?= bin
 COMPOSE ?= docker compose -f deployments/compose.yml
 IN_RUNNER = $(COMPOSE) exec -T runner
 TEST_DATABASE ?= winch_test
+GO_PACKAGES := ./cmd/... ./internal/... ./pkg/... ./test/...
 
 # Targets are marked [host] or [docker].
 #
@@ -17,8 +18,8 @@ TEST_DATABASE ?= winch_test
 # deployments/README.md for the testing procedure.
 
 .PHONY: all api-check api-compat api-generate api-validate build check format \
-	format-check lint run runner-image runner-shell runner-verify test test-cycle \
-	test-env test-env-down test-integration vet web-build
+	format-check lint run runner-image runner-integration runner-shell runner-verify \
+	test test-cycle test-env test-env-down test-integration vet web-build
 
 all: check
 
@@ -70,7 +71,12 @@ lint:
 
 ## test: [host] Run all Go unit tests.
 test:
-	$(GO) test ./...
+	$(GO) test $(GO_PACKAGES)
+
+## test-integration: [host] Run PostgreSQL integration tests.
+## Requires PG_TEST_DATABASE_URL to name a disposable database.
+test-integration:
+	$(GO) test -tags integration ./internal/adapters/postgres/...
 
 ## build: [host] Build the daemon, operator CLI, and fake harness into BUILD_DIR.
 build:
@@ -116,8 +122,8 @@ runner-verify: test-env
 	$(IN_RUNNER) go test ./...
 	$(IN_RUNNER) go build ./...
 
-## test-integration: [docker] Run the build-tagged integration suite in the runner.
-test-integration: test-env
+## runner-integration: [docker] Run the build-tagged integration suite in the runner.
+runner-integration: test-env
 	$(IN_RUNNER) go test -tags integration ./...
 
 ## test-env-down: [docker] Stop and remove the runner and drop the test database,
@@ -136,7 +142,7 @@ test-env-down:
 ## Tears down even when a step fails, and exits with that step's status.
 test-cycle: runner-image test-env
 	@status=0; \
-	$(MAKE) runner-verify test-integration || status=$$?; \
+	$(MAKE) runner-verify runner-integration || status=$$?; \
 	$(MAKE) test-env-down; \
 	exit $$status
 
