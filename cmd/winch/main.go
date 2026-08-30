@@ -20,9 +20,17 @@ import (
 
 const devRunID = "00000000-0000-0000-0000-000000000001"
 
+const usage = "usage: winch dev run --harness fake --sandbox local [--stop-after duration]"
+
 func main() {
+	// An asked-for usage text is not a usage error: deployments/README.md opens
+	// with `winch --help`, so it reports success on stdout rather than failure.
+	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help" || os.Args[1] == "help") {
+		fmt.Println(usage)
+		return
+	}
 	if len(os.Args) < 3 || os.Args[1] != "dev" || os.Args[2] != "run" {
-		fmt.Fprintln(os.Stderr, "usage: winch dev run --harness fake --sandbox local [--stop-after duration]")
+		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
 	}
 	fs := flag.NewFlagSet("dev run", flag.ExitOnError)
