@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/shaielc/code-winch/internal/adapters/transport/httpapi"
+	"github.com/shaielc/code-winch/internal/domain"
 	"github.com/shaielc/code-winch/internal/platform/telemetry"
 )
 
@@ -28,6 +29,18 @@ func TestStaticHandlerWithoutWebBuildStillLetsTheDaemonBoot(t *testing.T) {
 	assets.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status=%d, want 404", rec.Code)
+	}
+}
+
+func TestAPIRunIDRoundTrip(t *testing.T) {
+	id, _ := domain.ParseRunID("11111111-2222-3333-8444-555555555555")
+	external := formatAPIRunID(id)
+	if len(external) != 26 {
+		t.Fatalf("API ID length=%d", len(external))
+	}
+	got, err := apiRunID(external)
+	if err != nil || got != id {
+		t.Fatalf("round trip got=%s err=%v", got, err)
 	}
 }
 
@@ -59,7 +72,7 @@ func TestRejectionLogKeepsCorrelationIDAndErrorCode(t *testing.T) {
 	api, err := httpapi.NewHandler(httpapi.Config{
 		Token: testSecret, CSRFToken: testSecret, AllowedOrigin: "http://localhost:8080",
 		Actor: "local-user", Logger: logger, RequestID: func() string { return "correlation-canary" },
-	}, unavailableBackend{})
+	}, runBackend{})
 	if err != nil {
 		t.Fatal(err)
 	}

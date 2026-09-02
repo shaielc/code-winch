@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/shaielc/code-winch/internal/domain"
 	"github.com/shaielc/code-winch/pkg/protocol"
@@ -23,8 +24,13 @@ type Workspace struct {
 }
 
 type RunRecord struct {
-	ID       domain.RunID
-	Attempts []domain.Attempt
+	ID             domain.RunID
+	Attempts       []domain.Attempt
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	WorkspacePath  string
+	HarnessProfile string
+	SandboxProfile string
 }
 
 type WorkspaceRepository interface {

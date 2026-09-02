@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/big"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,9 +17,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shaielc/code-winch/internal/adapters/postgres"
 	"github.com/shaielc/code-winch/internal/adapters/transport/httpapi"
+	"github.com/shaielc/code-winch/internal/application"
+	"github.com/shaielc/code-winch/internal/domain"
 	"github.com/shaielc/code-winch/internal/platform/config"
 	"github.com/shaielc/code-winch/internal/platform/telemetry"
 )
@@ -70,9 +74,14 @@ func run(ctx context.Context) error {
 		migrationStatus = "applied"
 	}
 	logger.Info("schema checked", "component", "database", "operation", "migrate", "sequence", migration.Version, "status", migrationStatus)
+	store := postgres.New(pool)
+	runs, err := application.NewRunService(store, application.SystemClock{}, randomIDs{})
+	if err != nil {
+		return err
+	}
 	stream := httpapi.NewEventStream(64)
 	defer stream.Close()
-	api, err := httpapi.NewHandler(httpapi.Config{Token: cfg.Token, CSRFToken: cfg.CSRFToken, AllowedOrigin: cfg.AllowedOrigin, Actor: cfg.Actor, Logger: logger, RequestID: requestID, EventStream: stream}, unavailableBackend{})
+	api, err := httpapi.NewHandler(httpapi.Config{Token: cfg.Token, CSRFToken: cfg.CSRFToken, AllowedOrigin: cfg.AllowedOrigin, Actor: cfg.Actor, Logger: logger, RequestID: requestID, EventStream: stream}, runBackend{runs: runs})
 	if err != nil {
 		return err
 	}
@@ -156,28 +165,118 @@ func staticHandler(dir, csrf string) (http.Handler, bool) {
 	return handler, true
 }
 
-// unavailableBackend keeps the run routes mounted but inert until the real use
-// cases are bound. Reads answer not-found truthfully — no run can exist yet;
-// creation reports an internal error rather than blaming the caller's body.
-type unavailableBackend struct{}
+type randomIDs struct{}
 
-var errRunBackendUnbound = errors.New("run use cases are not bound")
+func (randomIDs) NewWorkspaceID() domain.WorkspaceID {
+	id, _ := domain.ParseWorkspaceID(uuid.NewString())
+	return id
+}
+func (randomIDs) NewRunID() domain.RunID { id, _ := domain.ParseRunID(uuid.NewString()); return id }
+func (randomIDs) NewAttemptID() domain.AttemptID {
+	id, _ := domain.ParseAttemptID(uuid.NewString())
+	return id
+}
+func (randomIDs) NewEventID() domain.EventID {
+	id, _ := domain.ParseEventID(uuid.NewString())
+	return id
+}
+func (randomIDs) NewCommandID() domain.CommandID {
+	id, _ := domain.ParseCommandID(uuid.NewString())
+	return id
+}
+func (randomIDs) NewArtifactID() domain.ArtifactID {
+	id, _ := domain.ParseArtifactID(uuid.NewString())
+	return id
+}
+func (randomIDs) NewCredentialID() domain.CredentialID {
+	id, _ := domain.ParseCredentialID(uuid.NewString())
+	return id
+}
+func (randomIDs) NewWorkflowID() domain.WorkflowID {
+	id, _ := domain.ParseWorkflowID(uuid.NewString())
+	return id
+}
 
-func (unavailableBackend) CreateRun(context.Context, string, string, httpapi.CreateRunRequest) (httpapi.Run, error) {
-	return httpapi.Run{}, errRunBackendUnbound
+type runBackend struct{ runs *application.RunService }
+
+func (b runBackend) CreateRun(ctx context.Context, _ string, _ string, request httpapi.CreateRunRequest) (httpapi.Run, error) {
+	view, err := b.runs.Create(ctx, application.CreateRunCommand{WorkspacePath: request.WorkspacePath, HarnessProfile: request.HarnessProfile, SandboxProfile: request.SandboxProfile})
+	if err != nil {
+		return httpapi.Run{}, err
+	}
+	return apiRun(view), nil
 }
-func (unavailableBackend) GetRun(context.Context, string, httpapi.RunId) (httpapi.Run, error) {
-	return httpapi.Run{}, httpapi.ErrRunNotFound
+func (b runBackend) GetRun(ctx context.Context, _ string, id httpapi.RunId) (httpapi.Run, error) {
+	runID, err := apiRunID(id)
+	if err != nil {
+		return httpapi.Run{}, httpapi.ErrRunNotFound
+	}
+	view, err := b.runs.Get(ctx, runID)
+	if errors.Is(err, application.ErrNotFound) {
+		return httpapi.Run{}, httpapi.ErrRunNotFound
+	}
+	if err != nil {
+		return httpapi.Run{}, err
+	}
+	return apiRun(view), nil
 }
-func (unavailableBackend) StartRun(context.Context, string, httpapi.RunId, string, int64) (httpapi.Run, error) {
-	return httpapi.Run{}, httpapi.ErrRunNotFound
+func apiRun(view application.RunView) httpapi.Run {
+	r := view.Record
+	sequence := int64(0)
+	return httpapi.Run{Id: formatAPIRunID(r.ID), State: httpapi.RunState(r.Attempts[len(r.Attempts)-1].State), Version: int64(view.Version), CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, WorkspacePath: r.WorkspacePath, HarnessProfile: r.HarnessProfile, SandboxProfile: r.SandboxProfile, LastSequence: &sequence}
 }
-func (unavailableBackend) StopRun(context.Context, string, httpapi.RunId, string, int64, httpapi.StopRunRequest) (httpapi.Run, error) {
-	return httpapi.Run{}, httpapi.ErrRunNotFound
+
+const crockford = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+func formatAPIRunID(id domain.RunID) string {
+	value := new(big.Int)
+	value.SetString(strings.ReplaceAll(id.String(), "-", ""), 16)
+	out := make([]byte, 26)
+	base, remainder := big.NewInt(32), new(big.Int)
+	for i := len(out) - 1; i >= 0; i-- {
+		value.QuoRem(value, base, remainder)
+		out[i] = crockford[remainder.Int64()]
+	}
+	return string(out)
 }
-func (unavailableBackend) ListRunEvents(context.Context, string, httpapi.RunId, int64, int) (httpapi.EventPage, error) {
-	return httpapi.EventPage{}, httpapi.ErrRunNotFound
+func apiRunID(value string) (domain.RunID, error) {
+	if len(value) != 26 {
+		return domain.RunID{}, errors.New("invalid API run ID")
+	}
+	n := new(big.Int)
+	base := big.NewInt(32)
+	for _, char := range value {
+		digit := strings.IndexRune(crockford, char)
+		if digit < 0 {
+			return domain.RunID{}, errors.New("invalid API run ID")
+		}
+		n.Mul(n, base)
+		n.Add(n, big.NewInt(int64(digit)))
+	}
+	if n.BitLen() > 128 {
+		return domain.RunID{}, errors.New("invalid API run ID")
+	}
+	hexValue := fmt.Sprintf("%032x", n)
+	canonical := hexValue[:8] + "-" + hexValue[8:12] + "-" + hexValue[12:16] + "-" + hexValue[16:20] + "-" + hexValue[20:]
+	return domain.ParseRunID(canonical)
 }
-func (unavailableBackend) SendRunInput(context.Context, string, httpapi.RunId, string, int64, httpapi.RunInputRequest) (httpapi.InputAccepted, error) {
-	return httpapi.InputAccepted{}, httpapi.ErrRunNotFound
+
+var (
+	errStartDeferred  = errors.New("run start is not implemented; owner=P0-008")
+	errInputDeferred  = errors.New("run input is not implemented; owner=P0-009")
+	errEventsDeferred = errors.New("run events are not implemented; owner=P0-010")
+	errStopDeferred   = errors.New("run stop is not implemented; owner=P0-011")
+)
+
+func (runBackend) StartRun(context.Context, string, httpapi.RunId, string, int64) (httpapi.Run, error) {
+	return httpapi.Run{}, errStartDeferred
+}
+func (runBackend) StopRun(context.Context, string, httpapi.RunId, string, int64, httpapi.StopRunRequest) (httpapi.Run, error) {
+	return httpapi.Run{}, errStopDeferred
+}
+func (runBackend) ListRunEvents(context.Context, string, httpapi.RunId, int64, int) (httpapi.EventPage, error) {
+	return httpapi.EventPage{}, errEventsDeferred
+}
+func (runBackend) SendRunInput(context.Context, string, httpapi.RunId, string, int64, httpapi.RunInputRequest) (httpapi.InputAccepted, error) {
+	return httpapi.InputAccepted{}, errInputDeferred
 }

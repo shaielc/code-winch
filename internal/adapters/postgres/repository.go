@@ -61,7 +61,11 @@ func (s *Store) Save(ctx context.Context, record application.RunRecord, expected
 	defer func() { _ = tx.Rollback(ctx) }()
 	next := expected + 1
 	if expected == 0 {
-		_, err = tx.Exec(ctx, `INSERT INTO runs(id,version) VALUES($1,1)`, record.ID.String())
+		configuration, marshalErr := json.Marshal(map[string]any{"createdAt": record.CreatedAt, "updatedAt": record.UpdatedAt, "workspacePath": record.WorkspacePath, "harnessProfile": record.HarnessProfile, "sandboxProfile": record.SandboxProfile})
+		if marshalErr != nil {
+			return 0, marshalErr
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO runs(id,version,resolved_configuration) VALUES($1,1,$2)`, record.ID.String(), configuration)
 	} else {
 		var found uint64
 		err = tx.QueryRow(ctx, `UPDATE runs SET version=$2 WHERE id=$1 AND version=$3 RETURNING version`, record.ID.String(), next, expected).Scan(&found)
@@ -94,7 +98,8 @@ func zeroID(id domain.AttemptID) string {
 
 func (s *Store) Get(ctx context.Context, id domain.RunID) (application.RunRecord, uint64, error) {
 	var version uint64
-	if err := s.pool.QueryRow(ctx, `SELECT version FROM runs WHERE id=$1`, id.String()).Scan(&version); errors.Is(err, pgx.ErrNoRows) {
+	var configuration []byte
+	if err := s.pool.QueryRow(ctx, `SELECT version,resolved_configuration FROM runs WHERE id=$1`, id.String()).Scan(&version, &configuration); errors.Is(err, pgx.ErrNoRows) {
 		return application.RunRecord{}, 0, application.ErrNotFound
 	} else if err != nil {
 		return application.RunRecord{}, 0, err
@@ -105,6 +110,17 @@ func (s *Store) Get(ctx context.Context, id domain.RunID) (application.RunRecord
 	}
 	defer rows.Close()
 	record := application.RunRecord{ID: id}
+	var metadata struct {
+		CreatedAt      time.Time `json:"createdAt"`
+		UpdatedAt      time.Time `json:"updatedAt"`
+		WorkspacePath  string    `json:"workspacePath"`
+		HarnessProfile string    `json:"harnessProfile"`
+		SandboxProfile string    `json:"sandboxProfile"`
+	}
+	if err = json.Unmarshal(configuration, &metadata); err != nil {
+		return application.RunRecord{}, 0, err
+	}
+	record.CreatedAt, record.UpdatedAt, record.WorkspacePath, record.HarnessProfile, record.SandboxProfile = metadata.CreatedAt, metadata.UpdatedAt, metadata.WorkspacePath, metadata.HarnessProfile, metadata.SandboxProfile
 	for rows.Next() {
 		var aid, prev, state string
 		if err = rows.Scan(&aid, &prev, &state); err != nil {

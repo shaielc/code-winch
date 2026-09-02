@@ -17,7 +17,7 @@ GO_PACKAGES := ./cmd/... ./internal/... ./pkg/... ./test/...
 # With no Go toolchain installed, the [docker] group is the way in. See
 # deployments/README.md for the testing procedure.
 
-.PHONY: all api-check api-compat api-generate api-validate build check format \
+.PHONY: all api-check api-compat api-generate api-validate build check e2e format \
 	format-check lint run runner-image runner-integration runner-shell runner-verify \
 	test test-cycle test-env test-env-down test-integration vet web-build
 
@@ -77,6 +77,11 @@ test:
 ## Requires PG_TEST_DATABASE_URL to name a disposable database.
 test-integration:
 	$(GO) test -tags integration ./internal/adapters/postgres/...
+
+## e2e: [host] Run daemon API scenarios against PostgreSQL.
+## Requires PG_TEST_DATABASE_URL to name a disposable database.
+e2e: build
+	WINCHD_BIN="$(CURDIR)/$(BUILD_DIR)/winchd" $(GO) test ./test/e2e/...
 
 ## build: [host] Build the daemon, operator CLI, and fake harness into BUILD_DIR.
 build:
