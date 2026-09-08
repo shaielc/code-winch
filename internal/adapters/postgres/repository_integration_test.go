@@ -20,11 +20,40 @@ import (
 )
 
 var (
-	_ application.RunRepository     = (*pgstore.Store)(nil)
-	_ application.EventStore        = (*pgstore.Store)(nil)
-	_ application.OutboxStore       = (*pgstore.Store)(nil)
-	_ application.InputCommandStore = (*pgstore.Store)(nil)
+	_ application.RunRepository       = (*pgstore.Store)(nil)
+	_ application.CreateRunRepository = (*pgstore.Store)(nil)
+	_ application.EventStore          = (*pgstore.Store)(nil)
+	_ application.OutboxStore         = (*pgstore.Store)(nil)
+	_ application.InputCommandStore   = (*pgstore.Store)(nil)
 )
+
+func TestCreateRunIdempotencyAndLastSequence(t *testing.T) {
+	pool, store := database(t)
+	record := application.RunRecord{ID: id(t, domain.ParseRunID, 901), Attempts: []domain.Attempt{{ID: id(t, domain.ParseAttemptID, 902), State: domain.RunStateCreated}}, WorkspacePath: "/tmp/ws", HarnessProfile: "fake", SandboxProfile: "local"}
+	identity := application.CreateRunIdentity{Actor: "actor", IdempotencyKey: "create-1"}
+	created, _, err := store.Create(context.Background(), record, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay := record
+	replay.ID = id(t, domain.ParseRunID, 903)
+	replay.Attempts[0].ID = id(t, domain.ParseAttemptID, 904)
+	got, _, err := store.Create(context.Background(), replay, identity)
+	if err != nil || got.ID != created.ID {
+		t.Fatalf("replay=%#v err=%v", got, err)
+	}
+	replay.WorkspacePath = "/different"
+	if _, _, err = store.Create(context.Background(), replay, identity); !errors.Is(err, application.ErrIdempotencyConflict) {
+		t.Fatalf("conflicting replay: %v", err)
+	}
+	if _, err = pool.Exec(context.Background(), `UPDATE runs SET last_sequence=7 WHERE id=$1`, record.ID.String()); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err = store.Get(context.Background(), record.ID)
+	if err != nil || got.LastSequence != 7 {
+		t.Fatalf("last sequence=%d err=%v", got.LastSequence, err)
+	}
+}
 
 func TestInputAcceptanceIsAtomicConcurrentAndReplayable(t *testing.T) {
 	pool, store := database(t)

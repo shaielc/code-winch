@@ -199,9 +199,12 @@ func (randomIDs) NewWorkflowID() domain.WorkflowID {
 
 type runBackend struct{ runs *application.RunService }
 
-func (b runBackend) CreateRun(ctx context.Context, _ string, _ string, request httpapi.CreateRunRequest) (httpapi.Run, error) {
-	view, err := b.runs.Create(ctx, application.CreateRunCommand{WorkspacePath: request.WorkspacePath, HarnessProfile: request.HarnessProfile, SandboxProfile: request.SandboxProfile})
+func (b runBackend) CreateRun(ctx context.Context, actor string, key string, request httpapi.CreateRunRequest) (httpapi.Run, error) {
+	view, err := b.runs.Create(ctx, application.CreateRunCommand{WorkspacePath: request.WorkspacePath, HarnessProfile: request.HarnessProfile, SandboxProfile: request.SandboxProfile, Actor: actor, IdempotencyKey: key})
 	if err != nil {
+		if errors.Is(err, application.ErrIdempotencyConflict) {
+			return httpapi.Run{}, httpapi.ErrIdempotencyConflict
+		}
 		return httpapi.Run{}, err
 	}
 	return apiRun(view), nil
@@ -222,7 +225,7 @@ func (b runBackend) GetRun(ctx context.Context, _ string, id httpapi.RunId) (htt
 }
 func apiRun(view application.RunView) httpapi.Run {
 	r := view.Record
-	sequence := int64(0)
+	sequence := int64(r.LastSequence)
 	return httpapi.Run{Id: formatAPIRunID(r.ID), State: httpapi.RunState(r.Attempts[len(r.Attempts)-1].State), Version: int64(view.Version), CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, WorkspacePath: r.WorkspacePath, HarnessProfile: r.HarnessProfile, SandboxProfile: r.SandboxProfile, LastSequence: &sequence}
 }
 

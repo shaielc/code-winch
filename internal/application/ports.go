@@ -12,8 +12,10 @@ import (
 // ErrNotFound and ErrConflict let use cases make stable decisions without
 // depending on an adapter's implementation details.
 var (
-	ErrNotFound = errors.New("application port: resource not found")
-	ErrConflict = errors.New("application port: concurrent update conflict")
+	ErrNotFound            = errors.New("application port: resource not found")
+	ErrConflict            = errors.New("application port: concurrent update conflict")
+	ErrIdempotencyConflict = errors.New("application: idempotency conflict")
+	ErrInvalidRunRecord    = errors.New("application: invalid persisted run")
 )
 
 // Workspace and RunRecord are persistence DTOs. Slice fields must be copied by
@@ -31,6 +33,15 @@ type RunRecord struct {
 	WorkspacePath  string
 	HarnessProfile string
 	SandboxProfile string
+	LastSequence   uint64
+}
+
+type CreateRunIdentity struct {
+	Actor, IdempotencyKey string
+}
+
+type CreateRunRepository interface {
+	Create(context.Context, RunRecord, CreateRunIdentity) (RunRecord, uint64, error)
 }
 
 type WorkspaceRepository interface {

@@ -15,15 +15,22 @@ type RunView struct {
 
 type CreateRunCommand struct {
 	WorkspacePath, HarnessProfile, SandboxProfile string
+	Actor, IdempotencyKey                         string
 }
 
 type RunService struct {
-	repository RunRepository
-	clock      Clock
-	ids        IDSource
+	repository interface {
+		RunRepository
+		CreateRunRepository
+	}
+	clock Clock
+	ids   IDSource
 }
 
-func NewRunService(repository RunRepository, clock Clock, ids IDSource) (*RunService, error) {
+func NewRunService(repository interface {
+	RunRepository
+	CreateRunRepository
+}, clock Clock, ids IDSource) (*RunService, error) {
 	if repository == nil || clock == nil || ids == nil {
 		return nil, errors.New("run service: repository, clock, and ID source are required")
 	}
@@ -31,7 +38,7 @@ func NewRunService(repository RunRepository, clock Clock, ids IDSource) (*RunSer
 }
 
 func (s *RunService) Create(ctx context.Context, command CreateRunCommand) (RunView, error) {
-	if command.WorkspacePath == "" || command.HarnessProfile == "" || command.SandboxProfile == "" {
+	if command.WorkspacePath == "" || command.HarnessProfile == "" || command.SandboxProfile == "" || command.Actor == "" || command.IdempotencyKey == "" {
 		return RunView{}, errors.New("run service: required run fields are missing")
 	}
 	run, err := domain.NewRun(s.ids.NewRunID(), s.ids.NewAttemptID())
@@ -40,12 +47,15 @@ func (s *RunService) Create(ctx context.Context, command CreateRunCommand) (RunV
 	}
 	now := s.clock.Now().Time()
 	record := RunRecord{ID: run.ID(), Attempts: run.Attempts(), CreatedAt: now, UpdatedAt: now, WorkspacePath: command.WorkspacePath, HarnessProfile: command.HarnessProfile, SandboxProfile: command.SandboxProfile}
-	version, err := s.repository.Save(ctx, record, 0)
-	return RunView{Record: record, Version: version}, err
+	stored, version, err := s.repository.Create(ctx, record, CreateRunIdentity{Actor: command.Actor, IdempotencyKey: command.IdempotencyKey})
+	return RunView{Record: stored, Version: version}, err
 }
 
 func (s *RunService) Get(ctx context.Context, id domain.RunID) (RunView, error) {
 	record, version, err := s.repository.Get(ctx, id)
+	if err == nil && len(record.Attempts) == 0 {
+		return RunView{}, ErrInvalidRunRecord
+	}
 	return RunView{Record: record, Version: version}, err
 }
 

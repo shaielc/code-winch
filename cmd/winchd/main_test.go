@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -13,7 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shaielc/code-winch/internal/adapters/memory"
 	"github.com/shaielc/code-winch/internal/adapters/transport/httpapi"
+	"github.com/shaielc/code-winch/internal/application"
 	"github.com/shaielc/code-winch/internal/domain"
 	"github.com/shaielc/code-winch/internal/platform/telemetry"
 )
@@ -41,6 +44,21 @@ func TestAPIRunIDRoundTrip(t *testing.T) {
 	got, err := apiRunID(external)
 	if err != nil || got != id {
 		t.Fatalf("round trip got=%s err=%v", got, err)
+	}
+}
+
+func TestBackendRejectsPersistedRunWithoutAttempts(t *testing.T) {
+	id, _ := domain.ParseRunID("77777777-7777-7777-7777-777777777777")
+	repository := &memory.RunRepository{}
+	_, _ = repository.Save(context.Background(), application.RunRecord{ID: id}, 0)
+	now, _ := domain.NewTimestamp(time.Now())
+	service, err := application.NewRunService(repository, memory.NewClock(now), &memory.IDSource{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = (runBackend{runs: service}).GetRun(context.Background(), "actor", formatAPIRunID(id))
+	if !errors.Is(err, application.ErrInvalidRunRecord) {
+		t.Fatalf("malformed run error: %v", err)
 	}
 }
 

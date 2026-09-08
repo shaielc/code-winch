@@ -61,6 +61,17 @@ func TestCreateThenGet(t *testing.T) {
 	if got["state"] != "created" || got["lastSequence"] != float64(0) || got["workspacePath"] != "/tmp/ws" {
 		t.Fatalf("unexpected run: %s", read.Body)
 	}
+	replayed := call(t, http.MethodPost, base+"/api/v1/runs", body)
+	var replayedRun map[string]any
+	_ = json.Unmarshal(replayed.Body, &replayedRun)
+	if replayed.StatusCode != http.StatusCreated || replayedRun["id"] != run["id"] {
+		t.Fatalf("replay status=%d body=%s", replayed.StatusCode, replayed.Body)
+	}
+	conflicting, _ := json.Marshal(map[string]string{"workspacePath": "/different", "harnessProfile": "fake", "sandboxProfile": "local"})
+	conflict := call(t, http.MethodPost, base+"/api/v1/runs", conflicting)
+	if conflict.StatusCode != http.StatusConflict || !bytes.Contains(conflict.Body, []byte(`"code":"idempotency_conflict"`)) {
+		t.Fatalf("conflict status=%d body=%s", conflict.StatusCode, conflict.Body)
+	}
 }
 
 type response struct {
@@ -76,6 +87,7 @@ func call(t *testing.T, method, url string, body []byte) response {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-CSRF-Token", secret)
 		req.Header.Set("Origin", strings.TrimSuffix(url, "/api/v1/runs"))
+		req.Header.Set("Idempotency-Key", "create-1")
 	}
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
