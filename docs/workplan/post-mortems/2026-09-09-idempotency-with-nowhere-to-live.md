@@ -119,14 +119,27 @@ lookup is also a `Seq Scan on runs` inside that lock, once per create.
 
 Not yet applied; it needs an owner, because it needs a migration slot.
 
-1. `run_create_requests(actor, idempotency_key, run_id)` with
-   `UNIQUE (actor, idempotency_key)` and a foreign key to `runs`. That retires
-   the advisory lock, the sequential scan, and the overwrite hazard together.
-2. Columns for `created_at` and `updated_at` (and `workspace_path`);
+1. `create_actor` and `create_idempotency_key` as nullable columns on `runs`,
+   with `UNIQUE (create_actor, create_idempotency_key)`. This is the schema's
+   own pattern, twice over: `input_commands.idempotency_key` with
+   `UNIQUE (run_id, idempotency_key)` (migration 001), and
+   `workflow_signals.idempotency_key` with
+   `UNIQUE (workflow_instance_id, idempotency_key)` (migration 005). Both put
+   the key on the row the request creates and scope uniqueness to the parent
+   aggregate. Run creation has no parent, so the scope is the actor. Nullable
+   because a run spawned internally — by a workflow, say — carries no client
+   key, and PostgreSQL treats NULLs as distinct in a unique index.
+2. Replay follows the same idiom the adapter already uses for commands:
+   `INSERT … ON CONFLICT (create_actor, create_idempotency_key) DO NOTHING`
+   (compare `PutCommand`), then re-read on zero rows affected and compare the
+   run's fields to decide replay or conflict. The constraint does the work, so
+   the advisory lock and the JSON-path sequential scan both go away, and
+   `conflict()` already maps SQLSTATE 23505 onto `application.ErrConflict`.
+3. Columns for `created_at` and `updated_at` (and `workspace_path`);
    `harness_driver` and `sandbox_driver` already exist from migration 003.
-3. Leave the profile names in `resolved_configuration` — they belong there — and
+4. Leave the profile names in `resolved_configuration` — they belong there — and
    let create write the initial document that layering later rewrites.
-4. One insert path: drop `Save(_, 0)` as a creation route or send it through
+5. One insert path: drop `Save(_, 0)` as a creation route or send it through
    `Create`.
 
 If a migration slot cannot be allocated first, the interim step is to namespace
@@ -151,6 +164,11 @@ to P0-006.
   who may add a migration belongs to the first task of the next plan, not to
   whoever first needs one — otherwise the need is met with a workaround inside
   whatever column happens to be reachable.
+- Look for the pattern before inventing one. The schema had already answered
+  "where does an idempotency key go" twice, in `input_commands` and
+  `workflow_signals`, in the same shape both times. The workaround here, and the
+  first remedy proposed for it, each missed that precedent and reached for a new
+  structure instead.
 - A column with a documented owner is a contract surface. Storing something else
   in it is a contract change subject to the same rule as an API path or a port
   signature: it takes its design-document update in the same change, or it takes
