@@ -27,20 +27,6 @@ type InputCommand struct {
 	Payload        []byte
 }
 
-type runMetadata struct {
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
-	WorkspacePath  string    `json:"workspacePath"`
-	HarnessProfile string    `json:"harnessProfile"`
-	SandboxProfile string    `json:"sandboxProfile"`
-	Actor          string    `json:"createActor,omitempty"`
-	IdempotencyKey string    `json:"createIdempotencyKey,omitempty"`
-}
-
-func metadata(record application.RunRecord, identity application.CreateRunIdentity) runMetadata {
-	return runMetadata{CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt, WorkspacePath: record.WorkspacePath, HarnessProfile: record.HarnessProfile, SandboxProfile: record.SandboxProfile, Actor: identity.Actor, IdempotencyKey: identity.IdempotencyKey}
-}
-
 func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
 // SaveResolvedConfiguration records canonical, fully resolved non-secret JSON
@@ -75,14 +61,10 @@ func (s *Store) Save(ctx context.Context, record application.RunRecord, expected
 	defer func() { _ = tx.Rollback(ctx) }()
 	next := expected + 1
 	if expected == 0 {
-		configuration, marshalErr := json.Marshal(metadata(record, application.CreateRunIdentity{}))
-		if marshalErr != nil {
-			return 0, marshalErr
-		}
-		_, err = tx.Exec(ctx, `INSERT INTO runs(id,version,resolved_configuration) VALUES($1,1,$2)`, record.ID.String(), configuration)
+		_, err = tx.Exec(ctx, `INSERT INTO runs(id,version,workspace_path,harness_profile,sandbox_profile,created_at,updated_at) VALUES($1,1,$2,$3,$4,$5,$6)`, record.ID.String(), record.WorkspacePath, record.HarnessProfile, record.SandboxProfile, record.CreatedAt, record.UpdatedAt)
 	} else {
 		var found uint64
-		err = tx.QueryRow(ctx, `UPDATE runs SET version=$2 WHERE id=$1 AND version=$3 RETURNING version`, record.ID.String(), next, expected).Scan(&found)
+		err = tx.QueryRow(ctx, `UPDATE runs SET version=$2,updated_at=$4 WHERE id=$1 AND version=$3 RETURNING version`, record.ID.String(), next, expected, record.UpdatedAt).Scan(&found)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, fmt.Errorf("%w: run=%s expected_version=%d", application.ErrConflict, record.ID, expected)
 		}
@@ -103,43 +85,25 @@ func (s *Store) Save(ctx context.Context, record application.RunRecord, expected
 	return next, nil
 }
 
-// Create atomically applies the API's actor-scoped idempotency contract. The
-// advisory lock makes the JSON-backed lookup safe for concurrent first use
-// without changing the migration owned by the storage foundation.
+// Create applies the API's actor-scoped idempotency contract. The unique
+// constraint on (create_actor, create_idempotency_key) decides the race: the
+// loser of a concurrent first use sees zero rows affected and reads the winner's
+// run, which its own statement snapshot resolves under read committed.
 func (s *Store) Create(ctx context.Context, record application.RunRecord, identity application.CreateRunIdentity) (application.RunRecord, uint64, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return application.RunRecord{}, 0, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))`, identity.Actor, identity.IdempotencyKey); err != nil {
-		return application.RunRecord{}, 0, err
-	}
-	var existingID string
-	err = tx.QueryRow(ctx, `SELECT id::text FROM runs WHERE resolved_configuration->>'createActor'=$1 AND resolved_configuration->>'createIdempotencyKey'=$2`, identity.Actor, identity.IdempotencyKey).Scan(&existingID)
-	if err == nil {
-		id, parseErr := domain.ParseRunID(existingID)
-		if parseErr != nil {
-			return application.RunRecord{}, 0, parseErr
-		}
-		existing, version, getErr := getRun(ctx, tx, id)
-		if getErr != nil {
-			return application.RunRecord{}, 0, getErr
-		}
-		if existing.WorkspacePath != record.WorkspacePath || existing.HarnessProfile != record.HarnessProfile || existing.SandboxProfile != record.SandboxProfile {
-			return application.RunRecord{}, 0, application.ErrIdempotencyConflict
-		}
-		return existing, version, tx.Commit(ctx)
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return application.RunRecord{}, 0, err
-	}
-	configuration, err := json.Marshal(metadata(record, identity))
+	tag, err := tx.Exec(ctx, `INSERT INTO runs(id,version,workspace_path,harness_profile,sandbox_profile,created_at,updated_at,create_actor,create_idempotency_key)
+	VALUES($1,1,$2,$3,$4,$5,$6,NULLIF($7,''),NULLIF($8,''))
+	ON CONFLICT (create_actor,create_idempotency_key) DO NOTHING`,
+		record.ID.String(), record.WorkspacePath, record.HarnessProfile, record.SandboxProfile, record.CreatedAt, record.UpdatedAt, identity.Actor, identity.IdempotencyKey)
 	if err != nil {
-		return application.RunRecord{}, 0, err
-	}
-	if _, err = tx.Exec(ctx, `INSERT INTO runs(id,version,resolved_configuration) VALUES($1,1,$2)`, record.ID.String(), configuration); err != nil {
 		return application.RunRecord{}, 0, conflict(err, "run="+record.ID.String())
+	}
+	if tag.RowsAffected() == 0 {
+		return replayCreate(ctx, tx, record, identity)
 	}
 	for i, attempt := range record.Attempts {
 		if _, err = tx.Exec(ctx, `INSERT INTO run_attempts(run_id,ordinal,id,previous_attempt_id,state) VALUES($1,$2,$3,NULLIF($4,'')::uuid,$5)`, record.ID.String(), i+1, attempt.ID.String(), zeroID(attempt.PreviousAttemptID), attempt.State); err != nil {
@@ -147,9 +111,31 @@ func (s *Store) Create(ctx context.Context, record application.RunRecord, identi
 		}
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return application.RunRecord{}, 0, err
+		return application.RunRecord{}, 0, conflict(err, "run="+record.ID.String())
 	}
 	return record, 1, nil
+}
+
+// replayCreate answers a create whose request key already exists: the same
+// request replays the stored run, a different one is a conflict. The run the
+// key names always exists, because only its committed row refused the insert.
+func replayCreate(ctx context.Context, tx pgx.Tx, record application.RunRecord, identity application.CreateRunIdentity) (application.RunRecord, uint64, error) {
+	var existingID string
+	if err := tx.QueryRow(ctx, `SELECT id::text FROM runs WHERE create_actor=$1 AND create_idempotency_key=$2`, identity.Actor, identity.IdempotencyKey).Scan(&existingID); err != nil {
+		return application.RunRecord{}, 0, err
+	}
+	id, err := domain.ParseRunID(existingID)
+	if err != nil {
+		return application.RunRecord{}, 0, err
+	}
+	existing, version, err := getRun(ctx, tx, id)
+	if err != nil {
+		return application.RunRecord{}, 0, err
+	}
+	if existing.WorkspacePath != record.WorkspacePath || existing.HarnessProfile != record.HarnessProfile || existing.SandboxProfile != record.SandboxProfile {
+		return application.RunRecord{}, 0, application.ErrIdempotencyConflict
+	}
+	return existing, version, tx.Commit(ctx)
 }
 
 func zeroID(id domain.AttemptID) string {
@@ -170,9 +156,8 @@ type runQuerier interface {
 
 func getRun(ctx context.Context, query runQuerier, id domain.RunID) (application.RunRecord, uint64, error) {
 	var version uint64
-	var lastSequence uint64
-	var configuration []byte
-	if err := query.QueryRow(ctx, `SELECT version,last_sequence,resolved_configuration FROM runs WHERE id=$1`, id.String()).Scan(&version, &lastSequence, &configuration); errors.Is(err, pgx.ErrNoRows) {
+	record := application.RunRecord{ID: id}
+	if err := query.QueryRow(ctx, `SELECT version,last_sequence,workspace_path,harness_profile,sandbox_profile,created_at,updated_at FROM runs WHERE id=$1`, id.String()).Scan(&version, &record.LastSequence, &record.WorkspacePath, &record.HarnessProfile, &record.SandboxProfile, &record.CreatedAt, &record.UpdatedAt); errors.Is(err, pgx.ErrNoRows) {
 		return application.RunRecord{}, 0, application.ErrNotFound
 	} else if err != nil {
 		return application.RunRecord{}, 0, err
@@ -182,12 +167,6 @@ func getRun(ctx context.Context, query runQuerier, id domain.RunID) (application
 		return application.RunRecord{}, 0, err
 	}
 	defer rows.Close()
-	record := application.RunRecord{ID: id, LastSequence: lastSequence}
-	var stored runMetadata
-	if err = json.Unmarshal(configuration, &stored); err != nil {
-		return application.RunRecord{}, 0, err
-	}
-	record.CreatedAt, record.UpdatedAt, record.WorkspacePath, record.HarnessProfile, record.SandboxProfile = stored.CreatedAt, stored.UpdatedAt, stored.WorkspacePath, stored.HarnessProfile, stored.SandboxProfile
 	for rows.Next() {
 		var aid, prev, state string
 		if err = rows.Scan(&aid, &prev, &state); err != nil {

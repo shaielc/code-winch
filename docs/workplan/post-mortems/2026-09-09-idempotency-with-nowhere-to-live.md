@@ -117,7 +117,8 @@ lookup is also a `Seq Scan on runs` inside that lock, once per create.
 
 ## Remediation
 
-Not yet applied; it needs an owner, because it needs a migration slot.
+Applied on P0-006's branch, pending merge. Its brief now declares the persisted
+aggregate and the migration slot it always needed.
 
 1. `create_actor` and `create_idempotency_key` as nullable columns on `runs`,
    with `UNIQUE (create_actor, create_idempotency_key)`. This is the schema's
@@ -135,21 +136,22 @@ Not yet applied; it needs an owner, because it needs a migration slot.
    run's fields to decide replay or conflict. The constraint does the work, so
    the advisory lock and the JSON-path sequential scan both go away, and
    `conflict()` already maps SQLSTATE 23505 onto `application.ErrConflict`.
-3. Columns for `created_at` and `updated_at` (and `workspace_path`);
-   `harness_driver` and `sandbox_driver` already exist from migration 003.
-4. Leave the profile names in `resolved_configuration` — they belong there — and
-   let create write the initial document that layering later rewrites.
-5. One insert path: drop `Save(_, 0)` as a creation route or send it through
-   `Create`.
+3. `created_at` and `updated_at` as columns, so a timestamp the API declares
+   required stops depending on a document another feature rewrites, and
+   `updated_at` can move when a run changes.
+4. `workspace_path`, `harness_profile`, and `sandbox_profile` as columns too.
+   The requested profile *name*, the driver the supervisor resolves it to
+   (migration 003), and the expanded configuration document are three different
+   things; only the last belongs in `resolved_configuration`, which run creation
+   now leaves at its `{}` default.
+5. `Save(_, 0)` stays a second insert path, and stops being a hole: a row it
+   inserts carries no request key, and NULLs are distinct in the unique index,
+   so it dedupes against nothing by construction rather than by remembering to
+   take a lock.
 
-If a migration slot cannot be allocated first, the interim step is to namespace
-the blob (`{"run": …, "resolved": …}`) so the two writers stop clobbering each
-other. That removes the data loss and leaves uniqueness a convention, so it is a
-stopgap, not the fix.
-
-Either way the work belongs to a task: P0-006's brief extended to declare the
-persisted aggregate and a migration slot, or a task carrying a `revision` edge
-to P0-006.
+Two writers on the run row remain out of scope and owned: the supervisor paths
+that bump `version` without moving `updated_at` land with P0-008, which is the
+first task that transitions a run.
 
 ## Prevention
 

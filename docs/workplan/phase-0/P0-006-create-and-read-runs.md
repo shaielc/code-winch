@@ -47,6 +47,7 @@ the run is persisted but does not execute.
 
 - `cmd/winchd/main.go`
 - `internal/application/` (run create/get use cases)
+- `internal/adapters/postgres/` (run row columns, migration 006, create/get)
 - `cmd/winch/` (run create/get subcommands)
 - `test/e2e/` (new directory: shared scenario harness and `create_test.go`)
 - `Makefile` (`make e2e` target)
@@ -54,8 +55,12 @@ the run is persisted but does not execute.
 
 ## Contract surfaces
 
-- API: `POST /api/v1/runs`, `GET /api/v1/runs/{runId}`
+- API: `POST /api/v1/runs`, `GET /api/v1/runs/{runId}`, including the
+  `Idempotency-Key` the operation requires and its conflict response
 - port: partial `httpapi.Backend` (create and get only)
+- port: `application.CreateRunRepository`
+- persisted aggregate: the `runs` row — its own fields and its create request key
+- migration slot: 006
 
 ## Demonstration
 
