@@ -3,6 +3,7 @@ package local
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -114,6 +115,12 @@ func waitForPID(t *testing.T, path string) int {
 }
 
 func processExists(pid int) bool {
+	if state, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid)); err == nil {
+		fields := strings.Fields(string(state))
+		if len(fields) > 2 && fields[2] == "Z" {
+			return false
+		}
+	}
 	err := syscall.Kill(pid, 0)
 	return err == nil || !errors.Is(err, syscall.ESRCH)
 }

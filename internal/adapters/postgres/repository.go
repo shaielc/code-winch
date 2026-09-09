@@ -112,7 +112,7 @@ func (s *Store) Create(ctx context.Context, record application.RunRecord, identi
 		return application.RunRecord{}, 0, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, identity.Actor+"\x00"+identity.IdempotencyKey); err != nil {
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))`, identity.Actor, identity.IdempotencyKey); err != nil {
 		return application.RunRecord{}, 0, err
 	}
 	var existingID string
