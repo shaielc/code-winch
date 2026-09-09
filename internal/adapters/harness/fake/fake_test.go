@@ -54,6 +54,17 @@ func TestBuildLaunchResolvesInstalledBinaryAndPassesControls(t *testing.T) {
 	}
 }
 
+func TestBuildLaunchRemainsUsableWithFakeSandboxWithoutInstalledBinary(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	launch, err := (fake.Driver{}).BuildLaunch(context.Background(), runSpec(t), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if launch.Command != "fake-harness" {
+		t.Fatalf("command = %q; want fake-harness fallback", launch.Command)
+	}
+}
+
 func TestCompleteRunUsesFakeTime(t *testing.T) {
 	now, _ := domain.NewTimestamp(time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC))
 	clock := testkit.NewClock(now)

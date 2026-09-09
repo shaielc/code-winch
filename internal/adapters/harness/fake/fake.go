@@ -73,7 +73,12 @@ func resolveExecutable(configured string) (string, error) {
 	}
 	resolved, err := exec.LookPath("fake-harness")
 	if err != nil {
-		return "", errors.New("fake harness: code=EXECUTABLE_NOT_FOUND field=executable")
+		// The all-fake profile does not execute the launch command, so preserve a
+		// usable specification when the process fixture is not installed. The
+		// local profile will report START_FAILED if it tries to execute it. When
+		// the deployment image has installed the fixture, LookPath above embeds
+		// its absolute path and does not depend on a later PATH lookup.
+		return "fake-harness", nil
 	}
 	absolute, err := filepath.Abs(resolved)
 	if err != nil {
