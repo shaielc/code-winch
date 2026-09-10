@@ -9,6 +9,17 @@ concurrent migrators. Production migrations are forward-only; `MigrateDown`
 reverses what the ledger records and is intended for clean-database
 verification.
 
+A run's own fields — workspace path, requested harness and sandbox profiles,
+and its timestamps — are columns on `runs`, and the caller's clock owns the
+timestamps the store writes. Creation is idempotent per request key: migration
+006 adds `create_actor` and `create_idempotency_key` with a unique constraint,
+following `input_commands` and `workflow_signals`, so replaying a key returns
+the stored run and reusing it for a different run reports
+`application.ErrIdempotencyConflict`. A run no client request created leaves
+both NULL and dedupes against nothing. `resolved_configuration` holds only the
+resolved configuration described in `docs/code-structure.md`; its writer
+replaces it as one document, so run fields must never be kept there.
+
 Event appends atomically compare `expectedSequence`, reserve exactly the batch
 range, and insert the batch. A conflict returns `application.ErrConflict` with
 only resource identifiers. Secret-sensitivity events and invalid JSON are

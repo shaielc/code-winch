@@ -20,11 +20,102 @@ import (
 )
 
 var (
-	_ application.RunRepository     = (*pgstore.Store)(nil)
-	_ application.EventStore        = (*pgstore.Store)(nil)
-	_ application.OutboxStore       = (*pgstore.Store)(nil)
-	_ application.InputCommandStore = (*pgstore.Store)(nil)
+	_ application.RunRepository       = (*pgstore.Store)(nil)
+	_ application.CreateRunRepository = (*pgstore.Store)(nil)
+	_ application.EventStore          = (*pgstore.Store)(nil)
+	_ application.OutboxStore         = (*pgstore.Store)(nil)
+	_ application.InputCommandStore   = (*pgstore.Store)(nil)
 )
+
+func TestCreateRunIdempotencyAndLastSequence(t *testing.T) {
+	pool, store := database(t)
+	record := application.RunRecord{ID: id(t, domain.ParseRunID, 901), Attempts: []domain.Attempt{{ID: id(t, domain.ParseAttemptID, 902), State: domain.RunStateCreated}}, WorkspacePath: "/tmp/ws", HarnessProfile: "fake", SandboxProfile: "local"}
+	identity := application.CreateRunIdentity{Actor: "actor", IdempotencyKey: "create-1"}
+	created, _, err := store.Create(context.Background(), record, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay := record
+	replay.ID = id(t, domain.ParseRunID, 903)
+	replay.Attempts[0].ID = id(t, domain.ParseAttemptID, 904)
+	got, _, err := store.Create(context.Background(), replay, identity)
+	if err != nil || got.ID != created.ID {
+		t.Fatalf("replay=%#v err=%v", got, err)
+	}
+	replay.WorkspacePath = "/different"
+	if _, _, err = store.Create(context.Background(), replay, identity); !errors.Is(err, application.ErrIdempotencyConflict) {
+		t.Fatalf("conflicting replay: %v", err)
+	}
+	if _, err = pool.Exec(context.Background(), `UPDATE runs SET last_sequence=7 WHERE id=$1`, record.ID.String()); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err = store.Get(context.Background(), record.ID)
+	if err != nil || got.LastSequence != 7 {
+		t.Fatalf("last sequence=%d err=%v", got.LastSequence, err)
+	}
+}
+
+// A run's own fields survive a resolved-configuration write, and the create
+// request key with them: the two are separate columns with separate owners.
+func TestResolvedConfigurationDoesNotDisturbTheRun(t *testing.T) {
+	_, store := database(t)
+	record := application.RunRecord{ID: id(t, domain.ParseRunID, 911), Attempts: []domain.Attempt{{ID: id(t, domain.ParseAttemptID, 912), State: domain.RunStateCreated}}, WorkspacePath: "/tmp/ws", HarnessProfile: "fake", SandboxProfile: "local", CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
+	record.UpdatedAt = record.CreatedAt
+	identity := application.CreateRunIdentity{Actor: "actor", IdempotencyKey: "configured-1"}
+	if _, _, err := store.Create(context.Background(), record, identity); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveResolvedConfiguration(context.Background(), record.ID, []byte(`{"profile":"safe","credentialRef":"vault:item"}`)); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := store.Get(context.Background(), record.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.WorkspacePath != record.WorkspacePath || got.HarnessProfile != record.HarnessProfile || !got.CreatedAt.Equal(record.CreatedAt) {
+		t.Fatalf("run after configuration write: %#v", got)
+	}
+	replayed, _, err := store.Create(context.Background(), record, identity)
+	if err != nil || replayed.ID != record.ID {
+		t.Fatalf("replay after configuration write: %#v %v", replayed, err)
+	}
+}
+
+// Concurrent first use of one request key is decided by the unique constraint,
+// not by the order the callers arrive in.
+func TestConcurrentCreateWithOneRequestKeyMakesOneRun(t *testing.T) {
+	pool, store := database(t)
+	identity := application.CreateRunIdentity{Actor: "actor", IdempotencyKey: "concurrent-1"}
+	const callers = 8
+	ids := make([]domain.RunID, callers)
+	errs := make([]error, callers)
+	var wg sync.WaitGroup
+	for i := range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			record := application.RunRecord{ID: id(t, domain.ParseRunID, 920+i*2), Attempts: []domain.Attempt{{ID: id(t, domain.ParseAttemptID, 921+i*2), State: domain.RunStateCreated}}, WorkspacePath: "/tmp/ws", HarnessProfile: "fake", SandboxProfile: "local"}
+			stored, _, err := store.Create(context.Background(), record, identity)
+			ids[i], errs[i] = stored.ID, err
+		}()
+	}
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("caller %d: %v", i, err)
+		}
+		if ids[i] != ids[0] {
+			t.Fatalf("caller %d got run %s, caller 0 got %s", i, ids[i], ids[0])
+		}
+	}
+	var rows int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM runs WHERE create_idempotency_key=$1`, identity.IdempotencyKey).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 1 {
+		t.Fatalf("runs persisted for one request key: %d", rows)
+	}
+}
 
 func TestInputAcceptanceIsAtomicConcurrentAndReplayable(t *testing.T) {
 	pool, store := database(t)
@@ -186,8 +277,8 @@ func TestMigrateUpOnMigratedDatabaseIsANoOp(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM schema_migrations`).Scan(&applied); err != nil {
 		t.Fatal(err)
 	}
-	if applied != 5 {
-		t.Fatalf("ledger records %d migrations, want 5", applied)
+	if applied != result.Version {
+		t.Fatalf("ledger records %d migrations, want %d", applied, result.Version)
 	}
 }
 

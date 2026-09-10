@@ -61,10 +61,10 @@ func (s *Store) Save(ctx context.Context, record application.RunRecord, expected
 	defer func() { _ = tx.Rollback(ctx) }()
 	next := expected + 1
 	if expected == 0 {
-		_, err = tx.Exec(ctx, `INSERT INTO runs(id,version) VALUES($1,1)`, record.ID.String())
+		_, err = tx.Exec(ctx, `INSERT INTO runs(id,version,workspace_path,harness_profile,sandbox_profile,created_at,updated_at) VALUES($1,1,$2,$3,$4,$5,$6)`, record.ID.String(), record.WorkspacePath, record.HarnessProfile, record.SandboxProfile, record.CreatedAt, record.UpdatedAt)
 	} else {
 		var found uint64
-		err = tx.QueryRow(ctx, `UPDATE runs SET version=$2 WHERE id=$1 AND version=$3 RETURNING version`, record.ID.String(), next, expected).Scan(&found)
+		err = tx.QueryRow(ctx, `UPDATE runs SET version=$2,updated_at=$4 WHERE id=$1 AND version=$3 RETURNING version`, record.ID.String(), next, expected, record.UpdatedAt).Scan(&found)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, fmt.Errorf("%w: run=%s expected_version=%d", application.ErrConflict, record.ID, expected)
 		}
@@ -85,6 +85,59 @@ func (s *Store) Save(ctx context.Context, record application.RunRecord, expected
 	return next, nil
 }
 
+// Create applies the API's actor-scoped idempotency contract. The unique
+// constraint on (create_actor, create_idempotency_key) decides the race: the
+// loser of a concurrent first use sees zero rows affected and reads the winner's
+// run, which its own statement snapshot resolves under read committed.
+func (s *Store) Create(ctx context.Context, record application.RunRecord, identity application.CreateRunIdentity) (application.RunRecord, uint64, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return application.RunRecord{}, 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	tag, err := tx.Exec(ctx, `INSERT INTO runs(id,version,workspace_path,harness_profile,sandbox_profile,created_at,updated_at,create_actor,create_idempotency_key)
+	VALUES($1,1,$2,$3,$4,$5,$6,NULLIF($7,''),NULLIF($8,''))
+	ON CONFLICT (create_actor,create_idempotency_key) DO NOTHING`,
+		record.ID.String(), record.WorkspacePath, record.HarnessProfile, record.SandboxProfile, record.CreatedAt, record.UpdatedAt, identity.Actor, identity.IdempotencyKey)
+	if err != nil {
+		return application.RunRecord{}, 0, conflict(err, "run="+record.ID.String())
+	}
+	if tag.RowsAffected() == 0 {
+		return replayCreate(ctx, tx, record, identity)
+	}
+	for i, attempt := range record.Attempts {
+		if _, err = tx.Exec(ctx, `INSERT INTO run_attempts(run_id,ordinal,id,previous_attempt_id,state) VALUES($1,$2,$3,NULLIF($4,'')::uuid,$5)`, record.ID.String(), i+1, attempt.ID.String(), zeroID(attempt.PreviousAttemptID), attempt.State); err != nil {
+			return application.RunRecord{}, 0, conflict(err, "run="+record.ID.String())
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return application.RunRecord{}, 0, conflict(err, "run="+record.ID.String())
+	}
+	return record, 1, nil
+}
+
+// replayCreate answers a create whose request key already exists: the same
+// request replays the stored run, a different one is a conflict. The run the
+// key names always exists, because only its committed row refused the insert.
+func replayCreate(ctx context.Context, tx pgx.Tx, record application.RunRecord, identity application.CreateRunIdentity) (application.RunRecord, uint64, error) {
+	var existingID string
+	if err := tx.QueryRow(ctx, `SELECT id::text FROM runs WHERE create_actor=$1 AND create_idempotency_key=$2`, identity.Actor, identity.IdempotencyKey).Scan(&existingID); err != nil {
+		return application.RunRecord{}, 0, err
+	}
+	id, err := domain.ParseRunID(existingID)
+	if err != nil {
+		return application.RunRecord{}, 0, err
+	}
+	existing, version, err := getRun(ctx, tx, id)
+	if err != nil {
+		return application.RunRecord{}, 0, err
+	}
+	if existing.WorkspacePath != record.WorkspacePath || existing.HarnessProfile != record.HarnessProfile || existing.SandboxProfile != record.SandboxProfile {
+		return application.RunRecord{}, 0, application.ErrIdempotencyConflict
+	}
+	return existing, version, tx.Commit(ctx)
+}
+
 func zeroID(id domain.AttemptID) string {
 	if id.IsZero() {
 		return ""
@@ -93,18 +146,27 @@ func zeroID(id domain.AttemptID) string {
 }
 
 func (s *Store) Get(ctx context.Context, id domain.RunID) (application.RunRecord, uint64, error) {
+	return getRun(ctx, s.pool, id)
+}
+
+type runQuerier interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+func getRun(ctx context.Context, query runQuerier, id domain.RunID) (application.RunRecord, uint64, error) {
 	var version uint64
-	if err := s.pool.QueryRow(ctx, `SELECT version FROM runs WHERE id=$1`, id.String()).Scan(&version); errors.Is(err, pgx.ErrNoRows) {
+	record := application.RunRecord{ID: id}
+	if err := query.QueryRow(ctx, `SELECT version,last_sequence,workspace_path,harness_profile,sandbox_profile,created_at,updated_at FROM runs WHERE id=$1`, id.String()).Scan(&version, &record.LastSequence, &record.WorkspacePath, &record.HarnessProfile, &record.SandboxProfile, &record.CreatedAt, &record.UpdatedAt); errors.Is(err, pgx.ErrNoRows) {
 		return application.RunRecord{}, 0, application.ErrNotFound
 	} else if err != nil {
 		return application.RunRecord{}, 0, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id,COALESCE(previous_attempt_id::text,''),state FROM run_attempts WHERE run_id=$1 ORDER BY ordinal`, id.String())
+	rows, err := query.Query(ctx, `SELECT id,COALESCE(previous_attempt_id::text,''),state FROM run_attempts WHERE run_id=$1 ORDER BY ordinal`, id.String())
 	if err != nil {
 		return application.RunRecord{}, 0, err
 	}
 	defer rows.Close()
-	record := application.RunRecord{ID: id}
 	for rows.Next() {
 		var aid, prev, state string
 		if err = rows.Scan(&aid, &prev, &state); err != nil {

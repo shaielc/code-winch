@@ -7,10 +7,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	harnessfake "github.com/shaielc/code-winch/internal/adapters/harness/fake"
 	sandboxlocal "github.com/shaielc/code-winch/internal/adapters/sandbox/local"
 	"github.com/shaielc/code-winch/internal/application"
@@ -20,19 +24,39 @@ import (
 
 const devRunID = "00000000-0000-0000-0000-000000000001"
 
-const usage = "usage: winch dev run --harness fake --sandbox local [--stop-after duration]"
-
 func main() {
 	// An asked-for usage text is not a usage error: deployments/README.md opens
 	// with `winch --help`, so it reports success on stdout rather than failure.
 	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help" || os.Args[1] == "help") {
-		fmt.Println(usage)
+		printUsage(os.Stdout)
 		return
 	}
-	if len(os.Args) < 3 || os.Args[1] != "dev" || os.Args[2] != "run" {
-		fmt.Fprintln(os.Stderr, usage)
-		os.Exit(2)
+	if len(os.Args) >= 3 && os.Args[1] == "dev" && os.Args[2] == "run" {
+		devRun()
+		return
 	}
+	if len(os.Args) >= 3 && os.Args[1] == "run" {
+		switch os.Args[2] {
+		case "create":
+			runCreate()
+			return
+		case "get":
+			runGet()
+			return
+		case "start":
+			fmt.Fprintln(os.Stderr, "winch run start: not implemented; owner=P0-008")
+			os.Exit(1)
+		}
+	}
+	printUsage(os.Stderr)
+	os.Exit(2)
+}
+
+func printUsage(out io.Writer) {
+	_, _ = fmt.Fprintln(out, "usage: winch run {create|get|start} | winch dev run")
+}
+
+func devRun() {
 	fs := flag.NewFlagSet("dev run", flag.ExitOnError)
 	harness := fs.String("harness", "fake", "harness driver")
 	sandbox := fs.String("sandbox", "local", "sandbox driver")
@@ -84,6 +108,74 @@ func main() {
 			// anything already queued instead of abandoning it.
 			runner.Close()
 		}
+	}
+}
+
+type apiRun struct {
+	ID             string `json:"id"`
+	State          string `json:"state"`
+	Version        int64  `json:"version"`
+	LastSequence   int64  `json:"lastSequence"`
+	WorkspacePath  string `json:"workspacePath"`
+	HarnessProfile string `json:"harnessProfile"`
+	SandboxProfile string `json:"sandboxProfile"`
+}
+
+func apiSettings() (string, string, string, string) {
+	base := os.Getenv("WINCH_API_URL")
+	if base == "" {
+		base = "http://localhost:8080"
+	}
+	return strings.TrimRight(base, "/"), os.Getenv("WINCH_TOKEN"), os.Getenv("WINCH_CSRF_TOKEN"), base
+}
+func runCreate() {
+	fs := flag.NewFlagSet("run create", flag.ExitOnError)
+	workspace := fs.String("workspace", "", "workspace path")
+	harness := fs.String("harness", "", "harness profile")
+	sandbox := fs.String("sandbox", "", "sandbox profile")
+	idempotencyKey := fs.String("idempotency-key", uuid.NewString(), "request idempotency key")
+	_ = fs.Parse(os.Args[3:])
+	body, _ := json.Marshal(map[string]string{"workspacePath": *workspace, "harnessProfile": *harness, "sandboxProfile": *sandbox})
+	var run apiRun
+	requestAPI(http.MethodPost, "/api/v1/runs", *idempotencyKey, body, &run)
+	fmt.Println(run.ID)
+}
+func runGet() {
+	fs := flag.NewFlagSet("run get", flag.ExitOnError)
+	_ = fs.Parse(os.Args[3:])
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: winch run get RUN_ID")
+		os.Exit(2)
+	}
+	var run apiRun
+	requestAPI(http.MethodGet, "/api/v1/runs/"+fs.Arg(0), "", nil, &run)
+	data, _ := json.MarshalIndent(run, "", "  ")
+	fmt.Println(string(data))
+}
+func requestAPI(method, path, idempotencyKey string, body []byte, target any) {
+	base, token, csrf, origin := apiSettings()
+	req, err := http.NewRequest(method, base+path, strings.NewReader(string(body)))
+	if err != nil {
+		fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	if method != http.MethodGet {
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-CSRF-Token", csrf)
+		req.Header.Set("Origin", origin)
+		req.Header.Set("Idempotency-Key", idempotencyKey)
+	}
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fatal(err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	data, _ := io.ReadAll(response.Body)
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		fatal(fmt.Errorf("api status=%d: %s", response.StatusCode, strings.TrimSpace(string(data))))
+	}
+	if err = json.Unmarshal(data, target); err != nil {
+		fatal(err)
 	}
 }
 func printEvent(event *application.UnsequencedEvent) {
