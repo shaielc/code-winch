@@ -26,6 +26,17 @@ new execution) linked to the run; it never rewrites history. `stop` is
 idempotent in `Stopping` and terminal states. Input is accepted only while the
 adapter reports an input-capable state.
 
+Creation is idempotent per `(actor, idempotency key)`; input commands scope the
+same guarantee to a run, which a run being created does not yet have. A repeated
+key from the same actor returns the run the first request created — same ID,
+same version, and the `201` the operation documents rather than a second run.
+The comparison is over the request's declared fields, the workspace path and the
+harness and sandbox profiles: identical fields replay, and any difference is an
+idempotency conflict, so callers must retry with the same key and must not
+invent a new key after an ambiguous response. A key is kept for the life of the
+run it created and is not otherwise expired. A run no client request created —
+one a workflow spawns, say — carries no key and deduplicates against nothing.
+
 ## 2. Canonical event envelope
 
 All persisted and streamed events use a common envelope:
