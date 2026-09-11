@@ -3,9 +3,10 @@
 Instructions for any agent working in this repository. One unit of work, one
 pull request.
 
-No implementation plan is in flight. [`docs/state.md`](docs/state.md) is the
-authoritative account of what runs and what does not; read it before assuming a
-capability exists.
+An implementation plan is in flight. [`docs/workplan/README.md`](docs/workplan/README.md)
+is its index and [`docs/workplan/tasks.json`](docs/workplan/tasks.json) is its
+tracker. [`docs/state.md`](docs/state.md) remains the authoritative account of
+what runs and what does not; read it before assuming a capability exists.
 
 An `AGENTS.md` deeper in the tree adds to or narrows these rules for its own
 subtree.
@@ -15,12 +16,15 @@ subtree.
 - **System state** — [`docs/state.md`](docs/state.md). What is reachable, what
   is built but unwired, and what has no code. Every claim in it carries the
   command or `file:line` that shows it.
+- **Active implementation plan** — [`docs/workplan/README.md`](docs/workplan/README.md).
+  Phase objectives, task briefs, dependencies, and instructions for selecting
+  available work from the tracker.
 - **Design baseline** — `docs/architecture.md`, `docs/code-structure.md`,
   `docs/contracts.md`, `docs/security.md`, `docs/roadmap.md`, and the ADRs in
   `docs/decisions/`.
-- **How to run a task** — `skills/task/SKILL.md`. Applies once a plan exists in
-  `docs/workplan/`: how to orient in a brief, what its shape must demonstrate,
-  and how to judge whether it is complete. It expands on the rules below.
+- **How to run a task** — `skills/task/SKILL.md`. How to orient in an active
+  brief, what its shape must demonstrate, and how to judge whether it is
+  complete. It expands on the rules below.
 - **Planning rules** — `skills/workplan/SKILL.md`. Read it when deriving the next
   plan from the design set and `docs/state.md`, or when changing a plan in
   flight.
@@ -130,11 +134,13 @@ a ceiling.
 
 ## Current state
 
-Some foundations these rules refer to do not exist yet. The daemon has a
-composition root, configuration, and telemetry, and `winch dev run` drives a
-harness by hand; the run use cases are unbound, the fake profile is not
-controllable, there is no standing end-to-end scenario suite, and the operator
-CLI covers `dev run` only. `docs/state.md` records each of these with evidence.
+Phase 0 is repairing the foundation gaps recorded in `docs/state.md`: broken CI
+coverage, an operator CLI absent from build and deployment, an uncontrollable
+fake profile, missing end-to-end coverage, stale post-close references, and the
+unbound run round trip. The active scope and current progress are in
+`docs/workplan/README.md` and `docs/workplan/tasks.json`.
 
-The rules above bind as each foundation lands. Until then, do not add code that
-makes them harder to establish.
+Capabilities outside that repair phase remain as documented under *What is not
+implemented* in `docs/state.md`; their presence in the design set is not
+evidence that they run. The rules above bind throughout the active plan, so do
+not add code that makes those foundations harder to establish.
