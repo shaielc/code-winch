@@ -57,7 +57,7 @@ not cover what they appear to, and the use-case layer that was never written.
 | P0-009 | Send input and drain outbox | P0-008 | seam | `run input` |
 | P0-010 | Live WebSocket event stream | P0-009 | seam | `run stream` |
 | P0-011 | Stop run | P0-008 | seam | `run stop` |
-| P0-012 | Ship controllable in-memory store profile | — | capability | `winchd` with `storeProfile=memory` |
+| P0-012 | Ship controllable in-memory store profile | — | seam | `winchd` with `storeProfile=memory` |
 | P0-013 | Revise create/read for memory store profile | P0-006, P0-012 | swap | `make e2e` create/get without DB |
 | P0-014 | Revise start execution for memory store profile | P0-008, P0-013 | swap | start scenario without DB |
 | P0-015 | Revise input and outbox for memory store profile | P0-009, P0-014 | swap | input scenario without DB |
