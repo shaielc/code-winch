@@ -45,7 +45,7 @@
       "title": "Exercise complete fake run in CI",
       "phase": 0,
       "phase_name": "Foundation repair",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P0-002",
         "P0-003"
