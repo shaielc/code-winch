@@ -153,7 +153,9 @@
       "phase": 0,
       "phase_name": "Foundation repair",
       "status": "pending",
-      "depends_on": [],
+      "depends_on": [
+        "P0-009"
+      ],
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-012-ship-memory-store-profile.md"
