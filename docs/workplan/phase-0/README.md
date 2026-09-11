@@ -7,8 +7,8 @@
 The product completes a run round trip. A person creates a run through the
 daemon API or the operator CLI, starts it, watches it live, sends it input,
 stops it, and reads a truthful terminal state back — against the fake harness
-under the local sandbox and the in-memory store — and CI refuses any change that
-breaks that path.
+under the local sandbox, with PostgreSQL as the store — and CI refuses any
+change that breaks that path.
 
 ## Scope
 
@@ -25,13 +25,9 @@ not cover what they appear to, and the use-case layer that was never written.
 - **The run round trip** — one seam per operator operation, each binding its own
   method on the delegating `httpapi.Backend`, each adding its own CLI command,
   each contributing its own e2e scenario (P0-006, P0-008 to P0-011).
-- **Memory store repair** — the run round trip was derived against PostgreSQL,
-  skipping I3 and I4's first rung. P0-012 ships `storeProfile=memory`; P0-013
-  through P0-018 revise each seam and the CI gate so `winchd` and `make e2e` run
-  without a database (see the post-mortem's defect 5).
 - **Closure** — the assembled round trip runs as one scenario and gates CI
-  (P0-007, then P0-018 for the memory-backed gate); contributor documentation
-  stops describing a plan that no longer exists (P0-005).
+  (P0-007); contributor documentation stops describing a plan that no longer
+  exists (P0-005).
 
 ## Non-goals
 
@@ -40,7 +36,11 @@ not cover what they appear to, and the use-case layer that was never written.
 - Structured event families, renderers, and a second harness provider
   (`docs/roadmap.md` Phase 2).
 - Container isolation, workflows, and remote runners (Phases 3 to 5).
-- PostgreSQL as the default e2e substrate — that is an I4 swap task in phase 1.
+- **A runnable in-memory store profile.** Phase 0 runs on PostgreSQL
+  throughout, so I3 does not hold for storage at phase exit and I4's first rung
+  is the postgres scenario rather than a fake one. The gap is registered in
+  [`../phase-1/README.md`](../phase-1/README.md) *Deferrals in* and explained in
+  [`../post-mortems/2026-09-11-a-store-profile-derived-from-test-doubles.md`](../post-mortems/2026-09-11-a-store-profile-derived-from-test-doubles.md).
 
 ## Tasks
 
@@ -57,19 +57,12 @@ not cover what they appear to, and the use-case layer that was never written.
 | P0-009 | Send input and drain outbox | P0-008 | seam | `run input` |
 | P0-010 | Live WebSocket event stream | P0-009 | seam | `run stream` |
 | P0-011 | Stop run | P0-008 | seam | `run stop` |
-| P0-012 | Ship controllable in-memory store profile | — | seam | `winchd` with `storeProfile=memory` |
-| P0-013 | Revise create/read for memory store profile | P0-006, P0-012 | swap | `make e2e` create/get without DB |
-| P0-014 | Revise start execution for memory store profile | P0-008, P0-013 | swap | start scenario without DB |
-| P0-015 | Revise input and outbox for memory store profile | P0-009, P0-014 | swap | input scenario without DB |
-| P0-016 | Revise WebSocket stream for memory store profile | P0-010, P0-015 | swap | stream scenario without DB |
-| P0-017 | Revise stop run for memory store profile | P0-011, P0-014 | swap | stop scenario without DB |
-| P0-018 | Revise phase 0 closure for memory-backed e2e | P0-007, P0-016, P0-017, P0-012 | hardening | `make e2e` in CI without DB |
 
 ### Dependency graph
 
 ```
 Independent at open:
-  P0-001   P0-002   P0-003   P0-005   P0-012
+  P0-001   P0-002   P0-003   P0-005
 
 P0-002 + P0-003 ──► P0-004
 
@@ -77,51 +70,43 @@ P0-001 ──► P0-006 ──┬──► P0-008 ──┬──► P0-009 ─�
                     │             │                        │
 P0-003 ──────────────┘             └──► P0-011 ─────────────┤
 P0-001 ────────────────────────────────────────────────────►┴──► P0-007
-
-Memory repair (revision edges; each waits on the postgres seam it revises):
-P0-012 ──┬──► P0-013 ◄── P0-006
-         │       │
-         │       └──► P0-014 ◄── P0-008 ──┬──► P0-015 ◄── P0-009 ──► P0-016 ◄── P0-010
-         │                                │
-         │                                └──► P0-017 ◄── P0-011
-         │
-P0-007 + P0-016 + P0-017 ──► P0-018
 ```
 
 - **P0-004** waits on the profile it exercises (P0-003) and on the CLI it
   invokes (P0-002).
-- **P0-006 → P0-001** is semantic in the CI sense for the postgres profile only;
-  P0-013 removes that requirement from the e2e path once it lands.
+- **P0-006 → P0-001** is semantic in the CI sense: the e2e path needs a
+  PostgreSQL service the repaired gate provides. Every scenario in this phase
+  inherits that requirement, because every scenario runs on postgres.
 - **P0-011 → P0-008** only. Stop needs a running execution, not input or a
   WebSocket.
-- **P0-007** asserts the assembled round trip on postgres; **P0-018** revises
-  that gate to the all-fake memory profile.
-- **P0-012** is available at open and can land before the postgres seams, but
-  P0-013 through P0-018 carry `revision` edges and wait on P0-006 through
-  P0-011 respectively.
+- **P0-007** asserts the assembled round trip on postgres, and is the phase's
+  last task.
 
 ### The e2e suite
 
-Each postgres seam task owns one scenario file. The memory repair tasks revise
-those files to run without PostgreSQL. P0-007 adds the assembled postgres
-scenario; P0-018 revises it for memory.
+Each seam task owns one scenario file, and every scenario runs against
+PostgreSQL. P0-007 adds the assembled one.
 
 | Task | Scenario | File |
 |---|---|---|
-| P0-006 / P0-013 | `create → get` | `test/e2e/create_test.go` |
-| P0-008 / P0-014 | `create → start → poll events → get` | `test/e2e/start_test.go` |
-| P0-009 / P0-015 | `create → start → input → poll events` | `test/e2e/input_test.go` |
-| P0-010 / P0-016 | `create → start → stream` | `test/e2e/stream_test.go` |
-| P0-011 / P0-017 | `create → start → stop → get` | `test/e2e/stop_test.go` |
-| P0-007 / P0-018 | `create → start → stream → input → stop` | `test/e2e/roundtrip_test.go` |
+| P0-006 | `create → get` | `test/e2e/create_test.go` |
+| P0-008 | `create → start → poll events → get` | `test/e2e/start_test.go` |
+| P0-009 | `create → start → input → poll events` | `test/e2e/input_test.go` |
+| P0-010 | `create → start → stream` | `test/e2e/stream_test.go` |
+| P0-011 | `create → start → stop → get` | `test/e2e/stop_test.go` |
+| P0-007 | `create → start → stream → input → stop` | `test/e2e/roundtrip_test.go` |
+
+Every file here requires `PG_TEST_DATABASE_URL` and skips without it, so the
+suite asserts nothing on a machine with no database. Making it runnable against
+a fake profile is I4's first rung, which this phase does not build.
 
 ### Width
 
 | Metric | Value |
 |---|---|
-| Critical path | 10 — `P0-001 → P0-006 → P0-008 → P0-009 → P0-010 → P0-013 → P0-014 → P0-015 → P0-016 → P0-018` |
-| Average width | 18 ÷ 10 ≈ 1.8 |
-| Available at open | P0-001, P0-002, P0-003, P0-005, P0-012 |
+| Critical path | 6 — `P0-001 → P0-006 → P0-008 → P0-009 → P0-010 → P0-007` |
+| Average width | 11 ÷ 6 ≈ 1.8 |
+| Available at open | P0-001, P0-002, P0-003, P0-005 |
 | Contract collisions | none between concurrently-available tasks |
 
 Write collisions — a cost, not an edge. Whoever takes the second one rebases.
@@ -131,21 +116,17 @@ Write collisions — a cost, not an edge. Whoever takes the second one rebases.
 | P0-001 ↔ P0-002 | `Makefile`, `deployments/README.md` |
 | P0-001 ↔ P0-003 | `deployments/README.md` (if P0-001 changes the testing procedure) |
 | P0-001 ↔ P0-004 | `Makefile`, `.github/workflows/go.yml` |
-| P0-001 ↔ P0-018 | `.github/workflows/go.yml` |
 | P0-002 ↔ P0-003 | `deployments/README.md` |
 | P0-002 ↔ P0-006 | `Makefile` |
 | P0-002 ↔ P0-007 | `deployments/README.md` |
 | P0-003 ↔ P0-006 | `cmd/winch/main.go` |
 | P0-004 ↔ P0-006 | `Makefile` |
 | P0-004 ↔ P0-007 | `.github/workflows/go.yml` |
-| P0-006 ↔ P0-012 | `cmd/winchd/main.go` |
 | P0-009 ↔ P0-011 | `cmd/winchd/main.go`, `internal/application/`, `cmd/winch/` |
-| P0-013 ↔ P0-014 | `cmd/winchd/main.go`, `test/e2e/` |
-| P0-007 ↔ P0-018 | `test/e2e/roundtrip_test.go`, `.github/workflows/go.yml` |
 
-`cmd/winchd/main.go` attracts both the postgres seams and the memory repairs, but
-revision edges serialize the repairs after their targets. `docs/code-structure.md:119`
-keeps adapter registration explicit in the composition root.
+`cmd/winchd/main.go` attracts every seam, since each binds its own method on the
+delegating backend. `docs/code-structure.md:119` keeps adapter registration
+explicit in the composition root.
 
 ## Deferrals in
 
@@ -154,9 +135,13 @@ None. No other phase defers work into phase 0.
 ## Phase exit
 
 Every task above is `completed`, `make e2e` runs the full
-`create → start → stream → input → stop` scenario on `storeProfile=memory` on
-every push and pull request without a PostgreSQL service, and
-`make test-integration` still gates the postgres adapter.
+`create → start → stream → input → stop` scenario against PostgreSQL on every
+push and pull request, and `make test-integration` still gates the postgres
+adapter.
+
+The phase exits with I3 unmet for storage and I4's first rung unbuilt. That is a
+stated shortfall, not a silent one: both are registered as deferrals into phase
+1.
 
 ## Invariants
 
@@ -164,16 +149,20 @@ every push and pull request without a PostgreSQL service, and
 |---|---|---|
 | I1 — system runs | holds (daemon starts) | kept by every task |
 | I2 — system deploys | holds (compose stack) | P0-002 |
-| I3 — controllable fake profile | **fails** | P0-003 (harness); P0-012 (storage) |
-| I4 — standing scenario suite | **fails** | P0-006, P0-008 to P0-011 contribute; P0-007 on postgres; P0-018 closes memory first rung |
+| I3 — controllable fake profile | **fails** | P0-003 (harness) only; **storage is not closed in this phase** — deferred to phase 1 |
+| I4 — standing scenario suite | **fails** | P0-006, P0-008 to P0-011 contribute; P0-007 assembles it on postgres; **the all-fake first rung is not built** — deferred to phase 1 |
 | I5 — operator CLI reachable | **partial** | P0-002, then each seam adds its own command |
 | I6 — owned deferrals | — | P0-005; phase deferrals are registered in the owning phase brief |
 | I7 — plan stays wide | — | width recorded above; recheck on every extend |
 
-The postgres seams (P0-006 through P0-011) were derived before the memory
-profile existed — recorded as defect 5 in
-[`../post-mortems/2026-08-23-workplan-create-phase-0.md`](../post-mortems/2026-08-23-workplan-create-phase-0.md).
-P0-012 through P0-018 repair that without changing the launched briefs.
+A first attempt to close I3 for storage inside this phase — P0-012 through
+P0-018, a store-profile task plus one revision task per seam — was withdrawn
+after an audit found the store profile had been derived from the shape of
+`internal/adapters/memory`'s test doubles rather than from the ports the run path
+consumes. See
+[`../post-mortems/2026-09-11-a-store-profile-derived-from-test-doubles.md`](../post-mortems/2026-09-11-a-store-profile-derived-from-test-doubles.md).
+The work is real and still wanted; it is deferred into phase 1 for a fresh
+derivation rather than left in the plan in a form that cannot be built.
 
 ## Traces to
 
