@@ -18,6 +18,7 @@ import (
 	"github.com/shaielc/code-winch/internal/adapters/transport/httpapi"
 	"github.com/shaielc/code-winch/internal/application"
 	"github.com/shaielc/code-winch/internal/domain"
+	"github.com/shaielc/code-winch/internal/platform/config"
 	"github.com/shaielc/code-winch/internal/platform/telemetry"
 )
 
@@ -125,5 +126,48 @@ func TestServeReturnsWithinTheShutdownDeadline(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("serve did not return within the drain deadline")
+	}
+}
+
+func TestMemoryStoreProfileConstructsEveryRunPathPort(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.StoreProfile = "memory"
+	cfg.DatabaseURL = ""
+	cfg.MemoryInjectRunSave = "not_found"
+	stores, closeStores, err := newStores(context.Background(), cfg, slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeStores()
+	if stores.Runs == nil || stores.Events == nil || stores.Outbox == nil || stores.Supervisor == nil || stores.Clock == nil || stores.IDs == nil {
+		t.Fatalf("incomplete memory store set: %#v", stores)
+	}
+	_, err = stores.Runs.Save(context.Background(), application.RunRecord{}, 0)
+	if !errors.Is(err, application.ErrNotFound) {
+		t.Fatalf("injected save error=%v", err)
+	}
+	if _, err = stores.Runs.Save(context.Background(), application.RunRecord{}, 0); err != nil {
+		t.Fatalf("failure was not consumed: %v", err)
+	}
+}
+
+func TestPostgresProfileStillRequiresAValidDatabaseURL(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.StoreProfile = "postgres"
+	cfg.DatabaseURL = ""
+	cfg.Token, cfg.CSRFToken = testSecret, testSecret
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "database_url") {
+		t.Fatalf("validation error=%v", err)
+	}
+}
+
+func TestPostgresStoreProfileStillUsesDatabasePath(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.StoreProfile = "postgres"
+	cfg.DatabaseURL = "://invalid"
+	_, _, err := newStores(context.Background(), cfg, slog.Default())
+	if err == nil || !strings.Contains(err.Error(), "database pool") {
+		t.Fatalf("postgres startup error=%v", err)
 	}
 }

@@ -10,7 +10,7 @@ docker compose -f deployments/compose.yml up --build
 The UI is then served on <http://localhost:8080>. Stop the stack with `down`,
 and add `-v` to discard the database volume.
 
-At startup the daemon validates configuration, connects to PostgreSQL, applies
+By default the daemon validates configuration, connects to PostgreSQL, applies
 any migrations the database does not already record, and only then opens its
 listener. `GET /api/v1/health` returns `{"status":"ok"}`. Shutdown signals close
 live event subscribers and give HTTP requests the configured bounded drain
@@ -64,7 +64,9 @@ one yet — no code establishes a browser session.
 | Variable | Default | Purpose |
 |---|---|---|
 | `WINCH_ADDR` | `:8080` | Daemon listen address |
+| `WINCH_STORE_PROFILE` | `postgres` | Store implementation: `postgres` or `memory` |
 | `WINCH_DATABASE_URL` | compose-internal | PostgreSQL connection string |
+| `WINCH_MEMORY_INJECT_RUN_SAVE` | unset | In memory mode, fail the next run save with `not_found` or `conflict` |
 | `WINCH_ALLOWED_ORIGIN` | `http://localhost:8080` | Must equal the browser's origin |
 | `WINCH_TOKEN` | development default | Session/bearer secret; minimum 32 bytes |
 | `WINCH_CSRF_TOKEN` | development default | CSRF secret; minimum 32 bytes |
@@ -77,6 +79,15 @@ environment overrides are applied. `WINCH_STATIC_DIR` selects the built asset
 directory, and `WINCH_SHUTDOWN_TIMEOUT` (default `10s`) bounds HTTP and stream
 draining. Authentication secrets deliberately have no compiled default and
 must contain at least 32 bytes.
+
+For a database-free local daemon, set `WINCH_STORE_PROFILE=memory`; in a YAML
+configuration file the equivalent is `store_profile: memory`. The database URL
+is not required and the daemon neither opens a pool nor runs migrations. To
+exercise the controllable failure path, also set
+`WINCH_MEMORY_INJECT_RUN_SAVE=not_found` (or `conflict`). The selected error is
+injected into the first run save and then consumed. This profile does not prove
+cross-restart durability, multi-instance consistency, or SQL semantics, and all
+records disappear when the process exits.
 
 The image builds the browser assets itself. Outside the image — `make run`
 against a fresh clone — `web/dist` does not exist, and the daemon logs

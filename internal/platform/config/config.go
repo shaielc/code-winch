@@ -14,7 +14,9 @@ import (
 
 type Config struct {
 	Addr                string        `yaml:"addr"`
+	StoreProfile        string        `yaml:"store_profile"`
 	DatabaseURL         string        `yaml:"database_url"`
+	MemoryInjectRunSave string        `yaml:"memory_inject_run_save"`
 	AllowedOrigin       string        `yaml:"allowed_origin"`
 	Token               string        `yaml:"token"`
 	CSRFToken           string        `yaml:"csrf_token"`
@@ -32,7 +34,7 @@ func (e *ValidationError) Error() string {
 }
 
 func Defaults() Config {
-	return Config{Addr: ":8080", DatabaseURL: "postgres://winch:winch-local-development@localhost:5432/winch?sslmode=disable", AllowedOrigin: "http://localhost:8080", Actor: "local-user", StaticDir: "web/dist", ShutdownTimeout: 10 * time.Second}
+	return Config{Addr: ":8080", StoreProfile: "postgres", DatabaseURL: "postgres://winch:winch-local-development@localhost:5432/winch?sslmode=disable", AllowedOrigin: "http://localhost:8080", Actor: "local-user", StaticDir: "web/dist", ShutdownTimeout: 10 * time.Second}
 }
 
 // Load applies safe compiled defaults, an optional YAML file, and environment variables.
@@ -47,7 +49,7 @@ func Load() (Config, error) {
 			return c, fmt.Errorf("config file: %w", err)
 		}
 	}
-	env := map[string]*string{"WINCH_ADDR": &c.Addr, "WINCH_DATABASE_URL": &c.DatabaseURL, "WINCH_ALLOWED_ORIGIN": &c.AllowedOrigin, "WINCH_TOKEN": &c.Token, "WINCH_CSRF_TOKEN": &c.CSRFToken, "WINCH_ACTOR": &c.Actor, "WINCH_STATIC_DIR": &c.StaticDir, "WINCH_SHUTDOWN_TIMEOUT": &c.ShutdownTimeoutText}
+	env := map[string]*string{"WINCH_ADDR": &c.Addr, "WINCH_STORE_PROFILE": &c.StoreProfile, "WINCH_DATABASE_URL": &c.DatabaseURL, "WINCH_MEMORY_INJECT_RUN_SAVE": &c.MemoryInjectRunSave, "WINCH_ALLOWED_ORIGIN": &c.AllowedOrigin, "WINCH_TOKEN": &c.Token, "WINCH_CSRF_TOKEN": &c.CSRFToken, "WINCH_ACTOR": &c.Actor, "WINCH_STATIC_DIR": &c.StaticDir, "WINCH_SHUTDOWN_TIMEOUT": &c.ShutdownTimeoutText}
 	for key, dst := range env {
 		if value, ok := os.LookupEnv(key); ok {
 			*dst = value
@@ -67,8 +69,16 @@ func (c Config) Validate() error {
 	if strings.TrimSpace(c.Addr) == "" {
 		fields = append(fields, "addr")
 	}
-	if u, e := url.Parse(c.DatabaseURL); e != nil || u.Scheme == "" || u.Host == "" {
-		fields = append(fields, "database_url")
+	if c.StoreProfile != "memory" && c.StoreProfile != "postgres" {
+		fields = append(fields, "store_profile")
+	}
+	if c.StoreProfile == "postgres" {
+		if u, e := url.Parse(c.DatabaseURL); e != nil || u.Scheme == "" || u.Host == "" {
+			fields = append(fields, "database_url")
+		}
+	}
+	if c.MemoryInjectRunSave != "" && (c.StoreProfile != "memory" || (c.MemoryInjectRunSave != "not_found" && c.MemoryInjectRunSave != "conflict")) {
+		fields = append(fields, "memory_inject_run_save")
 	}
 	if u, e := url.Parse(c.AllowedOrigin); e != nil || u.Scheme == "" || u.Host == "" || u.Path != "" {
 		fields = append(fields, "allowed_origin")

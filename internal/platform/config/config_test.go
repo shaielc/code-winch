@@ -42,3 +42,27 @@ func TestValidationReportsAllFieldsWithoutValues(t *testing.T) {
 		t.Fatal("secret leaked")
 	}
 }
+
+func TestMemoryProfileDoesNotRequireDatabaseURL(t *testing.T) {
+	c := Defaults()
+	c.StoreProfile = "memory"
+	c.DatabaseURL = ""
+	c.Token, c.CSRFToken = strings.Repeat("a", 32), strings.Repeat("b", 32)
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestStoreProfileAndMemoryFailureAreValidated(t *testing.T) {
+	c := Defaults()
+	c.Token, c.CSRFToken = strings.Repeat("a", 32), strings.Repeat("b", 32)
+	c.StoreProfile = "disk"
+	c.MemoryInjectRunSave = "secret-canary"
+	err := c.Validate()
+	if err == nil || !strings.Contains(err.Error(), "store_profile") || !strings.Contains(err.Error(), "memory_inject_run_save") {
+		t.Fatalf("validation error=%v", err)
+	}
+	if strings.Contains(err.Error(), "secret-canary") {
+		t.Fatal("rejected configuration value leaked")
+	}
+}

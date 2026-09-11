@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shaielc/code-winch/internal/adapters/memory"
 	"github.com/shaielc/code-winch/internal/adapters/postgres"
 	"github.com/shaielc/code-winch/internal/adapters/transport/httpapi"
 	"github.com/shaielc/code-winch/internal/application"
@@ -56,26 +57,12 @@ func run(ctx context.Context) error {
 	slog.SetDefault(logger)
 	metrics := telemetry.NewRegistry()
 	metrics.Declare("winch_startup_time_seconds", "status", "ready")
-	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	stores, closeStores, err := newStores(ctx, cfg, logger)
 	if err != nil {
-		return fmt.Errorf("database pool: %w", err)
+		return err
 	}
-	defer pool.Close()
-	if err = pool.Ping(ctx); err != nil {
-		return fmt.Errorf("database connection: %w", err)
-	}
-	migration, err := postgres.MigrateUp(ctx, pool)
-	if err != nil {
-		return fmt.Errorf("database migration: %w", err)
-	}
-	// A start that applied nothing must not claim it migrated the database.
-	migrationStatus := "current"
-	if migration.Applied > 0 {
-		migrationStatus = "applied"
-	}
-	logger.Info("schema checked", "component", "database", "operation", "migrate", "sequence", migration.Version, "status", migrationStatus)
-	store := postgres.New(pool)
-	runs, err := application.NewRunService(store, application.SystemClock{}, randomIDs{})
+	defer closeStores()
+	runs, err := application.NewRunService(stores.Runs, stores.Clock, stores.IDs)
 	if err != nil {
 		return err
 	}
@@ -105,6 +92,54 @@ func run(ctx context.Context) error {
 	logger.Info("startup complete", "component", "daemon", "operation", "start", "status", "ready", "duration_ms", time.Since(started).Milliseconds())
 	logger.Info("listener started", "component", "http", "operation", "listen", "status", "ready")
 	return serve(ctx, server, stream, cfg.ShutdownTimeout)
+}
+
+// storeSet keeps the complete run-path storage seam together so selecting a
+// profile cannot accidentally leave one of its ports backed by another one.
+type storeSet struct {
+	Runs interface {
+		application.CreateRunRepository
+		application.RunRepository
+	}
+	Events     application.EventStore
+	Outbox     application.OutboxPublisher
+	Supervisor application.SupervisorStore
+	Clock      application.Clock
+	IDs        application.IDSource
+}
+
+func newStores(ctx context.Context, cfg config.Config, logger *slog.Logger) (storeSet, func(), error) {
+	if cfg.StoreProfile == "memory" {
+		runs := &memory.RunRepository{}
+		if cfg.MemoryInjectRunSave != "" {
+			failure := application.ErrNotFound
+			if cfg.MemoryInjectRunSave == "conflict" {
+				failure = application.ErrConflict
+			}
+			runs.Failures.Inject("save", failure)
+		}
+		return storeSet{Runs: runs, Events: &memory.EventStore{}, Outbox: &memory.OutboxPublisher{}, Supervisor: &memory.SupervisorStore{}, Clock: application.SystemClock{}, IDs: randomIDs{}}, func() {}, nil
+	}
+	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return storeSet{}, func() {}, fmt.Errorf("database pool: %w", err)
+	}
+	if err = pool.Ping(ctx); err != nil {
+		pool.Close()
+		return storeSet{}, func() {}, fmt.Errorf("database connection: %w", err)
+	}
+	migration, err := postgres.MigrateUp(ctx, pool)
+	if err != nil {
+		pool.Close()
+		return storeSet{}, func() {}, fmt.Errorf("database migration: %w", err)
+	}
+	status := "current"
+	if migration.Applied > 0 {
+		status = "applied"
+	}
+	logger.Info("schema checked", "component", "database", "operation", "migrate", "sequence", migration.Version, "status", status)
+	store := postgres.New(pool)
+	return storeSet{Runs: store, Events: store, Outbox: &memory.OutboxPublisher{}, Supervisor: store, Clock: application.SystemClock{}, IDs: randomIDs{}}, pool.Close, nil
 }
 
 // serve runs until ctx is cancelled or the listener fails, then disconnects
