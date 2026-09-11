@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,17 +15,23 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	harnessfake "github.com/shaielc/code-winch/internal/adapters/harness/fake"
 	"github.com/shaielc/code-winch/internal/adapters/postgres"
+	sandboxlocal "github.com/shaielc/code-winch/internal/adapters/sandbox/local"
 	"github.com/shaielc/code-winch/internal/adapters/transport/httpapi"
 	"github.com/shaielc/code-winch/internal/application"
 	"github.com/shaielc/code-winch/internal/domain"
 	"github.com/shaielc/code-winch/internal/platform/config"
 	"github.com/shaielc/code-winch/internal/platform/telemetry"
+	runnerlocal "github.com/shaielc/code-winch/internal/runner/local"
+	"github.com/shaielc/code-winch/internal/supervisor"
+	"github.com/shaielc/code-winch/pkg/protocol"
 )
 
 // Bounds how long a client may dribble request headers; unrelated to the
@@ -79,9 +86,14 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// The daemon's shipped fake profile is a finite transcript: it emits its
+	// deterministic startup records and exits without waiting for input.
+	runner := runnerlocal.New(sandboxlocal.New(), harnessfake.Driver{Config: harnessfake.Config{EarlyExit: true}})
+	defer runner.Close()
+	coordinator := newRunCoordinator(store, runner, randomIDs{}, logger)
 	stream := httpapi.NewEventStream(64)
 	defer stream.Close()
-	api, err := httpapi.NewHandler(httpapi.Config{Token: cfg.Token, CSRFToken: cfg.CSRFToken, AllowedOrigin: cfg.AllowedOrigin, Actor: cfg.Actor, Logger: logger, RequestID: requestID, EventStream: stream}, runBackend{runs: runs})
+	api, err := httpapi.NewHandler(httpapi.Config{Token: cfg.Token, CSRFToken: cfg.CSRFToken, AllowedOrigin: cfg.AllowedOrigin, Actor: cfg.Actor, Logger: logger, RequestID: requestID, EventStream: stream}, runBackend{runs: runs, runtime: coordinator, events: store})
 	if err != nil {
 		return err
 	}
@@ -197,7 +209,11 @@ func (randomIDs) NewWorkflowID() domain.WorkflowID {
 	return id
 }
 
-type runBackend struct{ runs *application.RunService }
+type runBackend struct {
+	runs    *application.RunService
+	runtime application.RunRuntime
+	events  application.EventStore
+}
 
 func (b runBackend) CreateRun(ctx context.Context, actor string, key string, request httpapi.CreateRunRequest) (httpapi.Run, error) {
 	view, err := b.runs.Create(ctx, application.CreateRunCommand{WorkspacePath: request.WorkspacePath, HarnessProfile: request.HarnessProfile, SandboxProfile: request.SandboxProfile, Actor: actor, IdempotencyKey: key})
@@ -222,6 +238,58 @@ func (b runBackend) GetRun(ctx context.Context, _ string, id httpapi.RunId) (htt
 		return httpapi.Run{}, err
 	}
 	return apiRun(view), nil
+}
+func (b runBackend) StartRun(ctx context.Context, _ string, id httpapi.RunId, _ string, version int64) (httpapi.Run, error) {
+	runID, err := apiRunID(id)
+	if err != nil {
+		return httpapi.Run{}, httpapi.ErrRunNotFound
+	}
+	view, err := b.runs.Start(ctx, runID, uint64(version), b.runtime)
+	switch {
+	case errors.Is(err, application.ErrNotFound):
+		return httpapi.Run{}, httpapi.ErrRunNotFound
+	case errors.Is(err, application.ErrUnsupportedRunProfiles):
+		return httpapi.Run{}, httpapi.ErrValidation
+	case errors.Is(err, application.ErrConflict):
+		return httpapi.Run{}, httpapi.ErrPreconditionFailed
+	case err != nil:
+		return httpapi.Run{}, err
+	}
+	return apiRun(view), nil
+}
+func (b runBackend) ListRunEvents(ctx context.Context, _ string, id httpapi.RunId, after int64, limit int) (httpapi.EventPage, error) {
+	runID, err := apiRunID(id)
+	if err != nil {
+		return httpapi.EventPage{}, httpapi.ErrRunNotFound
+	}
+	values, err := b.runs.Events(ctx, runID, uint64(after), limit+1, b.events)
+	if errors.Is(err, application.ErrNotFound) {
+		return httpapi.EventPage{}, httpapi.ErrRunNotFound
+	}
+	if err != nil {
+		return httpapi.EventPage{}, err
+	}
+	hasMore := len(values) > limit
+	if hasMore {
+		values = values[:limit]
+	}
+	out := httpapi.EventPage{Events: make([]httpapi.Event, 0, len(values)), HasMore: hasMore, NextAfterSequence: after}
+	for _, value := range values {
+		var payload map[string]interface{}
+		_ = json.Unmarshal(value.Payload, &payload)
+		sourceBytes, _ := json.Marshal(value.Source)
+		var source map[string]interface{}
+		_ = json.Unmarshal(sourceBytes, &source)
+		extensions := map[string]interface{}{}
+		for key, raw := range value.Extensions {
+			var extension interface{}
+			_ = json.Unmarshal(raw, &extension)
+			extensions[key] = extension
+		}
+		out.Events = append(out.Events, httpapi.Event{EventId: value.EventID, RunId: httpapi.RunId(formatAPIRunID(runID)), Sequence: int64(value.Sequence), OccurredAt: value.OccurredAt, Kind: value.Kind, SchemaVersion: int(value.SchemaVersion), Source: source, Sensitivity: httpapi.EventSensitivity(value.Sensitivity), Payload: payload, Extensions: &extensions})
+		out.NextAfterSequence = int64(value.Sequence)
+	}
+	return out, nil
 }
 func apiRun(view application.RunView) httpapi.Run {
 	r := view.Record
@@ -265,21 +333,111 @@ func apiRunID(value string) (domain.RunID, error) {
 }
 
 var (
-	errStartDeferred  = errors.New("run start is not implemented; owner=P0-008")
-	errInputDeferred  = errors.New("run input is not implemented; owner=P0-009")
-	errEventsDeferred = errors.New("run events are not implemented; owner=P0-010")
-	errStopDeferred   = errors.New("run stop is not implemented; owner=P0-011")
+	errInputDeferred = errors.New("run input is not implemented; owner=P0-009")
+	errStopDeferred  = errors.New("run stop is not implemented; owner=P0-011")
 )
 
-func (runBackend) StartRun(context.Context, string, httpapi.RunId, string, int64) (httpapi.Run, error) {
-	return httpapi.Run{}, errStartDeferred
-}
 func (runBackend) StopRun(context.Context, string, httpapi.RunId, string, int64, httpapi.StopRunRequest) (httpapi.Run, error) {
 	return httpapi.Run{}, errStopDeferred
 }
-func (runBackend) ListRunEvents(context.Context, string, httpapi.RunId, int64, int) (httpapi.EventPage, error) {
-	return httpapi.EventPage{}, errEventsDeferred
-}
 func (runBackend) SendRunInput(context.Context, string, httpapi.RunId, string, int64, httpapi.RunInputRequest) (httpapi.InputAccepted, error) {
 	return httpapi.InputAccepted{}, errInputDeferred
+}
+
+type activeExecution struct {
+	runID domain.RunID
+	lease application.RunLease
+}
+
+type runCoordinator struct {
+	store  *postgres.Store
+	runner *runnerlocal.Runner
+	super  *supervisor.Supervisor
+	ids    randomIDs
+	logger *slog.Logger
+	mu     sync.Mutex
+	active map[string]activeExecution
+}
+
+type persistRedactor struct{}
+
+func (persistRedactor) Redact(_ context.Context, event application.UnsequencedEvent) (application.UnsequencedEvent, error) {
+	return event, nil
+}
+
+func newRunCoordinator(store *postgres.Store, runner *runnerlocal.Runner, ids randomIDs, logger *slog.Logger) *runCoordinator {
+	c := &runCoordinator{store: store, runner: runner, ids: ids, logger: logger, active: map[string]activeExecution{}}
+	c.super = supervisor.New(store, runner, persistRedactor{}, application.SystemClock{}, "winchd", 30*time.Second)
+	go c.consume()
+	return c
+}
+
+func (c *runCoordinator) Start(ctx context.Context, record application.RunRecord) error {
+	executionID, leaseToken := uuid.NewString(), uuid.NewString()
+	lease, err := c.super.Acquire(ctx, record.ID, leaseToken)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.active[executionID] = activeExecution{runID: record.ID, lease: lease}
+	c.mu.Unlock()
+	prepare, _ := json.Marshal(protocol.PreparePayload{WorkspaceID: record.ID.String()})
+	if err = c.super.Execute(ctx, lease, supervisor.Command{DesiredState: domain.RunStatePreparing, HarnessDriver: "fake", SandboxDriver: "local", ExecutionID: executionID, Message: protocol.RunnerMessage{Version: protocol.RunnerVersion{Major: protocol.RunnerProtocolMajor}, Kind: "prepare", CommandID: uuid.NewString(), Payload: prepare}}); err != nil {
+		return err
+	}
+	if err = c.setState(ctx, record.ID, domain.RunStatePreparing); err != nil {
+		return err
+	}
+	start, _ := json.Marshal(protocol.StartPayload{LaunchProfile: "fake"})
+	if err = c.super.Execute(ctx, lease, supervisor.Command{DesiredState: domain.RunStateRunning, HarnessDriver: "fake", SandboxDriver: "local", ExecutionID: executionID, Message: protocol.RunnerMessage{Version: protocol.RunnerVersion{Major: protocol.RunnerProtocolMajor}, Kind: "start", CommandID: uuid.NewString(), Payload: start}}); err != nil {
+		return err
+	}
+	return c.setState(ctx, record.ID, domain.RunStateRunning)
+}
+
+func (c *runCoordinator) consume() {
+	for observation := range c.runner.Observations() {
+		c.mu.Lock()
+		active, ok := c.active[observation.ExecutionID]
+		c.mu.Unlock()
+		if !ok {
+			continue
+		}
+		ctx := context.Background()
+		if observation.Event != nil {
+			event := *observation.Event
+			if event.EventID.IsZero() {
+				event.EventID = c.ids.NewEventID()
+			}
+			if _, err := c.super.Observe(ctx, active.lease, observation.Ordinal, []application.UnsequencedEvent{event}); err != nil {
+				c.logger.Error("run observation failed", "component", "supervisor", "operation", "observe", "run_id", active.runID.String(), "error_code", "observation_failed")
+			}
+		}
+		if observation.Exit != nil {
+			state := domain.RunStateFailed
+			if observation.Exit.Successful {
+				state = domain.RunStateCompleted
+			}
+			_ = c.setState(ctx, active.runID, state)
+			_ = c.runner.Cleanup(ctx, observation.ExecutionID)
+			_ = c.super.Release(ctx, active.lease)
+			c.mu.Lock()
+			delete(c.active, observation.ExecutionID)
+			c.mu.Unlock()
+		}
+	}
+}
+
+func (c *runCoordinator) setState(ctx context.Context, id domain.RunID, state domain.RunState) error {
+	record, version, err := c.store.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if record.Attempts[len(record.Attempts)-1].State.IsTerminal() {
+		return nil
+	}
+	record.Attempts[len(record.Attempts)-1].State = state
+	record.UpdatedAt = time.Now().UTC()
+	_, err = c.store.Save(ctx, record, version)
+	return err
 }

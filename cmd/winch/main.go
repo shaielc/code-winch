@@ -44,8 +44,11 @@ func main() {
 			runGet()
 			return
 		case "start":
-			fmt.Fprintln(os.Stderr, "winch run start: not implemented; owner=P0-008")
-			os.Exit(1)
+			runStart()
+			return
+		case "events":
+			runEvents()
+			return
 		}
 	}
 	printUsage(os.Stderr)
@@ -53,7 +56,7 @@ func main() {
 }
 
 func printUsage(out io.Writer) {
-	_, _ = fmt.Fprintln(out, "usage: winch run {create|get|start} | winch dev run")
+	_, _ = fmt.Fprintln(out, "usage: winch run {create|get|start|events} | winch dev run")
 }
 
 func devRun() {
@@ -171,13 +174,51 @@ func runGet() {
 	data, _ := json.MarshalIndent(run, "", "  ")
 	fmt.Println(string(data))
 }
+func runStart() {
+	fs := flag.NewFlagSet("run start", flag.ExitOnError)
+	idempotencyKey := fs.String("idempotency-key", uuid.NewString(), "request idempotency key")
+	_ = fs.Parse(os.Args[3:])
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: winch run start RUN_ID")
+		os.Exit(2)
+	}
+	var current apiRun
+	requestAPI(http.MethodGet, "/api/v1/runs/"+fs.Arg(0), "", nil, &current)
+	var started apiRun
+	requestAPIHeaders(http.MethodPost, "/api/v1/runs/"+fs.Arg(0)+"/start", *idempotencyKey, nil, map[string]string{"If-Match": fmt.Sprintf("\"%d\"", current.Version)}, &started)
+	data, _ := json.MarshalIndent(started, "", "  ")
+	fmt.Println(string(data))
+}
+func runEvents() {
+	fs := flag.NewFlagSet("run events", flag.ExitOnError)
+	after := fs.Uint64("after-sequence", 0, "first sequence is after this value")
+	limit := fs.Int("limit", 200, "maximum events")
+	_ = fs.Parse(os.Args[3:])
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: winch run events RUN_ID")
+		os.Exit(2)
+	}
+	var page struct {
+		Events []json.RawMessage `json:"events"`
+	}
+	requestAPI(http.MethodGet, fmt.Sprintf("/api/v1/runs/%s/events?after_sequence=%d&limit=%d", fs.Arg(0), *after, *limit), "", nil, &page)
+	for _, event := range page.Events {
+		fmt.Println(string(event))
+	}
+}
 func requestAPI(method, path, idempotencyKey string, body []byte, target any) {
+	requestAPIHeaders(method, path, idempotencyKey, body, nil, target)
+}
+func requestAPIHeaders(method, path, idempotencyKey string, body []byte, headers map[string]string, target any) {
 	base, token, csrf, origin := apiSettings()
 	req, err := http.NewRequest(method, base+path, strings.NewReader(string(body)))
 	if err != nil {
 		fatal(err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
 	if method != http.MethodGet {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-CSRF-Token", csrf)
