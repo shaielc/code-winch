@@ -9,10 +9,11 @@ The task scheduler dispatches available workplan tasks to Codex Cloud when a
 task pull request merges. It read the task graph from `origin/main` but recorded
 completion in a local state file inside a Docker volume, overlaying that state on
 the tracker at dispatch time. The overlay was unconditional, so a local entry
-also overrode a status already recorded in `docs/workplan/tasks.json`.
+also overrode a status already recorded in the active workplan's
+[`tasks.json`](../workplan/tasks.json).
 
-That made the volume the durable record of project progress while
-`docs/workplan/tasks.json` claimed to be the source of truth, and the two could
+That made the volume the durable record of project progress while the workplan
+tracker claimed to be the source of truth, and the two could
 disagree. Losing the volume would lose every completion and re-dispatch finished
 work. A local `in_progress` entry masked a real `completed` status and blocked
 dependent tasks, and nothing expired an entry whose task never resolved to a
@@ -24,8 +25,10 @@ state matters only between dispatch and merge.
 
 ## Decision
 
-`docs/workplan/tasks.json` on the default branch is the sole authority for
-`completed`. The scheduler no longer derives completion from merge events.
+The active workplan's [`tasks.json`](../workplan/tasks.json) on the default
+branch is the sole authority for `completed`. The scheduler no longer derives
+completion from merge events. When a plan closes, that file remains as a valid
+empty tracker so the status gate and scheduler continue to operate.
 
 A status gate enforces this on every pull request. A check-only job requires each
 pull request to resolve to exactly one known task ID from its title, body, or

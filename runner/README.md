@@ -93,11 +93,12 @@ a manual **Schedule available tasks** run is what picks up a tracker edit that
 did not arrive through a merged pull request. Until the first run publishes a
 snapshot, the panel shows an empty table and says so.
 
-`docs/workplan/tasks.json` on the default branch remains the sole authority for
-`completed`; a local entry overrides the tracker only until the tracker records
-the task as completed. At that point the entry is retired in place rather than
-deleted, so the row keeps linking the pull request and the Codex task the work
-went through. Expiring a lease releases the concurrency slot it holds. See
+The [active workplan tracker](../docs/workplan/tasks.json) on the default branch
+remains the sole authority for `completed`; a local entry overrides the tracker
+only until the tracker records the task as completed. At that point the entry
+is retired in place rather than deleted, so the row keeps linking the pull
+request and the Codex task the work went through. Expiring a lease releases the
+concurrency slot it holds. See
 [ADR-0004](../docs/decisions/0004-task-status-authority.md).
 
 Because the scripts are baked into the image, changing `scripts/` requires a
