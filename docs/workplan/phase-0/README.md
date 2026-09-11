@@ -26,8 +26,7 @@ not cover what they appear to, and the use-case layer that was never written.
   method on the delegating `httpapi.Backend`, each adding its own CLI command,
   each contributing its own e2e scenario (P0-006, P0-008 to P0-011).
 - **Memory store repair** — the run round trip was derived against PostgreSQL,
-  skipping I3 and I4's first rung. P0-012 ships `storeProfile=memory` once the
-  outbox seam has settled the durable port set (P0-009); P0-013
+  skipping I3 and I4's first rung. P0-012 ships `storeProfile=memory`; P0-013
   through P0-018 revise each seam and the CI gate so `winchd` and `make e2e` run
   without a database (see the post-mortem's defect 5).
 - **Closure** — the assembled round trip runs as one scenario and gates CI
@@ -58,7 +57,7 @@ not cover what they appear to, and the use-case layer that was never written.
 | P0-009 | Send input and drain outbox | P0-008 | seam | `run input` |
 | P0-010 | Live WebSocket event stream | P0-009 | seam | `run stream` |
 | P0-011 | Stop run | P0-008 | seam | `run stop` |
-| P0-012 | Ship controllable in-memory store profile | P0-009 | seam | `winchd` with `storeProfile=memory` |
+| P0-012 | Ship controllable in-memory store profile | — | seam | `winchd` with `storeProfile=memory` |
 | P0-013 | Revise create/read for memory store profile | P0-006, P0-012 | swap | `make e2e` create/get without DB |
 | P0-014 | Revise start execution for memory store profile | P0-008, P0-013 | swap | start scenario without DB |
 | P0-015 | Revise input and outbox for memory store profile | P0-009, P0-014 | swap | input scenario without DB |
@@ -70,7 +69,7 @@ not cover what they appear to, and the use-case layer that was never written.
 
 ```
 Independent at open:
-  P0-001   P0-002   P0-003   P0-005
+  P0-001   P0-002   P0-003   P0-005   P0-012
 
 P0-002 + P0-003 ──► P0-004
 
@@ -80,13 +79,13 @@ P0-003 ──────────────┘             └──► P0
 P0-001 ────────────────────────────────────────────────────►┴──► P0-007
 
 Memory repair (revision edges; each waits on the postgres seam it revises):
-P0-009 ──► P0-012 ──┬──► P0-013 ◄── P0-006
-                    │       │
-                    │       └──► P0-014 ◄── P0-008 ──┬──► P0-015 ◄── P0-009 ──► P0-016 ◄── P0-010
-                    │                                │
-                    │                                └──► P0-017 ◄── P0-011
-                    │
-P0-007 + P0-016 + P0-017 ──────────────────────────► P0-018
+P0-012 ──┬──► P0-013 ◄── P0-006
+         │       │
+         │       └──► P0-014 ◄── P0-008 ──┬──► P0-015 ◄── P0-009 ──► P0-016 ◄── P0-010
+         │                                │
+         │                                └──► P0-017 ◄── P0-011
+         │
+P0-007 + P0-016 + P0-017 ──► P0-018
 ```
 
 - **P0-004** waits on the profile it exercises (P0-003) and on the CLI it
@@ -97,12 +96,9 @@ P0-007 + P0-016 + P0-017 ──────────────────�
   WebSocket.
 - **P0-007** asserts the assembled round trip on postgres; **P0-018** revises
   that gate to the all-fake memory profile.
-- **P0-012 → P0-009** is a contract edge, not a convenience. P0-009 declares
-  `port: OutboxPublisher` and starts the outbox worker in the composition root,
-  which is what settles the durable port set a store profile must supply. Wiring
-  that set earlier either omits ports the run path goes on to consume or reaches
-  into P0-009's surface. P0-013 through P0-018 then carry `revision` edges and
-  wait on P0-006 through P0-011 respectively.
+- **P0-012** is available at open and can land before the postgres seams, but
+  P0-013 through P0-018 carry `revision` edges and wait on P0-006 through
+  P0-011 respectively.
 
 ### The e2e suite
 
@@ -123,9 +119,9 @@ scenario; P0-018 revises it for memory.
 
 | Metric | Value |
 |---|---|
-| Critical path | 10 — `P0-001 → P0-006 → P0-008 → P0-009 → P0-012 → P0-013 → P0-014 → P0-015 → P0-016 → P0-018` |
+| Critical path | 10 — `P0-001 → P0-006 → P0-008 → P0-009 → P0-010 → P0-013 → P0-014 → P0-015 → P0-016 → P0-018` |
 | Average width | 18 ÷ 10 ≈ 1.8 |
-| Available at open | P0-001, P0-002, P0-003, P0-005 |
+| Available at open | P0-001, P0-002, P0-003, P0-005, P0-012 |
 | Contract collisions | none between concurrently-available tasks |
 
 Write collisions — a cost, not an edge. Whoever takes the second one rebases.
@@ -142,10 +138,8 @@ Write collisions — a cost, not an edge. Whoever takes the second one rebases.
 | P0-003 ↔ P0-006 | `cmd/winch/main.go` |
 | P0-004 ↔ P0-006 | `Makefile` |
 | P0-004 ↔ P0-007 | `.github/workflows/go.yml` |
-| P0-007 ↔ P0-012 | `deployments/README.md` |
+| P0-006 ↔ P0-012 | `cmd/winchd/main.go` |
 | P0-009 ↔ P0-011 | `cmd/winchd/main.go`, `internal/application/`, `cmd/winch/` |
-| P0-010 ↔ P0-012 | `cmd/winchd/main.go` |
-| P0-011 ↔ P0-012 | `cmd/winchd/main.go` |
 | P0-013 ↔ P0-014 | `cmd/winchd/main.go`, `test/e2e/` |
 | P0-007 ↔ P0-018 | `test/e2e/roundtrip_test.go`, `.github/workflows/go.yml` |
 

@@ -92,16 +92,6 @@ A fake has real drawbacks — it is not the provider, the database, or the
 kernel — and the brief that introduces it says what it does not prove. Stating
 those limits is what makes the profile safe to rely on for everything else.
 
-A limit is a statement about what the fake cannot **prove**, never a licence for
-what it may fail to **do**. Within the behavior its profile claims, a fake works:
-every operation the running system reaches is implemented, returns the errors the
-real adapter returns, and is exercised by the same scenario. "It is only a fake"
-never excuses a missing operation, a port the profile cannot supply, or a code
-path that degrades when the profile is selected. A fake that does not work is not
-a limited profile, it is a broken one, and the task shipping it is not complete.
-The word *fake* describes what the implementation is made of, never how well it
-has to work.
-
 ### I4 — Substrate swaps prove parity against a standing scenario suite
 
 One end-to-end scenario suite is written in the first phase against the

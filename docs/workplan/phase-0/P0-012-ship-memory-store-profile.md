@@ -2,151 +2,126 @@
 
 **Phase:** 0 — Foundation repair
 **Shape:** seam
-**Dependencies:** P0-009 (contract: P0-009 defines the `OutboxPublisher` port surface and starts the outbox worker in the composition root, settling which durable ports the run path consumes)
+**Dependencies:** None
 
 ## Objective
 
-`winchd` boots with `storeProfile=memory` and serves every run operation the
-daemon supports, from `internal/adapters/memory`, with no PostgreSQL process —
-restoring I3 for storage.
+`winchd` boots with `storeProfile=memory`, serves the run API from the existing
+`internal/adapters/memory` adapters, and needs no PostgreSQL process — restoring
+I3 for storage.
 
 ## Objective context
 
-The memory profile is a **supported way to run the product** (I3), held to the
-same standard as the postgres profile for everything it claims. What it does not
-claim is durability: it keeps nothing across a restart, so it is not the durable
-single-process developer database that `docs/architecture.md` §5 reserves for
-SQLite, and it supersedes no ADR. That is a limit on what it *proves*, not a
-discount on what it has to *do* — per I3, every operation the running system
-reaches must work on this profile or the task is not complete.
+The adapters this profile needs already exist. `internal/adapters/memory` holds
+concurrency-safe implementations of `CreateRunRepository`, `RunRepository`,
+`EventStore`, and `SupervisorStore`, each with a `FailurePlan`, written for
+use-case and contract tests. Nothing outside `_test.go` imports the package
+(`docs/state.md` §*What is not implemented*). This task makes that existing code
+a selectable runtime profile; it does not write a new store.
 
-Most of the implementation exists. `internal/adapters/memory` holds
-concurrency-safe `CreateRunRepository`, `RunRepository`, `EventStore`, and
-`SupervisorStore`, each with a `FailurePlan`, written for use-case and contract
-tests; nothing outside `_test.go` imports the package (`docs/state.md` §*What is
-not implemented*). This task makes that code a selectable runtime profile and
-closes the gaps that stop it from serving the whole run path.
-
-## Why this runs after P0-009
-
-The durable ports the run path consumes are not settled until P0-009 lands. It
-starts `application.OutboxWorker` in the daemon lifecycle, adds the input path,
-and **declares `port: OutboxPublisher` as its own contract surface**. A store set
-wired before that either omits ports the run path will consume, or reaches into a
-surface P0-009 owns — the earlier draft of this brief did the second, and listed
-`OutboxPublisher` among the "durable ports" it wired. `OutboxPublisher`
-(`internal/application/ports.go:83`) is the delivery side and a transport
-concern; `OutboxStore` (`:97`) is the durable side. Only the second belongs to a
-store profile, and P0-009 settles the first.
+The profile is a **fake, not a persistence substrate**. It makes no durability
+claim, so it is not the single-process developer database that
+`docs/architecture.md` §5 reserves for SQLite, and it supersedes no ADR. What it
+replaces is a test double's invisibility, which is I3's subject.
 
 ## Scope
 
 - Add a `store_profile` configuration key (`memory` | `postgres`, default
-  `postgres`) with validation, and require `database_url` only under `postgres`.
+  `postgres`) with validation, and require `database_url` only under
+  `postgres`.
 - Introduce a composition-root helper that selects one wired set of durable
-  ports, parallel to the existing postgres path, over every durable port the run
-  path consumes once P0-009 has landed: `CreateRunRepository`, `RunRepository`,
-  `EventStore`, `SupervisorStore`, `InputCommandStore`, `OutboxStore`, `Clock`,
-  and `IDSource`. Both profiles supply every port in the set from their own
-  adapter. `OutboxPublisher` is **not** in the set — it is delivery, and P0-009
-  owns it.
-- Add the memory implementations the set is missing: `memory.OutboxStore` and
-  `memory.InputCommandStore` do not exist, and once P0-009 puts those ports in
-  the run path a profile without them does not work.
-- Supply a deterministic clock and ID source fit for a long-running process.
-  `memory.Clock` never advances on its own and `memory.IDSource` panics when its
-  preloaded queue drains (`internal/adapters/memory/memory.go:420-450`); neither
-  survives a daemon.
+  ports, parallel to the existing postgres path, over exactly the ports the run
+  path consumes today: `CreateRunRepository`, `RunRepository`, `EventStore`,
+  `SupervisorStore`, `Clock`, and `IDSource`. Both profiles must be able to
+  supply every port in the set — see *Port asymmetry* below.
 - Teach `cmd/winchd` to skip the database pool and migrations when
   `storeProfile=memory`.
-- Make the profile controllable at runtime through a **memory scenario file**
-  selected by configuration, covering the three I3 controls that apply to a
-  store: failure injection over any port and operation in the set, latency, and a
-  determinism seed that can be left unset for wall-clock time and random IDs. See
-  *Where the controls live* below.
+- Make the profile controllable at runtime, over the three I3 controls that
+  apply to a store:
+  - **failure injection** — drive the existing `FailurePlan` on any port in the
+    set, for any operation, from one configuration key;
+  - **latency** — a delay applied to every memory port call;
+  - **determinism** — a seed that fixes the clock's start and makes IDs a
+    reproducible sequence, and the ability to leave it unset for wall-clock time
+    and random IDs.
+- Supply the deterministic clock and ID source the seed needs.
+  `memory.Clock` never advances on its own and `memory.IDSource` panics when its
+  preloaded queue drains (`internal/adapters/memory/memory.go:420-450`); neither
+  survives a long-running process. Both live in `internal/adapters/memory`
+  beside the adapters they pair with.
 - State what the profile does **not** prove: no cross-restart durability, no
-  multi-instance consistency, no SQL semantics, and no transactional outbox — the
-  guarantee `docs/architecture.md` §6 requires of every event-publishing
-  mutation. Memory satisfies `OutboxStore`'s signature, not its atomicity with
-  the event append.
-- Add unit tests for profile selection, for startup with no `database_url`, for
-  the new ports, and for each of the three controls.
+  multi-instance consistency, no SQL semantics, and **no transactional outbox**
+  — the guarantee `docs/architecture.md` §6 requires of every event-publishing
+  mutation.
+- Add unit tests for profile selection, for startup with no `database_url`, and
+  for each of the three controls.
 
 ## Non-goals
 
-- **Any change to `test/e2e/`.** The phase's e2e table allocates one scenario
-  file per seam task and allocates none to this one; `create → get` on the memory
-  profile is P0-013's, as is making memory the default for `make e2e`.
-- Defining, wiring, or replacing `OutboxPublisher` — P0-009's contract surface.
+- **Any change to `test/e2e/`.** The e2e suite allocates one scenario file per
+  seam task and allocates none to this one; `create → get` on the memory
+  profile is P0-013's, as is making memory the default for `make e2e`. See
+  *Deferrals*.
+- Binding run use cases or replacing `unavailableBackend` — P0-006 and the
+  revision tasks own that.
 - Changing the postgres profile's behavior, its default, or removing it.
-- A durable single-process store. SQLite, if it is ever wanted, is a separate
-  task against `docs/architecture.md` §5.
+- Adding `OutboxStore` or `InputCommandStore` to the memory package — P0-015.
 - Browser session cookies.
 
-## Where the controls live
+## Port asymmetry
 
-The daemon's configuration gains exactly two keys, because both are
-composition-root decisions: `store_profile` (which adapter set the root wires)
-and `memory_scenario` (where that profile's controls are read from). Everything
-else — which operation fails with which error, how much latency, which seed —
-lives in the scenario file.
+The two adapter sets are not parallel at HEAD, which constrains the set above.
+Asserted by interface assertion against both adapters:
 
-Three reasons the controls do not become daemon configuration keys:
+| Port | `memory` | `postgres.Store` |
+|---|---|---|
+| `CreateRunRepository` | yes | yes |
+| `RunRepository` | yes | yes |
+| `EventStore` | yes | yes |
+| `SupervisorStore` | yes | yes |
+| `OutboxPublisher` | yes | **no** |
+| `OutboxStore` | **no** | yes |
+| `InputCommandStore` | **no** | yes |
 
-- `internal/platform/config` describes how to deploy the product. It should not
-  grow a field per adapter debug knob, and cross-field validation of the form
-  "only meaningful when another key has one particular value" is the signal that
-  a key is in the wrong place.
-- `internal/adapters/memory` already defines `FailurePlan` and the operation
-  names it keys on, so it owns their spelling. A later task adding a port adds
-  operations to the file, with no new configuration key and no new contract
-  surface to collide over.
-- I3 names "scripted transcripts or scenario files selected at runtime" as the
-  controllability mechanism, and P0-003 set the precedent by putting the fake
-  harness's controls on the harness's own surface rather than in the daemon's
-  configuration.
+`OutboxPublisher` (`internal/application/ports.go:83`) is the delivery side and
+a transport concern; `OutboxStore` (`:97`) is the durable side. A store set must
+declare `OutboxStore`, never `OutboxPublisher` — putting the publisher in it
+forces the postgres branch to wire a memory object, because `postgres.Store` has
+no `Publish` method and should not grow one.
 
-An illustrative shape; the task fixes the schema:
-
-```yaml
-seed: 1          # omit for wall-clock time and random IDs
-latency: 250ms   # applied to every memory port call
-failures:        # consumed in order, per operation
-  - run.save: conflict
-  - run.get: not_found
-```
+Neither `OutboxStore` nor `InputCommandStore` exists in `internal/adapters/memory`,
+and nothing in the run path consumes either at HEAD. They are therefore out of
+the set and out of this task; P0-015 adds them when `run input` needs them.
 
 ## Runtime reachability
 
 - **Composition root:** `cmd/winchd`.
-- **Profile:** `storeProfile=memory`, with the fake harness and local sandbox
-  that P0-003 and P0-009 establish.
+- **Profile:** `storeProfile=memory`; harness and sandbox unset until run
+  binding lands.
 - **Command:** `winchd` with `store_profile: memory` (or `WINCH_STORE_PROFILE`),
-  driven by hand through `winch run create`, `run get`, `run start`, and
-  `run input`.
+  driven by hand through `winch run create` and `winch run get`.
 
 ## Write set
 
-- `internal/platform/config/` (`store_profile`, `memory_scenario`)
+- `internal/platform/config/` (`store_profile` and the three memory control keys)
 - `cmd/winchd/` (profile selection; may be a new file beside `main.go`)
-- `internal/adapters/memory/` (`OutboxStore`, `InputCommandStore`, deterministic
-  clock and ID source, scenario file loading, latency hook)
+- `internal/adapters/memory/` (deterministic clock and ID source; latency hook)
 - `internal/adapters/memory/README.md` (controls and limits)
 - `deployments/README.md` (memory store profile limits and controls)
-- Tests for profile selection, database-free startup, the new ports, and each
-  control
+- Tests for profile selection, database-free startup, and each control
 
-Write collision with P0-013 and P0-014 on `cmd/winchd/main.go`. No overlap with
+Write collision with P0-006 and P0-013 on `cmd/winchd/main.go`. No overlap with
 `test/e2e/`.
 
 ## Contract surfaces
 
 - configuration: `store_profile`
-- configuration: `memory_scenario` — valid only when `store_profile=memory`,
-  rejected otherwise
-- schema: the memory scenario file, owned by `internal/adapters/memory`
-- port: `InputCommandStore` and `OutboxStore` memory implementations
+- configuration: `memory_failures`, `memory_latency`, `memory_seed` — valid only
+  when `store_profile=memory`, rejected otherwise
 - driver namespace: `storeProfile=memory`
+
+`memory_failures` takes `operation=error` pairs so one key covers every port in
+the set and every operation on it, rather than one key per operation.
 
 ## Demonstration
 
@@ -158,48 +133,35 @@ Write collision with P0-013 and P0-014 on `cmd/winchd/main.go`. No overlap with
     → expect: unchanged postgres startup (pool ping and schema check, status
       applied then current)
 
-Against the memory daemon, a person drives the run path by hand through the
-maintained CLI and gets the same observable result as on postgres:
+A person drives the profile and each control by hand through the maintained CLI
+against that running daemon. `winch run create` and `winch run get` come from
+P0-006, which is already completed, so this task carries no edge for them:
 
     $ winch run create --workspace /tmp/ws --harness fake --sandbox local
-    $ winch run start <RUN_ID>
-    $ winch run input <RUN_ID> --text hello
     $ winch run get <RUN_ID>
-    → expect: the run reads back with the harness response recorded and the
-      outbox backlog drained to zero — the same assertions P0-009's scenario
-      makes against PostgreSQL
+    → expect: the created run reads back with state "created" from memory
 
-Each control, driven from a scenario file:
-
-    $ cat > /tmp/fail.yaml <<'Y'
-    failures:
-      - run.save: conflict
-    Y
-    $ WINCH_STORE_PROFILE=memory WINCH_MEMORY_SCENARIO=/tmp/fail.yaml winchd
+    $ WINCH_STORE_PROFILE=memory WINCH_MEMORY_FAILURES=run.save=conflict winchd
     $ winch run create --workspace /tmp/ws --harness fake --sandbox local
     $ winch run create --workspace /tmp/ws --harness fake --sandbox local
     → expect: the first create fails with the injected error, the second
       succeeds — the plan is consumed, so a person retries without restarting
 
-    $ printf 'latency: 250ms\n' > /tmp/slow.yaml
-    $ WINCH_STORE_PROFILE=memory WINCH_MEMORY_SCENARIO=/tmp/slow.yaml winchd
-    $ winch run get <RUN_ID>
+    $ WINCH_STORE_PROFILE=memory WINCH_MEMORY_LATENCY=250ms winch run get <RUN_ID>
     → expect: the read visibly takes at least the configured delay
 
-    $ printf 'seed: 1\n' > /tmp/seeded.yaml
-    $ WINCH_STORE_PROFILE=memory WINCH_MEMORY_SCENARIO=/tmp/seeded.yaml winchd
+    $ WINCH_STORE_PROFILE=memory WINCH_MEMORY_SEED=1 winchd
     $ winch run create --workspace /tmp/ws --harness fake --sandbox local
     → expect: the same run ID and createdAt across restarts with the same seed,
-      and different values with no scenario file
+      and different values with the seed unset
 
 ## Verification
 
 - `make check` passes.
-- New unit tests cover profile selection, startup with no `database_url`, the
-  memory `InputCommandStore` and `OutboxStore`, and failure, latency, and
-  determinism control.
-- `make e2e` still passes **unchanged** against PostgreSQL, with the profile seam
-  in the path — this task adds no scenario and revises none.
+- New unit tests cover profile selection, startup with no `database_url`, and
+  failure, latency, and determinism control.
+- `make e2e` still passes **unchanged** against PostgreSQL, with the profile
+  seam in the path — this task adds no scenario and revises none.
 - No change to `make test-integration` requirements (postgres adapter tests
   unchanged).
 
@@ -210,20 +172,15 @@ Each control, driven from a scenario file:
       consumes is not reached.
 - [ ] Both profiles supply every port in the set from their own adapter; neither
       profile is backed by the other's implementation.
-- [ ] Every run operation the daemon supports at this point — create, get, start,
-      input, and the outbox drain — works on the memory profile and returns the
-      same errors the postgres profile returns. No operation is missing, stubbed,
-      or degraded under the memory profile (I3).
-- [ ] `winchd` starts without `database_url` when the memory profile is selected,
-      and logs no database or migration line.
-- [ ] Failure, latency, and determinism are each drivable from the scenario file
+- [ ] `winchd` starts without `database_url` when the memory profile is
+      selected, and logs no database or migration line.
+- [ ] Failure, latency, and determinism are each drivable from configuration
       without editing source, and each is covered by a test.
 - [ ] I3 holds for the in-memory store profile: supported, controllable over the
-      three controls that apply to a store, honest about its limits — the absent
-      transactional-outbox atomicity among them — and working for everything it
-      claims.
+      three controls that apply to a store, and honest about its limits — the
+      absent transactional outbox among them.
 - [ ] I1 and I2 still hold for both profiles.
-- [ ] The daemon's configuration gained no key outside *Contract surfaces*.
+- [ ] No configuration key outside *Contract surfaces* was added.
 
 ## Deferrals
 
@@ -231,7 +188,8 @@ Each control, driven from a scenario file:
 |---|---|
 | `create → get` e2e scenario on the memory profile, and the shared e2e harness | P0-013 |
 | Memory profile as the default for local development and `make e2e` | P0-013 |
-| WebSocket stream and stop on the memory profile | P0-016, P0-017 |
+| Run API and CLI beyond create/get on the memory profile | P0-014, P0-016, P0-017 |
+| `memory.OutboxStore` and `memory.InputCommandStore` | P0-015 |
 | `make e2e` gating CI without a database | P0-018 |
 
 ## Traces to
@@ -241,4 +199,3 @@ Each control, driven from a scenario file:
   test-only; `postgres.New` is never called)
 - `docs/architecture.md` §5 (SQLite, not this profile, is the durable
   single-process developer option) and §6 (transactional outbox)
-- P0-009 §*Contract surfaces* (`port: OutboxPublisher`)
