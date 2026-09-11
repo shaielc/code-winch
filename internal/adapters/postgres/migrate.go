@@ -29,9 +29,9 @@ var migration005 string
 var migration006 string
 
 // ledgerDDL records which migrations a database already has. It is created
-// imperatively rather than as migration 000 because the numbered slots are
-// pre-allocated to tasks in docs/workplan/README.md and the ledger must precede
-// 001.
+// imperatively rather than as migration 000 because the existing numbered
+// history starts at 001 and the ledger must precede it. docs/state.md records
+// the migration re-runnability failure that required the ledger.
 const ledgerDDL = `CREATE TABLE IF NOT EXISTS schema_migrations (
   version integer PRIMARY KEY,
   name text NOT NULL,

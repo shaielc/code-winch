@@ -59,7 +59,7 @@
       "title": "Sanitize post-close plan references",
       "phase": 0,
       "phase_name": "Foundation repair",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [],
       "owner": null,
       "blocked_reason": null,
