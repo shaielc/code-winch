@@ -8,8 +8,7 @@ somewhere a reader can find them.
 ## Objective
 
 A person opens a browser, authenticates, and drives a run to completion without
-touching the CLI; and the product runs end to end with no database, so the
-standing scenario suite has a substrate to prove parity against.
+touching the CLI.
 
 ## Scope
 
@@ -20,9 +19,9 @@ not decomposed into tasks and the boundaries will move when it is.
 - **Browser session establishment** — a login path that issues the
   `winch_session` cookie the handler already accepts, so the SPA can call the
   API it is served alongside.
-- **A controllable in-memory store profile** — `winchd` boots against
-  `internal/adapters/memory` with no database, and the phase-0 scenarios pass
-  against it unchanged. This is I4's first rung, built after the fact.
+- **PostgreSQL store profile as an I4 swap** — re-run the phase-0 standing
+  scenario suite against `storeProfile=postgres` unchanged, proving parity with
+  the all-fake memory profile P0-012 through P0-018 established.
 - **Credentials and workspaces** — the `Workspace` and `Credential` aggregates
   from `docs/architecture.md` §6, replacing the raw `workspacePath` string a run
   carries today, and giving `application.SecretReferenceStore` a real
@@ -43,7 +42,8 @@ absent from this table is not owned.
 
 | Deferred | From | The gap |
 |---|---|---|
-| Controllable in-memory store profile | P0-003 | `internal/adapters/memory` implements every port and no runtime configuration reaches it, so no phase-0 configuration runs without PostgreSQL |
+| Same round trip against `storeProfile=postgres` (I4 swap) | P0-018 | Standing suite runs on memory only; postgres parity is not yet a gated scenario |
+| Postgres-backed e2e as I4 swap | P0-013 | Create/read e2e defaults to memory; postgres is selectable but not parity-gated |
 | Browser `winch_session` establishment | P0-011 | `httpapi.SetSessionCookie` exists and has no caller, so a browser is served the SPA and gets 401 from every API call |
 
 When this phase is derived, each row becomes a task or is re-deferred
@@ -64,4 +64,5 @@ clause through the CLI; the first two are this phase's.
 - [`docs/state.md`](../../state.md) — *The run round trip*, *Credentials,
   workspaces, and login*, *Approvals, retry, and queue admission*
 - [`../post-mortems/2026-08-23-workplan-create-phase-0.md`](../post-mortems/2026-08-23-workplan-create-phase-0.md)
-  defect 5 — why the in-memory profile arrives here instead of in phase 0
+  defect 5 — why the memory profile repair landed as revision tasks P0-012
+  through P0-018

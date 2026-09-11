@@ -92,6 +92,40 @@ type RunRepository struct {
 	mu       sync.RWMutex
 	items    map[domain.RunID]versionedRun
 	saves    []RunSaveCall
+	creates  map[application.CreateRunIdentity]domain.RunID
+}
+
+func (r *RunRepository) Create(ctx context.Context, value application.RunRecord, identity application.CreateRunIdentity) (application.RunRecord, uint64, error) {
+	if err := r.Failures.next("save"); err != nil {
+		return application.RunRecord{}, 0, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.creates == nil {
+		r.creates = make(map[application.CreateRunIdentity]domain.RunID)
+	}
+	// A run no client request created carries no key and dedupes against
+	// nothing, matching a unique index over NULLs in the durable store.
+	deduped := identity != application.CreateRunIdentity{}
+	if id, ok := r.creates[identity]; ok && deduped {
+		existing := r.items[id]
+		if existing.record.WorkspacePath != value.WorkspacePath || existing.record.HarnessProfile != value.HarnessProfile || existing.record.SandboxProfile != value.SandboxProfile {
+			return application.RunRecord{}, 0, application.ErrIdempotencyConflict
+		}
+		return cloneRun(existing.record), existing.version, nil
+	}
+	if r.items == nil {
+		r.items = make(map[domain.RunID]versionedRun)
+	}
+	if _, exists := r.items[value.ID]; exists {
+		return application.RunRecord{}, 0, application.ErrConflict
+	}
+	if deduped {
+		r.creates[identity] = value.ID
+	}
+	r.saves = append(r.saves, RunSaveCall{cloneRun(value), 0})
+	r.items[value.ID] = versionedRun{cloneRun(value), 1}
+	return cloneRun(value), 1, nil
 }
 
 func cloneRun(value application.RunRecord) application.RunRecord {

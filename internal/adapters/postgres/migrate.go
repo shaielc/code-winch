@@ -25,6 +25,9 @@ var migration004 string
 //go:embed migrations/005_workflow_runtime.sql
 var migration005 string
 
+//go:embed migrations/006_run_create_request.sql
+var migration006 string
+
 // ledgerDDL records which migrations a database already has. It is created
 // imperatively rather than as migration 000 because the numbered slots are
 // pre-allocated to tasks in docs/workplan/README.md and the ledger must precede
@@ -63,6 +66,7 @@ func migrations() []migration {
 		{3, "run_supervisor", migration003},
 		{4, "input_delivery", migration004},
 		{5, "workflow_runtime", migration005},
+		{6, "run_create_request", migration006},
 	}
 	ordered := make([]migration, 0, len(sources))
 	for _, source := range sources {

@@ -20,11 +20,32 @@ The `/api/v1/runs*` routes are mounted but not yet bound to run use cases. Until
 they are, the routes answer `404` for reads and `500` for creation, and no
 harness process is launched.
 
+## Operator CLI
+
+The daemon image also installs the maintained `winch` operator CLI on `PATH`.
+Invoke it in the running stack without installing Go on the host:
+
+```sh
+docker compose -f deployments/compose.yml exec winchd winch --help
+```
+
+The currently available `dev run` command is standalone and drives the local
+sandbox and fake harness directly inside the container. For example:
+
+```sh
+printf 'echo hello\nexit\n' | \
+  docker compose -f deployments/compose.yml exec -T winchd \
+  winch dev run --harness fake --sandbox local
+```
+
+Host builds place both operator and daemon binaries at `bin/winch` and
+`bin/winchd` by default. Set `BUILD_DIR` to choose another output directory.
+
 ## Services
 
 | Service | Image | Published | Notes |
 |---|---|---|---|
-| `winchd` | Go daemon + web assets + fake harness | `127.0.0.1:8080` | Serves the SPA and `/api/v1` from one origin |
+| `winchd` | Go daemon + operator CLI + web assets + fake harness | `127.0.0.1:8080` | Serves the SPA and `/api/v1` from one origin |
 | `postgres` | `postgres:17-alpine` | internal only | Data persists in the `postgres-data` volume |
 | `runner` | Go toolchain, the daemon image's build stage | not published | `test` profile only; see [Running the tests](#running-the-tests) |
 
@@ -70,6 +91,8 @@ copying secrets into the repository.
 
 Every Make target is marked `[host]` or `[docker]`. `[host]` targets run on this
 machine and need `go`, `node`, or `golangci-lint` installed — CI uses those.
+The Go workflow supplies PostgreSQL and runs both `make check` and the host
+`make test-integration` target on every push and pull request.
 `[docker]` targets need Docker only: the `runner` container supplies the Go
 toolchain and `postgres` supplies the database. With no Go toolchain installed,
 the `[docker]` group is the way in, and no target asks you to type a
@@ -92,7 +115,7 @@ edits:
 ```sh
 make runner-image      # build the toolchain image (needs registry access)
 make test-env          # start the runner and create the winch_test database
-make test-integration  # go test -tags integration ./... inside the runner
+make runner-integration # go test -tags integration ./... inside the runner
 make test-env-down     # stop the runner and drop winch_test; the daemon keeps running
 ```
 
@@ -120,10 +143,17 @@ owned by your host user while the container runs as root, and without it git
 refuses to report VCS status and `go build` fails.
 
 Integration tests are behind the `integration` build tag and skip unless
-`PG_TEST_DATABASE_URL` is set; the profile sets it to a `winch_test` database
-alongside `winch` on the same server. That separation matters: the test helper
-runs `DROP SCHEMA public CASCADE` before each migration, so pointing this
-variable at `winch` would destroy the daemon's database.
+`PG_TEST_DATABASE_URL` is set. With a host PostgreSQL, run them directly with:
+
+```sh
+PG_TEST_DATABASE_URL='postgres://winch@127.0.0.1:55432/winch_test?sslmode=disable' \
+  make test-integration
+```
+
+The Docker profile sets the same variable to a `winch_test` database alongside
+`winch` on the same server. That separation matters: the test helper runs
+`DROP SCHEMA public CASCADE` before each migration, so pointing this variable
+at `winch` would destroy the daemon's database.
 
 ## Security posture
 
@@ -143,7 +173,8 @@ reachable from anything but loopback.
 vendor account. It is built from `cmd/fake-harness` and installed on `PATH` in
 the daemon image. The adapter resolves that installed name to an absolute path
 before launch; `winch dev run --fake-binary /path/to/fake-harness` can select an
-explicit development build. You can drive the profile through the operator CLI:
+explicit development build. The operator CLI drives the profile — see *Operator
+CLI* above — and the fixture is also runnable on its own:
 
 ```sh
 docker compose -f deployments/compose.yml exec winchd fake-harness
@@ -153,9 +184,9 @@ docker compose -f deployments/compose.yml exec winchd fake-harness
 plays the file's commands before interactive input, and `--fake-delay 500ms`
 delays each scripted command. `--fake-force-failure`, `--fake-malformed-line`,
 and `--fake-early-exit` inject a nonzero exit, an invalid JSON-lines record
-(followed by a nonzero exit), or
-an exit before interactive input. The corresponding `fake-harness` flags omit
-the `fake-` prefix when invoking the fixture directly.
+(followed by a nonzero exit), or an exit before interactive input. An
+unsuccessful harness exit becomes the CLI's own exit status. The corresponding
+`fake-harness` flags omit the `fake-` prefix when invoking the fixture directly.
 
 It reads one JSON command per line — `{"id":"<id>","text":"<text>"}`, the format
 the fake harness codec encodes — and also accepts bare text so it stays usable

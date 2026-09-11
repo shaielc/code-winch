@@ -12,6 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: winch
+          POSTGRES_PASSWORD: winch
+          POSTGRES_DB: winch_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U winch -d winch_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -27,3 +42,8 @@ jobs:
 
       - name: Run repository checks
         run: make check
+
+      - name: Run PostgreSQL integration tests
+        env:
+          PG_TEST_DATABASE_URL: postgres://winch:winch@127.0.0.1:5432/winch_test?sslmode=disable
+        run: make test-integration

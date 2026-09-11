@@ -4,6 +4,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Default BUILD_DIR for `make build`
+bin/
+
 # Local runner secrets
 runner/.env
 

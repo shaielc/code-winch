@@ -18,7 +18,7 @@ its register of deferrals from other phases.
 
 | Phase | Name | Status | Brief |
 |---|---|---|---|
-| 0 | Foundation repair | derived — 11 tasks | [`phase-0/README.md`](phase-0/README.md) |
+| 0 | Foundation repair | derived — 18 tasks | [`phase-0/README.md`](phase-0/README.md) |
 | 1 | Browser-reachable single-user product | not derived | [`phase-1/README.md`](phase-1/README.md) |
 
 Phases 2 to 5 have no briefs yet. Nothing defers to them, and `docs/roadmap.md`
