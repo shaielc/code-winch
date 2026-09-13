@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func TestCreateStartPollEventsThenGet(t *testing.T) {
@@ -43,14 +45,14 @@ func TestCreateStartPollEventsThenGet(t *testing.T) {
 	waitHealthy(t, base, &logs)
 
 	body, _ := json.Marshal(map[string]string{"workspacePath": "/tmp/ws", "harnessProfile": "fake", "sandboxProfile": "local"})
-	created := scenarioCall(t, http.MethodPost, base+"/api/v1/runs", body, map[string]string{"Idempotency-Key": "start-create"})
+	created := scenarioCall(t, http.MethodPost, base+"/api/v1/runs", body, map[string]string{"Idempotency-Key": uuid.NewString()})
 	if created.StatusCode != http.StatusCreated {
 		t.Fatalf("create status=%d body=%s", created.StatusCode, created.Body)
 	}
 	var run map[string]any
 	_ = json.Unmarshal(created.Body, &run)
 	id, version := run["id"].(string), int64(run["version"].(float64))
-	started := scenarioCall(t, http.MethodPost, base+"/api/v1/runs/"+id+"/start", nil, map[string]string{"Idempotency-Key": "start-1", "If-Match": `"` + strconv.FormatInt(version, 10) + `"`})
+	started := scenarioCall(t, http.MethodPost, base+"/api/v1/runs/"+id+"/start", nil, map[string]string{"Idempotency-Key": uuid.NewString(), "If-Match": `"` + strconv.FormatInt(version, 10) + `"`})
 	if started.StatusCode != http.StatusAccepted {
 		t.Fatalf("start status=%d body=%s logs=%s", started.StatusCode, started.Body, logs.String())
 	}
@@ -70,8 +72,9 @@ func TestCreateStartPollEventsThenGet(t *testing.T) {
 	events := scenarioCall(t, http.MethodGet, base+"/api/v1/runs/"+id+"/events?limit=200", nil, nil)
 	var page struct {
 		Events []struct {
-			Sequence int64  `json:"sequence"`
-			Kind     string `json:"kind"`
+			Sequence   int64     `json:"sequence"`
+			Kind       string    `json:"kind"`
+			OccurredAt time.Time `json:"occurredAt"`
 		} `json:"events"`
 	}
 	_ = json.Unmarshal(events.Body, &page)
@@ -81,6 +84,9 @@ func TestCreateStartPollEventsThenGet(t *testing.T) {
 	for i, event := range page.Events {
 		if event.Sequence != int64(i+1) {
 			t.Fatalf("event gap at %d: %s", i, events.Body)
+		}
+		if event.OccurredAt.IsZero() {
+			t.Fatalf("event has zero occurredAt: %s", events.Body)
 		}
 	}
 }

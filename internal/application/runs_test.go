@@ -17,6 +17,13 @@ func (c fixedClock) Now() domain.Timestamp { return c.at }
 
 type recordingRuntime struct{ started []application.RunRecord }
 
+func (*recordingRuntime) Validate(run application.RunRecord) error {
+	if run.HarnessProfile != "fake" || run.SandboxProfile != "local" {
+		return application.ErrUnsupportedRunProfiles
+	}
+	return nil
+}
+
 func (r *recordingRuntime) Start(_ context.Context, run application.RunRecord) error {
 	r.started = append(r.started, run)
 	return nil

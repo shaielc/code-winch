@@ -33,6 +33,15 @@ type HarnessExit struct {
 	Code       string
 	Message    string
 }
+
+// RunnerObservation is runner-local output awaiting durable sequencing.
+type RunnerObservation struct {
+	ExecutionID string
+	Ordinal     uint64
+	Type        string
+	Event       *UnsequencedEvent
+	Exit        *HarnessExit
+}
 type OutputChunk struct{ Data []byte }
 type InputMessage struct {
 	ID   string

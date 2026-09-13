@@ -176,6 +176,14 @@ before launch; `winch dev run --fake-binary /path/to/fake-harness` can select an
 explicit development build. The operator CLI drives the profile — see *Operator
 CLI* above — and the fixture is also runnable on its own:
 
+Daemon-backed runs use the same controls through `WINCH_FAKE_BINARY`,
+`WINCH_FAKE_TRANSCRIPT`, `WINCH_FAKE_DELAY`, `WINCH_FAKE_FORCE_FAILURE`,
+`WINCH_FAKE_MALFORMED_LINE`, and `WINCH_FAKE_EARLY_EXIT`. The last three accept
+Go boolean values. The daemon defaults early exit to true so its standard fake
+scenario terminates by itself; set `WINCH_FAKE_EARLY_EXIT=false` with a
+transcript that awaits input to exercise interactive behavior. These controls
+do not prove provider, network, credential, or container-isolation behavior.
+
 ```sh
 docker compose -f deployments/compose.yml exec winchd fake-harness
 ```

@@ -29,10 +29,12 @@ type RunService struct {
 }
 
 var ErrUnsupportedRunProfiles = errors.New("application: unsupported run profiles")
+var ErrRunStateConflict = errors.New("application: run state conflict")
 
 // RunRuntime starts the single runtime profile selected by the composition
 // root. Profile selection remains outside the provider-neutral use case.
 type RunRuntime interface {
+	Validate(RunRecord) error
 	Start(context.Context, RunRecord) error
 }
 
@@ -78,13 +80,12 @@ func (s *RunService) Start(ctx context.Context, id domain.RunID, expected uint64
 	if version != expected {
 		return RunView{}, ErrConflict
 	}
-	if record.HarnessProfile != "fake" || record.SandboxProfile != "local" {
-		return RunView{}, ErrUnsupportedRunProfiles
+	if err = runtime.Validate(record); err != nil {
+		return RunView{}, err
 	}
-	if len(record.Attempts) == 0 || record.Attempts[len(record.Attempts)-1].State != domain.RunStateCreated {
-		return RunView{}, ErrConflict
+	if err = ApplyRunTransition(&record, domain.RunCommandStart); err != nil {
+		return RunView{}, ErrRunStateConflict
 	}
-	record.Attempts[len(record.Attempts)-1].State = domain.RunStateQueued
 	record.UpdatedAt = s.clock.Now().Time()
 	_, err = s.repository.Save(ctx, record, version)
 	if err != nil {
@@ -94,6 +95,40 @@ func (s *RunService) Start(ctx context.Context, id domain.RunID, expected uint64
 		return RunView{}, err
 	}
 	return s.Get(ctx, id)
+}
+
+// ApplyRunTransition routes persisted phase-zero lifecycle changes through the
+// domain state machine. Phase-zero records have exactly one attempt.
+func ApplyRunTransition(record *RunRecord, command domain.RunCommand) error {
+	if len(record.Attempts) != 1 {
+		return ErrInvalidRunRecord
+	}
+	run, err := domain.NewRun(record.ID, record.Attempts[0].ID)
+	if err != nil {
+		return err
+	}
+	var history []domain.RunCommand
+	switch record.Attempts[0].State {
+	case domain.RunStateCreated:
+	case domain.RunStateQueued:
+		history = []domain.RunCommand{domain.RunCommandStart}
+	case domain.RunStatePreparing:
+		history = []domain.RunCommand{domain.RunCommandStart, domain.RunCommandAcquireLease}
+	case domain.RunStateRunning:
+		history = []domain.RunCommand{domain.RunCommandStart, domain.RunCommandAcquireLease, domain.RunCommandExecutionStarted}
+	default:
+		return ErrRunStateConflict
+	}
+	for _, previous := range history {
+		if err = run.Apply(previous, domain.AttemptID{}); err != nil {
+			return err
+		}
+	}
+	if err = run.Apply(command, domain.AttemptID{}); err != nil {
+		return err
+	}
+	record.Attempts = run.Attempts()
+	return nil
 }
 
 func (s *RunService) Events(ctx context.Context, id domain.RunID, after uint64, limit int, events EventStore) ([]protocol.Event, error) {

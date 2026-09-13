@@ -14,8 +14,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -31,7 +31,6 @@ import (
 	"github.com/shaielc/code-winch/internal/platform/telemetry"
 	runnerlocal "github.com/shaielc/code-winch/internal/runner/local"
 	"github.com/shaielc/code-winch/internal/supervisor"
-	"github.com/shaielc/code-winch/pkg/protocol"
 )
 
 // Bounds how long a client may dribble request headers; unrelated to the
@@ -86,11 +85,11 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// The daemon's shipped fake profile is a finite transcript: it emits its
-	// deterministic startup records and exits without waiting for input.
-	runner := runnerlocal.New(sandboxlocal.New(), harnessfake.Driver{Config: harnessfake.Config{EarlyExit: true}})
+	// The shipped default is finite, while environment controls can select a
+	// transcript or keep the harness alive for interactive scenarios.
+	runner := runnerlocal.New(sandboxlocal.New(), harnessfake.Driver{Config: daemonFakeConfig()})
 	defer runner.Close()
-	coordinator := newRunCoordinator(store, runner, randomIDs{}, logger)
+	coordinator := supervisor.NewCoordinator(store, runner, randomIDs{}, logger)
 	stream := httpapi.NewEventStream(64)
 	defer stream.Close()
 	api, err := httpapi.NewHandler(httpapi.Config{Token: cfg.Token, CSRFToken: cfg.CSRFToken, AllowedOrigin: cfg.AllowedOrigin, Actor: cfg.Actor, Logger: logger, RequestID: requestID, EventStream: stream}, runBackend{runs: runs, runtime: coordinator, events: store})
@@ -117,6 +116,19 @@ func run(ctx context.Context) error {
 	logger.Info("startup complete", "component", "daemon", "operation", "start", "status", "ready", "duration_ms", time.Since(started).Milliseconds())
 	logger.Info("listener started", "component", "http", "operation", "listen", "status", "ready")
 	return serve(ctx, server, stream, cfg.ShutdownTimeout)
+}
+
+func daemonFakeConfig() harnessfake.Config {
+	cfg := harnessfake.Config{Executable: os.Getenv("WINCH_FAKE_BINARY"), Transcript: os.Getenv("WINCH_FAKE_TRANSCRIPT"), EarlyExit: true}
+	if value := os.Getenv("WINCH_FAKE_DELAY"); value != "" {
+		cfg.Delay, _ = time.ParseDuration(value)
+	}
+	for key, target := range map[string]*bool{"WINCH_FAKE_FORCE_FAILURE": &cfg.ForceFailure, "WINCH_FAKE_MALFORMED_LINE": &cfg.MalformedLine, "WINCH_FAKE_EARLY_EXIT": &cfg.EarlyExit} {
+		if value, ok := os.LookupEnv(key); ok {
+			*target, _ = strconv.ParseBool(value)
+		}
+	}
+	return cfg
 }
 
 // serve runs until ctx is cancelled or the listener fails, then disconnects
@@ -249,7 +261,9 @@ func (b runBackend) StartRun(ctx context.Context, _ string, id httpapi.RunId, _ 
 	case errors.Is(err, application.ErrNotFound):
 		return httpapi.Run{}, httpapi.ErrRunNotFound
 	case errors.Is(err, application.ErrUnsupportedRunProfiles):
-		return httpapi.Run{}, httpapi.ErrValidation
+		return httpapi.Run{}, httpapi.ErrUnsupportedProfile
+	case errors.Is(err, application.ErrRunStateConflict):
+		return httpapi.Run{}, httpapi.ErrStateConflict
 	case errors.Is(err, application.ErrConflict):
 		return httpapi.Run{}, httpapi.ErrPreconditionFailed
 	case err != nil:
@@ -342,102 +356,4 @@ func (runBackend) StopRun(context.Context, string, httpapi.RunId, string, int64,
 }
 func (runBackend) SendRunInput(context.Context, string, httpapi.RunId, string, int64, httpapi.RunInputRequest) (httpapi.InputAccepted, error) {
 	return httpapi.InputAccepted{}, errInputDeferred
-}
-
-type activeExecution struct {
-	runID domain.RunID
-	lease application.RunLease
-}
-
-type runCoordinator struct {
-	store  *postgres.Store
-	runner *runnerlocal.Runner
-	super  *supervisor.Supervisor
-	ids    randomIDs
-	logger *slog.Logger
-	mu     sync.Mutex
-	active map[string]activeExecution
-}
-
-type persistRedactor struct{}
-
-func (persistRedactor) Redact(_ context.Context, event application.UnsequencedEvent) (application.UnsequencedEvent, error) {
-	return event, nil
-}
-
-func newRunCoordinator(store *postgres.Store, runner *runnerlocal.Runner, ids randomIDs, logger *slog.Logger) *runCoordinator {
-	c := &runCoordinator{store: store, runner: runner, ids: ids, logger: logger, active: map[string]activeExecution{}}
-	c.super = supervisor.New(store, runner, persistRedactor{}, application.SystemClock{}, "winchd", 30*time.Second)
-	go c.consume()
-	return c
-}
-
-func (c *runCoordinator) Start(ctx context.Context, record application.RunRecord) error {
-	executionID, leaseToken := uuid.NewString(), uuid.NewString()
-	lease, err := c.super.Acquire(ctx, record.ID, leaseToken)
-	if err != nil {
-		return err
-	}
-	c.mu.Lock()
-	c.active[executionID] = activeExecution{runID: record.ID, lease: lease}
-	c.mu.Unlock()
-	prepare, _ := json.Marshal(protocol.PreparePayload{WorkspaceID: record.ID.String()})
-	if err = c.super.Execute(ctx, lease, supervisor.Command{DesiredState: domain.RunStatePreparing, HarnessDriver: "fake", SandboxDriver: "local", ExecutionID: executionID, Message: protocol.RunnerMessage{Version: protocol.RunnerVersion{Major: protocol.RunnerProtocolMajor}, Kind: "prepare", CommandID: uuid.NewString(), Payload: prepare}}); err != nil {
-		return err
-	}
-	if err = c.setState(ctx, record.ID, domain.RunStatePreparing); err != nil {
-		return err
-	}
-	start, _ := json.Marshal(protocol.StartPayload{LaunchProfile: "fake"})
-	if err = c.super.Execute(ctx, lease, supervisor.Command{DesiredState: domain.RunStateRunning, HarnessDriver: "fake", SandboxDriver: "local", ExecutionID: executionID, Message: protocol.RunnerMessage{Version: protocol.RunnerVersion{Major: protocol.RunnerProtocolMajor}, Kind: "start", CommandID: uuid.NewString(), Payload: start}}); err != nil {
-		return err
-	}
-	return c.setState(ctx, record.ID, domain.RunStateRunning)
-}
-
-func (c *runCoordinator) consume() {
-	for observation := range c.runner.Observations() {
-		c.mu.Lock()
-		active, ok := c.active[observation.ExecutionID]
-		c.mu.Unlock()
-		if !ok {
-			continue
-		}
-		ctx := context.Background()
-		if observation.Event != nil {
-			event := *observation.Event
-			if event.EventID.IsZero() {
-				event.EventID = c.ids.NewEventID()
-			}
-			if _, err := c.super.Observe(ctx, active.lease, observation.Ordinal, []application.UnsequencedEvent{event}); err != nil {
-				c.logger.Error("run observation failed", "component", "supervisor", "operation", "observe", "run_id", active.runID.String(), "error_code", "observation_failed")
-			}
-		}
-		if observation.Exit != nil {
-			state := domain.RunStateFailed
-			if observation.Exit.Successful {
-				state = domain.RunStateCompleted
-			}
-			_ = c.setState(ctx, active.runID, state)
-			_ = c.runner.Cleanup(ctx, observation.ExecutionID)
-			_ = c.super.Release(ctx, active.lease)
-			c.mu.Lock()
-			delete(c.active, observation.ExecutionID)
-			c.mu.Unlock()
-		}
-	}
-}
-
-func (c *runCoordinator) setState(ctx context.Context, id domain.RunID, state domain.RunState) error {
-	record, version, err := c.store.Get(ctx, id)
-	if err != nil {
-		return err
-	}
-	if record.Attempts[len(record.Attempts)-1].State.IsTerminal() {
-		return nil
-	}
-	record.Attempts[len(record.Attempts)-1].State = state
-	record.UpdatedAt = time.Now().UTC()
-	_, err = c.store.Save(ctx, record, version)
-	return err
 }
