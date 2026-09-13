@@ -27,7 +27,6 @@ var (
 	ErrIdempotencyConflict = errors.New("idempotency conflict")
 	ErrPreconditionFailed  = errors.New("precondition failed")
 	ErrValidation          = errors.New("validation failed")
-	ErrUnsupportedProfile  = errors.New("unsupported run profile")
 )
 
 // Backend is the inward application boundary used by the HTTP adapter. Actor is
@@ -301,8 +300,6 @@ func (s *server) backendProblem(w http.ResponseWriter, r *http.Request, err erro
 		s.problem(w, r, 412, "precondition_failed", "Precondition failed", "Read the run and retry with its current ETag.")
 	case errors.Is(err, ErrValidation):
 		s.problem(w, r, 422, "validation_failed", "Validation failed", "Correct the invalid fields and retry.")
-	case errors.Is(err, ErrUnsupportedProfile):
-		s.problem(w, r, 400, "unsupported_run_profile", "Unsupported run profile", "The run's configured execution profile is not supported.")
 	default:
 		s.problem(w, r, 500, "internal_error", "Internal error", "The request could not be completed.")
 	}

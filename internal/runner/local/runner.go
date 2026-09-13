@@ -34,7 +34,13 @@ var knownKinds = map[string]bool{
 
 // Observation is runner-local output. Ordinal orders observations but is not a
 // canonical event sequence; persistence remains the application's concern.
-type Observation = application.RunnerObservation
+type Observation struct {
+	ExecutionID string
+	Ordinal     uint64
+	Type        string
+	Event       *application.UnsequencedEvent
+	Exit        *application.HarnessExit
+}
 
 // execution keeps three independent locks so that no caller can starve the
 // pump:

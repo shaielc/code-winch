@@ -1,4 +1,4 @@
-package supervisor
+package runexec
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shaielc/code-winch/internal/application"
 	"github.com/shaielc/code-winch/internal/domain"
+	"github.com/shaielc/code-winch/internal/supervisor"
 	"github.com/shaielc/code-winch/pkg/protocol"
 )
 
@@ -33,7 +34,7 @@ type activeExecution struct {
 type Coordinator struct {
 	store  Store
 	runner Runner
-	super  *Supervisor
+	super  *supervisor.Supervisor
 	ids    application.IDSource
 	logger *slog.Logger
 	mu     sync.Mutex
@@ -54,9 +55,27 @@ func (fakeProfileRedactor) Redact(_ context.Context, event application.Unsequenc
 
 func NewCoordinator(store Store, runner Runner, ids application.IDSource, logger *slog.Logger) *Coordinator {
 	c := &Coordinator{store: store, runner: runner, ids: ids, logger: logger, active: map[string]activeExecution{}}
-	c.super = New(store, runner, fakeProfileRedactor{}, application.SystemClock{}, "winchd", 30*time.Second)
+	c.super = supervisor.New(store, runner, fakeProfileRedactor{}, application.SystemClock{}, "winchd", 30*time.Second)
 	go c.consume()
 	return c
+}
+
+// Close terminates every owned execution before the runner closes its
+// observation channel. It is bounded by the daemon's shutdown budget.
+func (c *Coordinator) Close(timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for executionID, active := range c.active {
+		if err := c.runner.Cleanup(ctx, executionID); err != nil {
+			c.logger.Error("run cleanup failed", "component", "supervisor", "operation", "shutdown", "run_id", active.runID.String(), "error_code", "cleanup_failed")
+		}
+		if err := c.super.Release(ctx, active.lease); err != nil {
+			c.logger.Error("run lease release failed", "component", "supervisor", "operation", "shutdown", "run_id", active.runID.String(), "error_code", "lease_release_failed")
+		}
+		delete(c.active, executionID)
+	}
 }
 
 func (c *Coordinator) Start(ctx context.Context, record application.RunRecord) error {
@@ -69,14 +88,14 @@ func (c *Coordinator) Start(ctx context.Context, record application.RunRecord) e
 	}
 	c.active[executionID] = activeExecution{runID: record.ID, lease: lease}
 	prepare, _ := json.Marshal(protocol.PreparePayload{WorkspaceID: record.ID.String()})
-	if err = c.super.Execute(ctx, lease, Command{DesiredState: domain.RunStatePreparing, HarnessDriver: "fake", SandboxDriver: "local", ExecutionID: executionID, Message: protocol.RunnerMessage{Version: protocol.RunnerVersion{Major: protocol.RunnerProtocolMajor}, Kind: "prepare", CommandID: uuid.NewString(), Payload: prepare}}); err != nil {
+	if err = c.super.Execute(ctx, lease, supervisor.Command{DesiredState: domain.RunStatePreparing, HarnessDriver: "fake", SandboxDriver: "local", ExecutionID: executionID, Message: protocol.RunnerMessage{Version: protocol.RunnerVersion{Major: protocol.RunnerProtocolMajor}, Kind: "prepare", CommandID: uuid.NewString(), Payload: prepare}}); err != nil {
 		return err
 	}
 	if err = c.setState(ctx, record.ID, domain.RunStatePreparing); err != nil {
 		return err
 	}
 	start, _ := json.Marshal(protocol.StartPayload{LaunchProfile: "fake"})
-	if err = c.super.Execute(ctx, lease, Command{DesiredState: domain.RunStateRunning, HarnessDriver: "fake", SandboxDriver: "local", ExecutionID: executionID, Message: protocol.RunnerMessage{Version: protocol.RunnerVersion{Major: protocol.RunnerProtocolMajor}, Kind: "start", CommandID: uuid.NewString(), Payload: start}}); err != nil {
+	if err = c.super.Execute(ctx, lease, supervisor.Command{DesiredState: domain.RunStateRunning, HarnessDriver: "fake", SandboxDriver: "local", ExecutionID: executionID, Message: protocol.RunnerMessage{Version: protocol.RunnerVersion{Major: protocol.RunnerProtocolMajor}, Kind: "start", CommandID: uuid.NewString(), Payload: start}}); err != nil {
 		return err
 	}
 	return c.setState(ctx, record.ID, domain.RunStateRunning)

@@ -26,11 +26,11 @@ import (
 	sandboxlocal "github.com/shaielc/code-winch/internal/adapters/sandbox/local"
 	"github.com/shaielc/code-winch/internal/adapters/transport/httpapi"
 	"github.com/shaielc/code-winch/internal/application"
+	"github.com/shaielc/code-winch/internal/application/runexec"
 	"github.com/shaielc/code-winch/internal/domain"
 	"github.com/shaielc/code-winch/internal/platform/config"
 	"github.com/shaielc/code-winch/internal/platform/telemetry"
 	runnerlocal "github.com/shaielc/code-winch/internal/runner/local"
-	"github.com/shaielc/code-winch/internal/supervisor"
 )
 
 // Bounds how long a client may dribble request headers; unrelated to the
@@ -89,7 +89,8 @@ func run(ctx context.Context) error {
 	// transcript or keep the harness alive for interactive scenarios.
 	runner := runnerlocal.New(sandboxlocal.New(), harnessfake.Driver{Config: daemonFakeConfig()})
 	defer runner.Close()
-	coordinator := supervisor.NewCoordinator(store, runner, randomIDs{}, logger)
+	coordinator := runexec.NewCoordinator(store, newRunnerBridge(runner), randomIDs{}, logger)
+	defer coordinator.Close(cfg.ShutdownTimeout)
 	stream := httpapi.NewEventStream(64)
 	defer stream.Close()
 	api, err := httpapi.NewHandler(httpapi.Config{Token: cfg.Token, CSRFToken: cfg.CSRFToken, AllowedOrigin: cfg.AllowedOrigin, Actor: cfg.Actor, Logger: logger, RequestID: requestID, EventStream: stream}, runBackend{runs: runs, runtime: coordinator, events: store})
@@ -130,6 +131,26 @@ func daemonFakeConfig() harnessfake.Config {
 	}
 	return cfg
 }
+
+// runnerBridge translates the local runner's outer-layer observation type to
+// the application boundary without making orchestration depend on an adapter.
+type runnerBridge struct {
+	*runnerlocal.Runner
+	observations chan application.RunnerObservation
+}
+
+func newRunnerBridge(runner *runnerlocal.Runner) *runnerBridge {
+	bridge := &runnerBridge{Runner: runner, observations: make(chan application.RunnerObservation, 64)}
+	go func() {
+		defer close(bridge.observations)
+		for value := range runner.Observations() {
+			bridge.observations <- application.RunnerObservation{ExecutionID: value.ExecutionID, Ordinal: value.Ordinal, Type: value.Type, Event: value.Event, Exit: value.Exit}
+		}
+	}()
+	return bridge
+}
+
+func (b *runnerBridge) Observations() <-chan application.RunnerObservation { return b.observations }
 
 // serve runs until ctx is cancelled or the listener fails, then disconnects
 // live subscribers and drains in-flight requests within timeout.
@@ -261,7 +282,7 @@ func (b runBackend) StartRun(ctx context.Context, _ string, id httpapi.RunId, _ 
 	case errors.Is(err, application.ErrNotFound):
 		return httpapi.Run{}, httpapi.ErrRunNotFound
 	case errors.Is(err, application.ErrUnsupportedRunProfiles):
-		return httpapi.Run{}, httpapi.ErrUnsupportedProfile
+		return httpapi.Run{}, httpapi.ErrStateConflict
 	case errors.Is(err, application.ErrRunStateConflict):
 		return httpapi.Run{}, httpapi.ErrStateConflict
 	case errors.Is(err, application.ErrConflict):
