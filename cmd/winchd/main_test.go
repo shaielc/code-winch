@@ -127,3 +127,15 @@ func TestServeReturnsWithinTheShutdownDeadline(t *testing.T) {
 		t.Fatal("serve did not return within the drain deadline")
 	}
 }
+
+func TestDaemonFakeConfigurationIsControllable(t *testing.T) {
+	t.Setenv("WINCH_FAKE_TRANSCRIPT", "/tmp/transcript")
+	t.Setenv("WINCH_FAKE_DELAY", "25ms")
+	t.Setenv("WINCH_FAKE_FORCE_FAILURE", "true")
+	t.Setenv("WINCH_FAKE_MALFORMED_LINE", "true")
+	t.Setenv("WINCH_FAKE_EARLY_EXIT", "false")
+	cfg := daemonFakeConfig()
+	if cfg.Transcript != "/tmp/transcript" || cfg.Delay != 25*time.Millisecond || !cfg.ForceFailure || !cfg.MalformedLine || cfg.EarlyExit {
+		t.Fatalf("unexpected fake configuration: %#v", cfg)
+	}
+}

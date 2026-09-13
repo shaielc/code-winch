@@ -15,6 +15,20 @@ type fixedClock struct{ at domain.Timestamp }
 
 func (c fixedClock) Now() domain.Timestamp { return c.at }
 
+type recordingRuntime struct{ started []application.RunRecord }
+
+func (*recordingRuntime) Validate(run application.RunRecord) error {
+	if run.HarnessProfile != "fake" || run.SandboxProfile != "local" {
+		return application.ErrUnsupportedRunProfiles
+	}
+	return nil
+}
+
+func (r *recordingRuntime) Start(_ context.Context, run application.RunRecord) error {
+	r.started = append(r.started, run)
+	return nil
+}
+
 func TestCreateAndGetRun(t *testing.T) {
 	runID, _ := domain.ParseRunID("11111111-1111-1111-1111-111111111111")
 	runID2, _ := domain.ParseRunID("33333333-3333-3333-3333-333333333333")
@@ -57,5 +71,37 @@ func TestGetRejectsRunWithoutAttempts(t *testing.T) {
 	_, err := service.Get(context.Background(), id)
 	if !errors.Is(err, application.ErrInvalidRunRecord) {
 		t.Fatalf("invalid record error: %v", err)
+	}
+}
+
+func TestStartPersistsQueuedBeforeLaunchingAndRejectsUnsupportedProfiles(t *testing.T) {
+	runID, _ := domain.ParseRunID("11111111-1111-1111-1111-111111111111")
+	attemptID, _ := domain.ParseAttemptID("22222222-2222-2222-2222-222222222222")
+	now, _ := domain.NewTimestamp(time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC))
+	repository := &memory.RunRepository{}
+	service, _ := application.NewRunService(repository, fixedClock{now}, &memory.IDSource{RunIDs: []domain.RunID{runID}, AttemptIDs: []domain.AttemptID{attemptID}})
+	created, err := service.Create(context.Background(), application.CreateRunCommand{WorkspacePath: "/tmp/ws", HarnessProfile: "fake", SandboxProfile: "local", Actor: "actor", IdempotencyKey: "key"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := &recordingRuntime{}
+	started, err := service.Start(context.Background(), runID, created.Version, runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if started.Record.Attempts[0].State != domain.RunStateQueued || len(runtime.started) != 1 || runtime.started[0].Attempts[0].State != domain.RunStateQueued {
+		t.Fatalf("start did not durably queue before launch: view=%#v runtime=%#v", started, runtime.started)
+	}
+
+	unsupportedID, _ := domain.ParseRunID("33333333-3333-3333-3333-333333333333")
+	unsupportedAttempt, _ := domain.ParseAttemptID("44444444-4444-4444-4444-444444444444")
+	unsupported, _ := application.NewRunService(repository, fixedClock{now}, &memory.IDSource{RunIDs: []domain.RunID{unsupportedID}, AttemptIDs: []domain.AttemptID{unsupportedAttempt}})
+	created, err = unsupported.Create(context.Background(), application.CreateRunCommand{WorkspacePath: "/tmp/ws", HarnessProfile: "other", SandboxProfile: "local", Actor: "actor", IdempotencyKey: "other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = unsupported.Start(context.Background(), unsupportedID, created.Version, runtime)
+	if !errors.Is(err, application.ErrUnsupportedRunProfiles) || len(runtime.started) != 1 {
+		t.Fatalf("unsupported profile launched: error=%v launches=%d", err, len(runtime.started))
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,18 +14,23 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	harnessfake "github.com/shaielc/code-winch/internal/adapters/harness/fake"
 	"github.com/shaielc/code-winch/internal/adapters/postgres"
+	sandboxlocal "github.com/shaielc/code-winch/internal/adapters/sandbox/local"
 	"github.com/shaielc/code-winch/internal/adapters/transport/httpapi"
 	"github.com/shaielc/code-winch/internal/application"
+	"github.com/shaielc/code-winch/internal/application/runexec"
 	"github.com/shaielc/code-winch/internal/domain"
 	"github.com/shaielc/code-winch/internal/platform/config"
 	"github.com/shaielc/code-winch/internal/platform/telemetry"
+	runnerlocal "github.com/shaielc/code-winch/internal/runner/local"
 )
 
 // Bounds how long a client may dribble request headers; unrelated to the
@@ -79,9 +85,15 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// The shipped default is finite, while environment controls can select a
+	// transcript or keep the harness alive for interactive scenarios.
+	runner := runnerlocal.New(sandboxlocal.New(), harnessfake.Driver{Config: daemonFakeConfig()})
+	defer runner.Close()
+	coordinator := runexec.NewCoordinator(store, newRunnerBridge(runner), randomIDs{}, logger)
+	defer coordinator.Close(cfg.ShutdownTimeout)
 	stream := httpapi.NewEventStream(64)
 	defer stream.Close()
-	api, err := httpapi.NewHandler(httpapi.Config{Token: cfg.Token, CSRFToken: cfg.CSRFToken, AllowedOrigin: cfg.AllowedOrigin, Actor: cfg.Actor, Logger: logger, RequestID: requestID, EventStream: stream}, runBackend{runs: runs})
+	api, err := httpapi.NewHandler(httpapi.Config{Token: cfg.Token, CSRFToken: cfg.CSRFToken, AllowedOrigin: cfg.AllowedOrigin, Actor: cfg.Actor, Logger: logger, RequestID: requestID, EventStream: stream}, runBackend{runs: runs, runtime: coordinator, events: store})
 	if err != nil {
 		return err
 	}
@@ -106,6 +118,39 @@ func run(ctx context.Context) error {
 	logger.Info("listener started", "component", "http", "operation", "listen", "status", "ready")
 	return serve(ctx, server, stream, cfg.ShutdownTimeout)
 }
+
+func daemonFakeConfig() harnessfake.Config {
+	cfg := harnessfake.Config{Executable: os.Getenv("WINCH_FAKE_BINARY"), Transcript: os.Getenv("WINCH_FAKE_TRANSCRIPT"), EarlyExit: true}
+	if value := os.Getenv("WINCH_FAKE_DELAY"); value != "" {
+		cfg.Delay, _ = time.ParseDuration(value)
+	}
+	for key, target := range map[string]*bool{"WINCH_FAKE_FORCE_FAILURE": &cfg.ForceFailure, "WINCH_FAKE_MALFORMED_LINE": &cfg.MalformedLine, "WINCH_FAKE_EARLY_EXIT": &cfg.EarlyExit} {
+		if value, ok := os.LookupEnv(key); ok {
+			*target, _ = strconv.ParseBool(value)
+		}
+	}
+	return cfg
+}
+
+// runnerBridge translates the local runner's outer-layer observation type to
+// the application boundary without making orchestration depend on an adapter.
+type runnerBridge struct {
+	*runnerlocal.Runner
+	observations chan application.RunnerObservation
+}
+
+func newRunnerBridge(runner *runnerlocal.Runner) *runnerBridge {
+	bridge := &runnerBridge{Runner: runner, observations: make(chan application.RunnerObservation, 64)}
+	go func() {
+		defer close(bridge.observations)
+		for value := range runner.Observations() {
+			bridge.observations <- application.RunnerObservation{ExecutionID: value.ExecutionID, Ordinal: value.Ordinal, Type: value.Type, Event: value.Event, Exit: value.Exit}
+		}
+	}()
+	return bridge
+}
+
+func (b *runnerBridge) Observations() <-chan application.RunnerObservation { return b.observations }
 
 // serve runs until ctx is cancelled or the listener fails, then disconnects
 // live subscribers and drains in-flight requests within timeout.
@@ -197,7 +242,11 @@ func (randomIDs) NewWorkflowID() domain.WorkflowID {
 	return id
 }
 
-type runBackend struct{ runs *application.RunService }
+type runBackend struct {
+	runs    *application.RunService
+	runtime application.RunRuntime
+	events  application.EventStore
+}
 
 func (b runBackend) CreateRun(ctx context.Context, actor string, key string, request httpapi.CreateRunRequest) (httpapi.Run, error) {
 	view, err := b.runs.Create(ctx, application.CreateRunCommand{WorkspacePath: request.WorkspacePath, HarnessProfile: request.HarnessProfile, SandboxProfile: request.SandboxProfile, Actor: actor, IdempotencyKey: key})
@@ -222,6 +271,60 @@ func (b runBackend) GetRun(ctx context.Context, _ string, id httpapi.RunId) (htt
 		return httpapi.Run{}, err
 	}
 	return apiRun(view), nil
+}
+func (b runBackend) StartRun(ctx context.Context, _ string, id httpapi.RunId, _ string, version int64) (httpapi.Run, error) {
+	runID, err := apiRunID(id)
+	if err != nil {
+		return httpapi.Run{}, httpapi.ErrRunNotFound
+	}
+	view, err := b.runs.Start(ctx, runID, uint64(version), b.runtime)
+	switch {
+	case errors.Is(err, application.ErrNotFound):
+		return httpapi.Run{}, httpapi.ErrRunNotFound
+	case errors.Is(err, application.ErrUnsupportedRunProfiles):
+		return httpapi.Run{}, httpapi.ErrStateConflict
+	case errors.Is(err, application.ErrRunStateConflict):
+		return httpapi.Run{}, httpapi.ErrStateConflict
+	case errors.Is(err, application.ErrConflict):
+		return httpapi.Run{}, httpapi.ErrPreconditionFailed
+	case err != nil:
+		return httpapi.Run{}, err
+	}
+	return apiRun(view), nil
+}
+func (b runBackend) ListRunEvents(ctx context.Context, _ string, id httpapi.RunId, after int64, limit int) (httpapi.EventPage, error) {
+	runID, err := apiRunID(id)
+	if err != nil {
+		return httpapi.EventPage{}, httpapi.ErrRunNotFound
+	}
+	values, err := b.runs.Events(ctx, runID, uint64(after), limit+1, b.events)
+	if errors.Is(err, application.ErrNotFound) {
+		return httpapi.EventPage{}, httpapi.ErrRunNotFound
+	}
+	if err != nil {
+		return httpapi.EventPage{}, err
+	}
+	hasMore := len(values) > limit
+	if hasMore {
+		values = values[:limit]
+	}
+	out := httpapi.EventPage{Events: make([]httpapi.Event, 0, len(values)), HasMore: hasMore, NextAfterSequence: after}
+	for _, value := range values {
+		var payload map[string]interface{}
+		_ = json.Unmarshal(value.Payload, &payload)
+		sourceBytes, _ := json.Marshal(value.Source)
+		var source map[string]interface{}
+		_ = json.Unmarshal(sourceBytes, &source)
+		extensions := map[string]interface{}{}
+		for key, raw := range value.Extensions {
+			var extension interface{}
+			_ = json.Unmarshal(raw, &extension)
+			extensions[key] = extension
+		}
+		out.Events = append(out.Events, httpapi.Event{EventId: value.EventID, RunId: httpapi.RunId(formatAPIRunID(runID)), Sequence: int64(value.Sequence), OccurredAt: value.OccurredAt, Kind: value.Kind, SchemaVersion: int(value.SchemaVersion), Source: source, Sensitivity: httpapi.EventSensitivity(value.Sensitivity), Payload: payload, Extensions: &extensions})
+		out.NextAfterSequence = int64(value.Sequence)
+	}
+	return out, nil
 }
 func apiRun(view application.RunView) httpapi.Run {
 	r := view.Record
@@ -265,20 +368,12 @@ func apiRunID(value string) (domain.RunID, error) {
 }
 
 var (
-	errStartDeferred  = errors.New("run start is not implemented; owner=P0-008")
-	errInputDeferred  = errors.New("run input is not implemented; owner=P0-009")
-	errEventsDeferred = errors.New("run events are not implemented; owner=P0-010")
-	errStopDeferred   = errors.New("run stop is not implemented; owner=P0-011")
+	errInputDeferred = errors.New("run input is not implemented; owner=P0-009")
+	errStopDeferred  = errors.New("run stop is not implemented; owner=P0-011")
 )
 
-func (runBackend) StartRun(context.Context, string, httpapi.RunId, string, int64) (httpapi.Run, error) {
-	return httpapi.Run{}, errStartDeferred
-}
 func (runBackend) StopRun(context.Context, string, httpapi.RunId, string, int64, httpapi.StopRunRequest) (httpapi.Run, error) {
 	return httpapi.Run{}, errStopDeferred
-}
-func (runBackend) ListRunEvents(context.Context, string, httpapi.RunId, int64, int) (httpapi.EventPage, error) {
-	return httpapi.EventPage{}, errEventsDeferred
 }
 func (runBackend) SendRunInput(context.Context, string, httpapi.RunId, string, int64, httpapi.RunInputRequest) (httpapi.InputAccepted, error) {
 	return httpapi.InputAccepted{}, errInputDeferred
