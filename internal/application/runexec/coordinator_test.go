@@ -71,3 +71,75 @@ func TestCloseCleansActiveExecutionBeforeRunnerShutdown(t *testing.T) {
 		t.Fatalf("lease remained active after close: %v", err)
 	}
 }
+
+// queuedRun seeds a store with one run that the start use case has already
+// moved to queued, which is the state the coordinator is handed.
+func queuedRun(t *testing.T, store *closeStore) (domain.RunID, uint64, application.RunRecord) {
+	t.Helper()
+	runID, _ := domain.ParseRunID("55555555-5555-5555-5555-555555555555")
+	attemptID, _ := domain.ParseAttemptID("66666666-6666-6666-6666-666666666666")
+	run, err := domain.NewRun(runID, attemptID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := application.RunRecord{ID: runID, Attempts: run.Attempts(), WorkspacePath: "/tmp/ws", HarnessProfile: "fake", SandboxProfile: "local"}
+	if err = application.ApplyRunTransition(&record, domain.RunCommandStart); err != nil {
+		t.Fatal(err)
+	}
+	stored, version, err := store.Create(context.Background(), record, application.CreateRunIdentity{Actor: "actor", IdempotencyKey: "key"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return runID, version, stored
+}
+
+func TestStartAbandonsTheRunWhenTheRunnerRefusesACommand(t *testing.T) {
+	for _, testCase := range []struct {
+		name     string
+		failures []error
+	}{
+		{name: "prepare refused", failures: []error{errors.New("prepare refused")}},
+		{name: "launch refused", failures: []error{nil, errors.New("launch refused")}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			store := &closeStore{RunRepository: &memory.RunRepository{}, SupervisorStore: &memory.SupervisorStore{}}
+			runner := &closeRunner{RunnerGateway: &memory.RunnerGateway{}, observations: make(chan application.RunnerObservation), cleaned: make(chan string, 1)}
+			runner.Failures.Inject("send", testCase.failures...)
+			runID, _, record := queuedRun(t, store)
+			coordinator := NewCoordinator(store, runner, &memory.IDSource{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+			if err := coordinator.Start(context.Background(), record); err == nil {
+				t.Fatal("start reported success after the runner refused a command")
+			}
+
+			// A queued or preparing run is startable-looking but unstartable: the
+			// domain refuses a second start, so a launch that fails without a
+			// terminal transition wedges the run for good.
+			stored, _, err := store.Get(context.Background(), runID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if state := stored.Attempts[len(stored.Attempts)-1].State; state != domain.RunStateFailed {
+				t.Fatalf("abandoned run is in state %q, not failed", state)
+			}
+			select {
+			case id := <-runner.cleaned:
+				if id == "" {
+					t.Fatal("cleanup named no execution")
+				}
+			default:
+				t.Fatal("the execution was not cleaned up")
+			}
+			control, err := store.LoadControl(context.Background(), runID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if control.LeaseToken != "" {
+				t.Fatal("the supervisor lease is still held after the failure")
+			}
+			if len(coordinator.active) != 0 {
+				t.Fatalf("coordinator still tracks %d execution(s)", len(coordinator.active))
+			}
+		})
+	}
+}
