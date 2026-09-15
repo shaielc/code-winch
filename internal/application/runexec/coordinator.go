@@ -71,10 +71,7 @@ func (c *Coordinator) Close(timeout time.Duration) {
 		if err := c.runner.Cleanup(ctx, executionID); err != nil {
 			c.logger.Error("run cleanup failed", "component", "supervisor", "operation", "shutdown", "run_id", active.runID.String(), "error_code", "cleanup_failed")
 		}
-		if err := c.super.Release(ctx, active.lease); err != nil {
-			c.logger.Error("run lease release failed", "component", "supervisor", "operation", "shutdown", "run_id", active.runID.String(), "error_code", "lease_release_failed")
-		}
-		delete(c.active, executionID)
+		c.releaseLease(ctx, "shutdown", executionID, active)
 	}
 }
 
@@ -86,19 +83,68 @@ func (c *Coordinator) Start(ctx context.Context, record application.RunRecord) e
 	if err != nil {
 		return err
 	}
-	c.active[executionID] = activeExecution{runID: record.ID, lease: lease}
-	prepare, _ := json.Marshal(protocol.PreparePayload{WorkspaceID: record.ID.String()})
-	if err = c.super.Execute(ctx, lease, supervisor.Command{DesiredState: domain.RunStatePreparing, HarnessDriver: "fake", SandboxDriver: "local", ExecutionID: executionID, Message: protocol.RunnerMessage{Version: protocol.RunnerVersion{Major: protocol.RunnerProtocolMajor}, Kind: "prepare", CommandID: uuid.NewString(), Payload: prepare}}); err != nil {
+	active := activeExecution{runID: record.ID, lease: lease}
+	c.active[executionID] = active
+	if err = c.launch(ctx, executionID, lease, record); err != nil {
+		c.abandon(ctx, executionID, active)
 		return err
 	}
-	if err = c.setState(ctx, record.ID, domain.RunStatePreparing); err != nil {
+	return nil
+}
+
+func (c *Coordinator) launch(ctx context.Context, executionID string, lease application.RunLease, record application.RunRecord) error {
+	prepare, _ := json.Marshal(protocol.PreparePayload{WorkspaceID: record.ID.String()})
+	if err := c.super.Execute(ctx, lease, supervisor.Command{DesiredState: domain.RunStatePreparing, HarnessDriver: "fake", SandboxDriver: "local", ExecutionID: executionID, Message: protocol.RunnerMessage{Version: protocol.RunnerVersion{Major: protocol.RunnerProtocolMajor}, Kind: "prepare", CommandID: uuid.NewString(), Payload: prepare}}); err != nil {
+		return err
+	}
+	if err := c.setState(ctx, record.ID, domain.RunStatePreparing); err != nil {
 		return err
 	}
 	start, _ := json.Marshal(protocol.StartPayload{LaunchProfile: "fake"})
-	if err = c.super.Execute(ctx, lease, supervisor.Command{DesiredState: domain.RunStateRunning, HarnessDriver: "fake", SandboxDriver: "local", ExecutionID: executionID, Message: protocol.RunnerMessage{Version: protocol.RunnerVersion{Major: protocol.RunnerProtocolMajor}, Kind: "start", CommandID: uuid.NewString(), Payload: start}}); err != nil {
+	if err := c.super.Execute(ctx, lease, supervisor.Command{DesiredState: domain.RunStateRunning, HarnessDriver: "fake", SandboxDriver: "local", ExecutionID: executionID, Message: protocol.RunnerMessage{Version: protocol.RunnerVersion{Major: protocol.RunnerProtocolMajor}, Kind: "start", CommandID: uuid.NewString(), Payload: start}}); err != nil {
 		return err
 	}
 	return c.setState(ctx, record.ID, domain.RunStateRunning)
+}
+
+// abandon ends a start that never reached running. Cleanup precedes the durable
+// transition so no harness process outlives a start the API has already
+// refused, and the attempt is recorded failed so the run is terminal rather
+// than parked in a nonterminal state behind a lease nobody will renew.
+func (c *Coordinator) abandon(ctx context.Context, executionID string, active activeExecution) {
+	if err := c.runner.Cleanup(ctx, executionID); err != nil {
+		c.logger.Error("run cleanup failed", "component", "supervisor", "operation", "abandon", "run_id", active.runID.String(), "error_code", "cleanup_failed")
+	}
+	if err := c.failRun(ctx, active.runID); err != nil {
+		c.logger.Error("launch failure transition failed", "component", "supervisor", "operation", "abandon", "run_id", active.runID.String(), "error_code", "terminal_transition_failed")
+	}
+	c.releaseLease(ctx, "abandon", executionID, active)
+}
+
+// failRun records the attempt as failed. The domain leaves queued only through
+// the lease this coordinator already holds, so a start that failed before it
+// prepared takes that step first instead of staying queued forever.
+func (c *Coordinator) failRun(ctx context.Context, id domain.RunID) error {
+	record, _, err := c.store.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if len(record.Attempts) > 0 && record.Attempts[len(record.Attempts)-1].State == domain.RunStateQueued {
+		if err = c.setState(ctx, id, domain.RunStatePreparing); err != nil {
+			return err
+		}
+	}
+	return c.setState(ctx, id, domain.RunStateFailed)
+}
+
+// releaseLease hands the durable lease back and forgets the execution. Both
+// happen even when an earlier step failed: holding either would only block the
+// next owner of a run that is no longer executing.
+func (c *Coordinator) releaseLease(ctx context.Context, operation, executionID string, active activeExecution) {
+	if err := c.super.Release(ctx, active.lease); err != nil {
+		c.logger.Error("run lease release failed", "component", "supervisor", "operation", operation, "run_id", active.runID.String(), "error_code", "lease_release_failed")
+	}
+	delete(c.active, executionID)
 }
 
 func (*Coordinator) Validate(record application.RunRecord) error {
@@ -136,12 +182,11 @@ func (c *Coordinator) consume() {
 			}
 			if err := c.setState(ctx, active.runID, state); err != nil {
 				c.logger.Error("terminal transition failed", "component", "supervisor", "operation", "transition", "run_id", active.runID.String(), "error_code", "terminal_transition_failed")
-				c.mu.Unlock()
-				continue
 			}
+			// The execution is over whether or not the transition was written, so
+			// the runner's record of it and the lease both go back here.
 			_ = c.runner.Cleanup(ctx, observation.ExecutionID)
-			_ = c.super.Release(ctx, active.lease)
-			delete(c.active, observation.ExecutionID)
+			c.releaseLease(ctx, "transition", observation.ExecutionID, active)
 		}
 		c.mu.Unlock()
 	}

@@ -243,6 +243,19 @@
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-018-revise-finalize-for-memory-e2e.md"
+    },
+    {
+      "id": "P0-019",
+      "title": "Harden start refusal, control convergence, and coordinator placement",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": [
+        "P0-008"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-019-harden-start-refusal-and-placement.md"
     }
   ]
 }

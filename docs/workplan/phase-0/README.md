@@ -64,6 +64,7 @@ not cover what they appear to, and the use-case layer that was never written.
 | P0-016 | Revise WebSocket stream for memory store profile | P0-010, P0-015 | swap | stream scenario without DB |
 | P0-017 | Revise stop run for memory store profile | P0-011, P0-014 | swap | stop scenario without DB |
 | P0-018 | Revise phase 0 closure for memory-backed e2e | P0-007, P0-016, P0-017, P0-012 | hardening | `make e2e` in CI without DB |
+| P0-019 | Harden start refusal, control convergence, and coordinator placement | P0-008 | hardening | `run start` on an unsupported profile |
 
 ### Dependency graph
 
@@ -86,6 +87,9 @@ P0-012 ──┬──► P0-013 ◄── P0-006
          │                                └──► P0-017 ◄── P0-011
          │
 P0-007 + P0-016 + P0-017 ──► P0-018
+
+Audit remediation (revision edge; found while auditing P0-008):
+P0-008 ──► P0-019
 ```
 
 - **P0-004** waits on the profile it exercises (P0-003) and on the CLI it
@@ -99,6 +103,9 @@ P0-007 + P0-016 + P0-017 ──► P0-018
 - **P0-012** is available at open and can land before the postgres seams, but
   P0-013 through P0-018 carry `revision` edges and wait on P0-006 through
   P0-011 respectively.
+- **P0-019 → P0-008** is a `revision` edge written after the fact: its object is
+  the coordinator, refusal, and configuration P0-008 produced. Recorded in
+  [`../post-mortems/2026-09-15-a-coordinator-with-nowhere-to-live.md`](../post-mortems/2026-09-15-a-coordinator-with-nowhere-to-live.md).
 
 ### The e2e suite
 
@@ -120,9 +127,9 @@ scenario; P0-018 revises it for memory.
 | Metric | Value |
 |---|---|
 | Critical path | 10 — `P0-001 → P0-006 → P0-008 → P0-009 → P0-010 → P0-013 → P0-014 → P0-015 → P0-016 → P0-018` |
-| Average width | 18 ÷ 10 ≈ 1.8 |
+| Average width | 19 ÷ 10 ≈ 1.9 |
 | Available at open | P0-001, P0-002, P0-003, P0-005, P0-012 |
-| Contract collisions | none between concurrently-available tasks |
+| Contract collisions | none between concurrently-available tasks — P0-019 shares `POST /runs/{runId}/start` with P0-008 and takes the `revision` edge for it; P0-009 and P0-011 add their own lifecycle transitions under P0-019's corrected control-record rule without redefining it |
 
 Write collisions — a cost, not an edge. Whoever takes the second one rebases.
 
@@ -141,6 +148,8 @@ Write collisions — a cost, not an edge. Whoever takes the second one rebases.
 | P0-006 ↔ P0-012 | `cmd/winchd/main.go` |
 | P0-009 ↔ P0-011 | `cmd/winchd/main.go`, `internal/application/`, `cmd/winch/` |
 | P0-013 ↔ P0-014 | `cmd/winchd/main.go`, `test/e2e/` |
+| P0-019 ↔ P0-009, P0-011 | `cmd/winchd/main.go`, the coordinator package P0-019 moves |
+| P0-019 ↔ P0-014 | `cmd/winchd/main.go` — P0-014 rewires the same coordinator for memory |
 | P0-007 ↔ P0-018 | `test/e2e/roundtrip_test.go`, `.github/workflows/go.yml` |
 
 `cmd/winchd/main.go` attracts both the postgres seams and the memory repairs, but
