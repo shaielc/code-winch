@@ -42,3 +42,56 @@ func TestValidationReportsAllFieldsWithoutValues(t *testing.T) {
 		t.Fatal("secret leaked")
 	}
 }
+
+func TestFakeHarnessProfileResolvesFromTheEnvironment(t *testing.T) {
+	t.Setenv("WINCH_TOKEN", strings.Repeat("a", 32))
+	t.Setenv("WINCH_CSRF_TOKEN", strings.Repeat("b", 32))
+	t.Setenv("WINCH_FAKE_HARNESS_BINARY", "/opt/winch/fake-harness")
+	t.Setenv("WINCH_FAKE_HARNESS_TRANSCRIPT", "/etc/winch/transcript.txt")
+	t.Setenv("WINCH_FAKE_HARNESS_DELAY", "250ms")
+	t.Setenv("WINCH_FAKE_HARNESS_FORCE_FAILURE", "true")
+	t.Setenv("WINCH_FAKE_HARNESS_MALFORMED_LINE", "1")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.FakeHarness.Binary != "/opt/winch/fake-harness" || c.FakeHarness.Transcript != "/etc/winch/transcript.txt" {
+		t.Fatalf("paths: %#v", c.FakeHarness)
+	}
+	if c.FakeHarness.Delay.String() != "250ms" || !c.FakeHarness.ForceFailure || !c.FakeHarness.MalformedLine {
+		t.Fatalf("injections: %#v", c.FakeHarness)
+	}
+}
+
+func TestFakeHarnessProfileDefaultsToNoInjections(t *testing.T) {
+	t.Setenv("WINCH_TOKEN", strings.Repeat("a", 32))
+	t.Setenv("WINCH_CSRF_TOKEN", strings.Repeat("b", 32))
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.FakeHarness != (FakeHarnessConfig{}) {
+		t.Fatalf("unconfigured fake profile: %#v", c.FakeHarness)
+	}
+}
+
+// An unparseable control is named rather than silently resolving to a profile
+// the operator did not ask for.
+func TestFakeHarnessProfileRejectsUnparseableControls(t *testing.T) {
+	t.Setenv("WINCH_TOKEN", strings.Repeat("a", 32))
+	t.Setenv("WINCH_CSRF_TOKEN", strings.Repeat("b", 32))
+	t.Setenv("WINCH_FAKE_HARNESS_FORCE_FAILURE", "sometimes")
+	t.Setenv("WINCH_FAKE_HARNESS_DELAY", "a while")
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected a validation error")
+	}
+	for _, field := range []string{"fake_harness.force_failure", "fake_harness.delay"} {
+		if !strings.Contains(err.Error(), field) {
+			t.Errorf("missing %s in %q", field, err.Error())
+		}
+	}
+	if strings.Contains(err.Error(), "sometimes") {
+		t.Fatalf("rejected value leaked: %s", err.Error())
+	}
+}

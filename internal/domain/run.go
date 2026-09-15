@@ -81,6 +81,39 @@ func NewRun(runID RunID, attemptID AttemptID) (*Run, error) {
 	return &Run{id: runID, attempts: []Attempt{{ID: attemptID, State: RunStateCreated}}}, nil
 }
 
+// RestoreRun rebuilds a run from its persisted attempt history so a run read
+// back from storage moves under the same state machine as one held in memory.
+// Without it a caller holding a record would have to decide transitions for
+// itself, which is how lifecycle rules escape the domain.
+func RestoreRun(runID RunID, attempts []Attempt) (*Run, error) {
+	if runID.IsZero() {
+		return nil, &RunError{Code: ErrorCodeInvalidRun, RunID: runID, Summary: "run ID must be non-zero"}
+	}
+	if len(attempts) == 0 {
+		return nil, &RunError{Code: ErrorCodeInvalidRun, RunID: runID, Summary: "a run must have at least one attempt"}
+	}
+	restored := make([]Attempt, len(attempts))
+	for i, attempt := range attempts {
+		if attempt.ID.IsZero() {
+			return nil, &RunError{Code: ErrorCodeInvalidAttempt, RunID: runID, AttemptID: attempt.ID, State: attempt.State, Summary: "attempt ID must be non-zero"}
+		}
+		if !attempt.State.isKnown() {
+			return nil, &RunError{Code: ErrorCodeInvalidAttempt, RunID: runID, AttemptID: attempt.ID, State: attempt.State, Summary: "attempt state is not a known run state"}
+		}
+		restored[i] = attempt
+	}
+	return &Run{id: runID, attempts: restored}, nil
+}
+
+func (state RunState) isKnown() bool {
+	switch state {
+	case RunStateCreated, RunStateQueued, RunStatePreparing, RunStateRunning,
+		RunStateStopping, RunStateCompleted, RunStateFailed, RunStateCancelled:
+		return true
+	}
+	return false
+}
+
 func (run *Run) ID() RunID { return run.id }
 
 func (run *Run) CurrentAttempt() Attempt { return run.attempts[len(run.attempts)-1] }
