@@ -16,9 +16,15 @@ listener. `GET /api/v1/health` returns `{"status":"ok"}`. Shutdown signals close
 live event subscribers and give HTTP requests the configured bounded drain
 period.
 
-The `/api/v1/runs*` routes are mounted but not yet bound to run use cases. Until
-they are, the routes answer `404` for reads and `500` for creation, and no
-harness process is launched.
+Four run routes are bound to use cases: `POST /api/v1/runs`,
+`GET /api/v1/runs/{runId}`, `POST /api/v1/runs/{runId}/start`, and
+`GET /api/v1/runs/{runId}/events`. Starting a run launches the fake harness
+under the local sandbox, and the events it produces are durably stored and
+readable by polling. `stop`, `input`, and the event WebSocket are mounted and
+still unbound: they answer `500`.
+
+Every appended event also records publish intent in the `outbox` table, and this
+daemon starts no worker to drain it, so that backlog grows with each run.
 
 ## Operator CLI
 
@@ -29,8 +35,24 @@ Invoke it in the running stack without installing Go on the host:
 docker compose -f deployments/compose.yml exec winchd winch --help
 ```
 
-The currently available `dev run` command is standalone and drives the local
-sandbox and fake harness directly inside the container. For example:
+`winch run create`, `run get`, `run start`, and `run events` drive the daemon
+over HTTP. They read `WINCH_API_URL` (default `http://localhost:8080`),
+`WINCH_TOKEN`, and `WINCH_CSRF_TOKEN` from the environment. `run start` reads
+the run first and supplies its current ETag itself, because the command is
+conditional:
+
+```sh
+RUN_ID=$(winch run create --workspace /tmp/ws --harness fake --sandbox local)
+winch run start "$RUN_ID"
+winch run events "$RUN_ID"
+```
+
+`run events` pages through the whole durable history, printing one
+`sequence  kind  sensitivity  payload` line per event. `winch run get "$RUN_ID"`
+reads the run back, including the terminal state it reached.
+
+The `dev run` command is standalone and drives the local sandbox and fake
+harness directly inside the container, with no daemon and no database:
 
 ```sh
 printf 'echo hello\nexit\n' | \
@@ -71,6 +93,11 @@ one yet — no code establishes a browser session.
 | `WINCH_ACTOR` | `local-user` | Actor recorded on every command |
 | `WINCH_WEB_PORT` | `8080` | Host port for the UI |
 | `POSTGRES_PASSWORD` | development default | Database password |
+| `WINCH_FAKE_HARNESS_BINARY` | resolved on `PATH` | Explicit `fake-harness` path |
+| `WINCH_FAKE_HARNESS_TRANSCRIPT` | none | Transcript the harness plays on every run |
+| `WINCH_FAKE_HARNESS_DELAY` | `0s` | Latency injected before each scripted action |
+| `WINCH_FAKE_HARNESS_FORCE_FAILURE` | `false` | Make the harness exit unsuccessfully |
+| `WINCH_FAKE_HARNESS_MALFORMED_LINE` | `false` | Make the harness emit an invalid record |
 
 Set `WINCH_CONFIG_FILE` to load an optional YAML configuration file before
 environment overrides are applied. `WINCH_STATIC_DIR` selects the built asset
@@ -179,6 +206,15 @@ CLI* above — and the fixture is also runnable on its own:
 ```sh
 docker compose -f deployments/compose.yml exec winchd fake-harness
 ```
+
+The daemon configures the same profile through the `WINCH_FAKE_HARNESS_*`
+variables above, which are the transcript, latency, and injection controls
+resolved through the ordinary configuration layering rather than compiled in. A
+daemon-started run always runs the harness in early-exit mode, because such a
+run has no way to answer an interactive prompt yet and a harness left reading
+its terminal would never reach a terminal state. Early exit takes effect only
+after a transcript has played out without ending the harness, so a transcript
+ending in `exit` or `fail` still decides the run's outcome.
 
 `winch dev run --help` documents the runtime controls. `--fake-transcript FILE`
 plays the file's commands before interactive input, and `--fake-delay 500ms`

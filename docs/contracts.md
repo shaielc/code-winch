@@ -26,6 +26,18 @@ new execution) linked to the run; it never rewrites history. `stop` is
 idempotent in `Stopping` and terminal states. Input is accepted only while the
 adapter reports an input-capable state.
 
+`start` resolves the run's persisted harness and sandbox profiles against the
+pair the deployment actually constructed, per
+[ADR-0003](decisions/0003-capability-based-adapters.md): a combination it cannot
+run is refused with the stable `unsupported_profile` code before any sandbox is
+prepared, rather than silently degrading to one it can. The refusal names the
+run and never the rejected profiles. Because a run's profiles are fixed at
+creation, this is not a validation failure the caller can correct by retrying.
+
+`start` is conditional rather than idempotent: it requires the run's current
+ETag, and a repeat against a run that has already left `created` is a state
+conflict, so one run never acquires two executions.
+
 Creation is idempotent per `(actor, idempotency key)`; input commands scope the
 same guarantee to a run, which a run being created does not yet have. A repeated
 key from the same actor returns the run the first request created — same ID,

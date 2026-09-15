@@ -157,3 +157,72 @@ func TestNewRunValidatesIDs(t *testing.T) {
 		t.Fatalf("NewRun() = %#v", run)
 	}
 }
+
+func TestRestoreRunContinuesFromPersistedState(t *testing.T) {
+	runID, attemptID, nextID := mustRunIDs(t)
+	run, err := RestoreRun(runID, []Attempt{
+		{ID: attemptID, State: RunStateFailed},
+		{ID: nextID, PreviousAttemptID: attemptID, State: RunStateRunning},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.ID() != runID || run.CurrentAttempt().ID != nextID {
+		t.Fatalf("restored the wrong attempt: %#v", run.CurrentAttempt())
+	}
+	// The restored run moves under the same rules: a start is illegal from
+	// running, and a successful exit completes it.
+	if err = run.Apply(RunCommandStart, AttemptID{}); err == nil {
+		t.Fatal("a restored running attempt accepted a start")
+	}
+	if err = run.Apply(RunCommandSuccessfulExit, AttemptID{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := run.CurrentAttempt().State; got != RunStateCompleted {
+		t.Fatalf("restored attempt reached %q", got)
+	}
+	// History is preserved, so a restored run does not lose its earlier attempts.
+	if attempts := run.Attempts(); len(attempts) != 2 || attempts[0].State != RunStateFailed {
+		t.Fatalf("restored history: %#v", attempts)
+	}
+}
+
+func TestRestoreRunRejectsRecordsItCannotGovern(t *testing.T) {
+	runID, attemptID, _ := mustRunIDs(t)
+	cases := map[string]struct {
+		id       RunID
+		attempts []Attempt
+	}{
+		"zero run":      {RunID{}, []Attempt{{ID: attemptID, State: RunStateCreated}}},
+		"no attempts":   {runID, nil},
+		"zero attempt":  {runID, []Attempt{{State: RunStateCreated}}},
+		"unknown state": {runID, []Attempt{{ID: attemptID, State: RunState("half-started")}}},
+	}
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			run, err := RestoreRun(test.id, test.attempts)
+			if run != nil || err == nil {
+				t.Fatalf("restored %s: %#v %v", name, run, err)
+			}
+			var runErr *RunError
+			if !errors.As(err, &runErr) {
+				t.Fatalf("error is not a lifecycle error: %v", err)
+			}
+		})
+	}
+}
+
+func TestRestoreRunCopiesTheCallersAttempts(t *testing.T) {
+	runID, attemptID, _ := mustRunIDs(t)
+	attempts := []Attempt{{ID: attemptID, State: RunStateRunning}}
+	run, err := RestoreRun(runID, attempts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = run.Apply(RunCommandSuccessfulExit, AttemptID{}); err != nil {
+		t.Fatal(err)
+	}
+	if attempts[0].State != RunStateRunning {
+		t.Fatal("restoring aliased the caller's slice")
+	}
+}

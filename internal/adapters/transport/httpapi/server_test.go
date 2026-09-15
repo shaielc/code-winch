@@ -136,3 +136,58 @@ func TestConfigurationRejectsWeakSecrets(t *testing.T) {
 		t.Fatal("NewHandler accepted weak local secrets")
 	}
 }
+
+// failingBackend answers every run command with one error, so a test can assert
+// the problem the adapter maps it to.
+type failingBackend struct {
+	backendStub
+	err error
+}
+
+func (b *failingBackend) StartRun(context.Context, string, RunId, string, int64) (Run, error) {
+	return Run{}, b.err
+}
+
+func TestStartMapsBackendRefusalsToStableProblems(t *testing.T) {
+	cases := map[string]struct {
+		err    error
+		status int
+		code   string
+	}{
+		"unsupported profile": {ErrUnsupportedProfile, http.StatusUnprocessableEntity, "unsupported_profile"},
+		"state conflict":      {ErrStateConflict, http.StatusConflict, "run_state_conflict"},
+		"stale etag":          {ErrPreconditionFailed, http.StatusPreconditionFailed, "precondition_failed"},
+		"unknown run":         {ErrRunNotFound, http.StatusNotFound, "run_not_found"},
+	}
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			h := newTestHandler(t, &failingBackend{err: test.err}, io.Discard, 1024)
+			recorder := httptest.NewRecorder()
+			r := request(http.MethodPost, "/api/v1/runs/01J00000000000000000000000/start", "")
+			r.Header.Set("Idempotency-Key", "start-1")
+			r.Header.Set("If-Match", `"1"`)
+			h.ServeHTTP(recorder, r)
+			if recorder.Code != test.status {
+				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+			}
+			if !strings.Contains(recorder.Body.String(), `"code":"`+test.code+`"`) {
+				t.Fatalf("problem body=%s", recorder.Body.String())
+			}
+		})
+	}
+}
+
+// TestStartRequiresAUsableETag covers the precondition the router cannot: a
+// present but unparseable If-Match reaches the handler, which refuses to guess
+// a version rather than starting the run unconditionally.
+func TestStartRequiresAUsableETag(t *testing.T) {
+	h := newTestHandler(t, &backendStub{}, io.Discard, 1024)
+	recorder := httptest.NewRecorder()
+	r := request(http.MethodPost, "/api/v1/runs/01J00000000000000000000000/start", "")
+	r.Header.Set("Idempotency-Key", "start-1")
+	r.Header.Set("If-Match", `"not-a-version"`)
+	h.ServeHTTP(recorder, r)
+	if recorder.Code != http.StatusPreconditionRequired {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
