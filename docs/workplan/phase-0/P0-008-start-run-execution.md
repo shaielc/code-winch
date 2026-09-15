@@ -102,6 +102,10 @@ intent exists but no worker drains it yet.
 | Input | P0-009 |
 | Live WebSocket stream | P0-010 |
 | Stop | P0-011 |
+| A problem code for the profile refusal; it answers `run_state_conflict` | P0-019 |
+| Terminal `desired_state` on the supervisor control record | P0-019 |
+| The coordinator's package, which imports outward from `internal/application/` | P0-019 |
+| Fake-harness controls read through the configuration loader | P0-019 |
 
 ## Traces to
 
