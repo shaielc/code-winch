@@ -8,6 +8,7 @@ checkout=/var/lib/code-winch/checkout
 if [[ ! -d "$checkout/.git" ]]; then
   git clone --branch main --single-branch "$GITHUB_URL" "$checkout"
 fi
-exec python3 /opt/code-winch/workplan-control-panel/control_panel.py \
+cd /opt/workplan-control-panel
+exec python3 -m control_panel \
   --state-file=/var/lib/code-winch/state/task-state.json \
   --clone="$checkout" --host=0.0.0.0 --port=8765

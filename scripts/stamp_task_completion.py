@@ -5,15 +5,49 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-from task_scheduler import TRACKER, failure_detail, run, save_tracker, task_id_for_pr
+TRACKER = Path("docs/workplan/tasks.json")
+TASK_ID = re.compile(r"(?<![A-Z0-9])P\d+-\d{3}(?![A-Z0-9])", re.IGNORECASE)
 
 BOT_NAME = "github-actions[bot]"
 BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
+
+
+def run(*command: str, cwd: Path, capture: bool = True) -> str:
+    result = subprocess.run(
+        command,
+        cwd=cwd,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE if capture else None,
+        stderr=subprocess.PIPE if capture else None,
+        timeout=300,
+    )
+    return result.stdout.strip() if capture else ""
+
+
+def failure_detail(error: Exception) -> str:
+    """Recover the diagnostics that check=True drops from the exception text."""
+    stderr = getattr(error, "stderr", None)
+    return f"{error}: {stderr.strip()}" if stderr else str(error)
+
+
+def save_tracker(path: Path, tracker: dict[str, Any]) -> None:
+    path.write_text(json.dumps(tracker, indent=2) + "\n")
+
+
+def task_id_for_pr(pr: dict[str, Any], known_ids: set[str]) -> str | None:
+    text = "\n".join(
+        str(value or "")
+        for value in (pr.get("title"), pr.get("body"), pr.get("head", {}).get("ref"))
+    )
+    matches = {match.upper() for match in TASK_ID.findall(text)} & known_ids
+    return next(iter(matches)) if len(matches) == 1 else None
 
 
 def load_tracker(path: Path) -> dict[str, Any]:

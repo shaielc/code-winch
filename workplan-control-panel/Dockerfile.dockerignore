@@ -1,11 +1,5 @@
-.git/
-.github/
-docs/
-tests/
-**/node_modules/
-**/dist/
 **/__pycache__/
-**/*.tsbuildinfo
-
-**/.env
-**/compose.override.yml
+**/*.pyc
+.env
+compose.override.yml
+tests/

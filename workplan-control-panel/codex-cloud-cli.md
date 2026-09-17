@@ -1,7 +1,7 @@
 # What Codex Cloud tells us
 
-Reference for what `scripts/task_scheduler.py` can learn about the tasks it
-dispatches. Checked against `codex-cli` 0.144.5 and the `cloud-tasks` sources in
+Reference for what the control panel can learn about the tasks it dispatches.
+Checked against `codex-cli` 0.144.5 and the `cloud-tasks` sources in
 [openai/codex](https://github.com/openai/codex/blob/main/codex-rs/cloud-tasks/src/lib.rs);
 `.env.example` pins `CODEX_VERSION=latest`, so re-check after a CLI bump.
 
@@ -32,8 +32,8 @@ follow-up call needs is its last path segment.
 
 Task status is a four-state enum: `pending`, `ready`, `applied`, `error`.
 
-Two `exec` flags we do not pass: `--attempts N` runs best-of-N and shows up as
-`attempt_total`, and `--branch` sets the base branch. `--env` accepts an
+`--attempts N` runs best-of-N and shows up as `attempt_total`; `--branch` sets
+the base branch, which the panel supplies explicitly. `--env` accepts an
 environment *label* such as `shaielc/code-winch`, not only the opaque ID, so
 `CODEX_ENV_ID` does not strictly have to be the ID.
 
@@ -60,8 +60,6 @@ request for scriptable task and environment lifecycle management.
 
 ## Control-panel integration
 
-The panel now passes `--branch task/<ID>` explicitly for both Refine and
-Implement. Merge notifications only prepare branches; they do not submit cloud
-tasks. Submission records and returned URLs are kept per stage and branch
-revision in panel state. Audit uses `gh pr list` to resolve the selected PR head
-and returns a formatted prompt without launching a cloud task.
+The panel passes `--branch task/<ID>` for Refine and Implement, and keeps the
+submission URL per stage and branch revision. Audit formats a prompt using the
+selected pull request and its current head; it does not submit a cloud task.

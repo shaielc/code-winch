@@ -1,8 +1,8 @@
 services:
   runner:
     build:
-      context: ..
-      dockerfile: workplan-control-panel/Dockerfile
+      context: .
+      dockerfile: Dockerfile
       args:
         RUNNER_IMAGE: ${RUNNER_IMAGE:-ghcr.io/actions/actions-runner:latest}
         NODE_IMAGE: ${NODE_IMAGE:-node:22-bookworm-slim}
