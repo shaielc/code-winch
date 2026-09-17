@@ -397,6 +397,23 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description The run's harness and sandbox profile pair is not supported by this deployment. */
+        ProblemUnsupportedProfile: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /** @example {
+                 *       "type": "https://code-winch.dev/problems/unsupported-profile",
+                 *       "title": "Unsupported profile",
+                 *       "status": 422,
+                 *       "code": "unsupported_profile",
+                 *       "detail": "This deployment cannot run the run's harness and sandbox profile pair.",
+                 *       "requestId": "01K0EXAMPLE00000000000000"
+                 *     } */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description One or more request fields are invalid. */
         ProblemValidationFailed: {
             headers: {
@@ -542,6 +559,7 @@ export interface operations {
             404: components["responses"]["ProblemRunNotFound"];
             409: components["responses"]["ProblemStateConflict"];
             412: components["responses"]["ProblemPreconditionFailed"];
+            422: components["responses"]["ProblemUnsupportedProfile"];
             428: components["responses"]["ProblemPreconditionRequired"];
         };
     };

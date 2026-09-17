@@ -102,6 +102,10 @@ intent exists but no worker drains it yet.
 | Input | P0-009 |
 | Live WebSocket stream | P0-010 |
 | Stop | P0-011 |
+| Output kept when an event append fails; no `completed` run with output missing | P0-020 |
+| A start whose request is cancelled, or whose lease acquisition fails, never strands the run in `queued` | P0-021 |
+| Attempt transitions fenced by the run lease | P0-022 |
+| Truthful terminal state for a run the daemon was stopped under | Phase 1 — registered in [`../phase-1/README.md`](../phase-1/README.md) |
 
 ## Traces to
 

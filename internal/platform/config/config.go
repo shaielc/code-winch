@@ -22,6 +22,24 @@ type Config struct {
 	StaticDir           string        `yaml:"static_dir"`
 	ShutdownTimeout     time.Duration `yaml:"-"`
 	ShutdownTimeoutText string        `yaml:"shutdown_timeout"`
+	// FakeHarness holds the named-profile controls for `harnessProfile=fake`.
+	// They are the daemon-side half of the controllable fake profile: the same
+	// transcript, latency, and failure injections `winch dev run` exposes as
+	// flags, resolved through the configuration layering rather than compiled in.
+	FakeHarness FakeHarnessConfig `yaml:"fake_harness"`
+}
+
+// FakeHarnessConfig configures the shipped fake harness profile. With no
+// transcript the daemon runs the harness in early-exit mode, because a run
+// started through the API has no way to answer an interactive prompt yet and a
+// harness blocked on its terminal would never reach a terminal state.
+type FakeHarnessConfig struct {
+	Binary        string        `yaml:"binary"`
+	Transcript    string        `yaml:"transcript"`
+	Delay         time.Duration `yaml:"-"`
+	DelayText     string        `yaml:"delay"`
+	ForceFailure  bool          `yaml:"force_failure"`
+	MalformedLine bool          `yaml:"malformed_line"`
 }
 
 // ValidationError contains field names only, never rejected values.
@@ -47,10 +65,25 @@ func Load() (Config, error) {
 			return c, fmt.Errorf("config file: %w", err)
 		}
 	}
-	env := map[string]*string{"WINCH_ADDR": &c.Addr, "WINCH_DATABASE_URL": &c.DatabaseURL, "WINCH_ALLOWED_ORIGIN": &c.AllowedOrigin, "WINCH_TOKEN": &c.Token, "WINCH_CSRF_TOKEN": &c.CSRFToken, "WINCH_ACTOR": &c.Actor, "WINCH_STATIC_DIR": &c.StaticDir, "WINCH_SHUTDOWN_TIMEOUT": &c.ShutdownTimeoutText}
+	env := map[string]*string{"WINCH_ADDR": &c.Addr, "WINCH_DATABASE_URL": &c.DatabaseURL, "WINCH_ALLOWED_ORIGIN": &c.AllowedOrigin, "WINCH_TOKEN": &c.Token, "WINCH_CSRF_TOKEN": &c.CSRFToken, "WINCH_ACTOR": &c.Actor, "WINCH_STATIC_DIR": &c.StaticDir, "WINCH_SHUTDOWN_TIMEOUT": &c.ShutdownTimeoutText, "WINCH_FAKE_HARNESS_BINARY": &c.FakeHarness.Binary, "WINCH_FAKE_HARNESS_TRANSCRIPT": &c.FakeHarness.Transcript, "WINCH_FAKE_HARNESS_DELAY": &c.FakeHarness.DelayText}
 	for key, dst := range env {
 		if value, ok := os.LookupEnv(key); ok {
 			*dst = value
+		}
+	}
+	var invalid []string
+	flags := map[string]*bool{"fake_harness.force_failure": &c.FakeHarness.ForceFailure, "fake_harness.malformed_line": &c.FakeHarness.MalformedLine}
+	for field, dst := range flags {
+		// An unparseable flag is reported rather than silently resolving to false:
+		// starting a profile the operator did not ask for is the worse answer.
+		value, ok := os.LookupEnv("WINCH_FAKE_HARNESS_" + strings.ToUpper(strings.TrimPrefix(field, "fake_harness.")))
+		if !ok {
+			continue
+		}
+		if parsed, err := strconv.ParseBool(value); err == nil {
+			*dst = parsed
+		} else {
+			invalid = append(invalid, field)
 		}
 	}
 	if c.ShutdownTimeoutText != "" {
@@ -59,11 +92,20 @@ func Load() (Config, error) {
 			c.ShutdownTimeout = d
 		}
 	}
-	return c, c.Validate()
+	if c.FakeHarness.DelayText != "" {
+		d, err := time.ParseDuration(c.FakeHarness.DelayText)
+		if err == nil {
+			c.FakeHarness.Delay = d
+		}
+	}
+	return c, c.validate(invalid)
 }
 
-func (c Config) Validate() error {
-	var fields []string
+func (c Config) Validate() error { return c.validate(nil) }
+
+// validate reports every invalid field at once. Callers pass fields Load could
+// not resolve at all, so a rejected boolean is named alongside the rest.
+func (c Config) validate(fields []string) error {
 	if strings.TrimSpace(c.Addr) == "" {
 		fields = append(fields, "addr")
 	}
@@ -92,6 +134,14 @@ func (c Config) Validate() error {
 	}
 	if c.ShutdownTimeout <= 0 {
 		fields = append(fields, "shutdown_timeout")
+	}
+	if c.FakeHarness.DelayText != "" {
+		if d, e := time.ParseDuration(c.FakeHarness.DelayText); e != nil || d < 0 {
+			fields = append(fields, "fake_harness.delay")
+		}
+	}
+	if c.FakeHarness.Delay < 0 {
+		fields = append(fields, "fake_harness.delay")
 	}
 	if len(fields) > 0 {
 		return &ValidationError{Fields: fields}

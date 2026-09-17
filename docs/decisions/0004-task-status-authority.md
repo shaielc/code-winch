@@ -88,3 +88,11 @@ recovery previously hid the matching failures that caused the problem.
 Tracker merge conflicts become routine rather than occasional, fork
 contributions need automated stamping, or manual lease release becomes frequent
 enough that the underlying matching failure should be fixed instead.
+
+## Control-panel update (2026-09-17)
+
+The self-contained control panel now owns scheduling through its HTTP API.
+GitHub Actions only posts merged-main events. The panel owns the main checkout,
+task-branch commits, stage submissions, and credentials; the runner shares none
+of those volumes. Completion authority remains with the tracker on main. See
+`workplan-control-panel/README.md` for the API and deployment configuration.

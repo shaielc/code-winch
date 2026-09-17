@@ -95,5 +95,20 @@ class MergeBaseBranchTests(unittest.TestCase):
         run.assert_called_once()
 
 
+class StampHelpersTests(unittest.TestCase):
+    def test_task_id_for_pr_accepts_one_known_id(self):
+        pull = {"title": "Implement P0-001", "body": "Task: P0-001", "head": {"ref": "work"}}
+        self.assertEqual(stamp.task_id_for_pr(pull, {"P0-001"}), "P0-001")
+
+    def test_task_id_for_pr_rejects_ambiguous_ids(self):
+        pull = {"title": "P0-001 and P0-002", "body": "", "head": {"ref": "work"}}
+        self.assertIsNone(stamp.task_id_for_pr(pull, {"P0-001", "P0-002"}))
+
+    def test_failure_detail_keeps_the_captured_stderr(self):
+        error = subprocess.CalledProcessError(1, ["codex"], stderr="environment not found\n")
+        self.assertIn("environment not found", stamp.failure_detail(error))
+        self.assertEqual(stamp.failure_detail(OSError("no codex")), "no codex")
+
+
 if __name__ == "__main__":
     unittest.main()

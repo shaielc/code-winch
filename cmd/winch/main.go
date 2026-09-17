@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -44,8 +45,11 @@ func main() {
 			runGet()
 			return
 		case "start":
-			fmt.Fprintln(os.Stderr, "winch run start: not implemented; owner=P0-008")
-			os.Exit(1)
+			runStart()
+			return
+		case "events":
+			runEvents()
+			return
 		}
 	}
 	printUsage(os.Stderr)
@@ -53,7 +57,7 @@ func main() {
 }
 
 func printUsage(out io.Writer) {
-	_, _ = fmt.Fprintln(out, "usage: winch run {create|get|start} | winch dev run")
+	_, _ = fmt.Fprintln(out, "usage: winch run {create|get|start|events} | winch dev run")
 }
 
 func devRun() {
@@ -156,7 +160,7 @@ func runCreate() {
 	_ = fs.Parse(os.Args[3:])
 	body, _ := json.Marshal(map[string]string{"workspacePath": *workspace, "harnessProfile": *harness, "sandboxProfile": *sandbox})
 	var run apiRun
-	requestAPI(http.MethodPost, "/api/v1/runs", *idempotencyKey, body, &run)
+	requestAPI(http.MethodPost, "/api/v1/runs", map[string]string{"Idempotency-Key": *idempotencyKey}, body, &run)
 	fmt.Println(run.ID)
 }
 func runGet() {
@@ -167,11 +171,70 @@ func runGet() {
 		os.Exit(2)
 	}
 	var run apiRun
-	requestAPI(http.MethodGet, "/api/v1/runs/"+fs.Arg(0), "", nil, &run)
+	requestAPI(http.MethodGet, "/api/v1/runs/"+fs.Arg(0), nil, nil, &run)
 	data, _ := json.MarshalIndent(run, "", "  ")
 	fmt.Println(string(data))
 }
-func requestAPI(method, path, idempotencyKey string, body []byte, target any) {
+
+// runStart reads the run first because start is conditional: the daemon refuses
+// a command that does not carry the run's current ETag, so the operator does
+// not have to quote one by hand.
+func runStart() {
+	fs := flag.NewFlagSet("run start", flag.ExitOnError)
+	idempotencyKey := fs.String("idempotency-key", uuid.NewString(), "request idempotency key")
+	_ = fs.Parse(os.Args[3:])
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: winch run start RUN_ID")
+		os.Exit(2)
+	}
+	var current apiRun
+	requestAPI(http.MethodGet, "/api/v1/runs/"+fs.Arg(0), nil, nil, &current)
+	var started apiRun
+	headers := map[string]string{"Idempotency-Key": *idempotencyKey, "If-Match": fmt.Sprintf("%q", strconv.FormatInt(current.Version, 10))}
+	requestAPI(http.MethodPost, "/api/v1/runs/"+fs.Arg(0)+"/start", headers, nil, &started)
+	data, _ := json.MarshalIndent(started, "", "  ")
+	fmt.Println(string(data))
+}
+
+type apiEventPage struct {
+	Events []struct {
+		EventID     string          `json:"eventId"`
+		Sequence    int64           `json:"sequence"`
+		Kind        string          `json:"kind"`
+		Sensitivity string          `json:"sensitivity"`
+		OccurredAt  string          `json:"occurredAt"`
+		Payload     json.RawMessage `json:"payload"`
+	} `json:"events"`
+	NextAfterSequence int64 `json:"nextAfterSequence"`
+	HasMore           bool  `json:"hasMore"`
+}
+
+// runEvents polls the durable event page. It follows hasMore so one invocation
+// prints the whole history rather than the first page of it.
+func runEvents() {
+	fs := flag.NewFlagSet("run events", flag.ExitOnError)
+	after := fs.Int64("after-sequence", 0, "return events after this sequence")
+	limit := fs.Int("limit", 50, "events per request")
+	_ = fs.Parse(os.Args[3:])
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: winch run events RUN_ID")
+		os.Exit(2)
+	}
+	cursor := *after
+	for {
+		var page apiEventPage
+		requestAPI(http.MethodGet, fmt.Sprintf("/api/v1/runs/%s/events?after_sequence=%d&limit=%d", fs.Arg(0), cursor, *limit), nil, nil, &page)
+		for _, event := range page.Events {
+			fmt.Printf("%d\t%s\t%s\t%s\n", event.Sequence, event.Kind, event.Sensitivity, event.Payload)
+		}
+		if !page.HasMore {
+			return
+		}
+		cursor = page.NextAfterSequence
+	}
+}
+
+func requestAPI(method, path string, headers map[string]string, body []byte, target any) {
 	base, token, csrf, origin := apiSettings()
 	req, err := http.NewRequest(method, base+path, strings.NewReader(string(body)))
 	if err != nil {
@@ -182,7 +245,9 @@ func requestAPI(method, path, idempotencyKey string, body []byte, target any) {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-CSRF-Token", csrf)
 		req.Header.Set("Origin", origin)
-		req.Header.Set("Idempotency-Key", idempotencyKey)
+	}
+	for name, value := range headers {
+		req.Header.Set(name, value)
 	}
 	response, err := http.DefaultClient.Do(req)
 	if err != nil {

@@ -331,6 +331,18 @@ Name the files actually expected. A directory is a legitimate entry when the
 task genuinely owns it — creates it, or rewrites most of it — but not as
 shorthand for files the planner could have listed.
 
+Derive the write set from the scope, one bullet at a time, by naming the files
+that carry each bullet. A required response or refusal brings the API document
+and its problem mapping. A new runtime control brings the configuration loader,
+and a new command brings operator documentation. An entry names a file; it does
+not restrict what the task may do there. Restrictions belong in Scope or
+Non-goals.
+
+A write set is a forecast, not a boundary. A change that writes outside it lists
+those files, and the write set and the phase's collision report are updated
+from that list. A file outside the forecast is not a deviation; scope is judged
+against Scope and Non-goals, and meaning against Contract surfaces.
+
 Two available tasks whose write sets overlap are a **write collision**. That is
 a warning, not an edge: both proceed, and whoever takes the second one rebases.
 Report the pairs so the cost is visible; do not add a dependency to make the
@@ -399,7 +411,9 @@ One sentence, stated as an observable change to the running system.
 
 ## Scope
 
-- Bullets. What this task builds.
+- Bullets. What this task builds. Written as a prediction when the plan is
+  created. The refinement in `skills/task/SKILL.md` makes them concrete
+  implementation instructions against the code before implementation starts.
 
 ## Non-goals
 
@@ -413,8 +427,9 @@ shapes and should be merged into the one that reaches it.
 
 ## Write set
 
-Concrete files and directories this task writes. Overlap with another available
-task is a merge warning, not an edge.
+Concrete files and directories this task writes, derived from the Scope bullets.
+A forecast, not a boundary. Overlap with another available task is a merge
+warning, not an edge.
 
 ## Contract surfaces
 
@@ -438,6 +453,8 @@ Exact commands and the expected observable result.
 ## Acceptance criteria
 
 - [ ] Observable, checkable statements. No restatement of the scope.
+- [ ] For every guarantee the objective states, the failure that would break it
+  and what a person observes when it is injected.
 - [ ] Invariants that must still hold at completion.
 
 ## Deferrals
