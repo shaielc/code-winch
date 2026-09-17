@@ -21,6 +21,7 @@ from typing import Any
 TASK_ID = re.compile(r"(?<![A-Z0-9])P\d+-\d{3}(?![A-Z0-9])", re.IGNORECASE)
 TASK_URL = re.compile(r"https?://\S+/codex/tasks/\S+")
 PROMPT_TEMPLATE = Path("scripts/task-implementation-prompt.md")
+TRACKER = Path("docs/workplan/tasks.json")
 
 
 def run(*command: str, cwd: Path, capture: bool = True) -> str:
@@ -90,10 +91,116 @@ def acquire_lock(state_file: Path) -> Any:
 
 def load_tracker(repo_root: Path, remote: str, branch: str) -> dict[str, Any]:
     run("git", "fetch", "--quiet", remote, branch, cwd=repo_root)
-    contents = run(
-        "git", "show", f"{remote}/{branch}:docs/workplan/tasks.json", cwd=repo_root
-    )
+    contents = run("git", "show", f"{remote}/{branch}:{TRACKER}", cwd=repo_root)
     return json.loads(contents)
+
+
+def save_tracker(path: Path, tracker: dict[str, Any]) -> None:
+    path.write_text(json.dumps(tracker, indent=2) + "\n")
+
+
+def task_branch(task_id: str) -> str:
+    return f"task/{task_id}"
+
+
+def ensure_task_branch(clone: Path, remote: str, base: str, task_id: str) -> None:
+    """Create the task branch on the remote from the base branch unless it exists."""
+    ref = f"refs/heads/{task_branch(task_id)}"
+    run("git", "fetch", "--quiet", remote, base, cwd=clone)
+    if not run("git", "ls-remote", "--heads", remote, ref, cwd=clone):
+        run("git", "push", "--quiet", remote, f"{remote}/{base}:{ref}", cwd=clone)
+    run("git", "fetch", "--quiet", remote, task_branch(task_id), cwd=clone)
+
+
+def push_opening_commit(clone: Path, remote: str, task_id: str) -> bool:
+    """Mark the task in progress on its branch once, and say whether this call did.
+
+    The commit is built in a temporary worktree so the clone's own checkout is never
+    touched. It is also what puts the branch ahead of its base, which GitHub requires
+    before it will open a pull request from it.
+    """
+    branch = task_branch(task_id)
+    tracker = json.loads(run("git", "show", f"{remote}/{branch}:{TRACKER}", cwd=clone))
+    task = next(item for item in tracker["tasks"] if item["id"] == task_id)
+    if task["status"] == "in_progress":
+        return False
+
+    task["status"] = "in_progress"
+    with tempfile.TemporaryDirectory() as scratch:
+        worktree = Path(scratch) / "worktree"
+        run(
+            "git",
+            "worktree",
+            "add",
+            "--quiet",
+            "--detach",
+            str(worktree),
+            f"{remote}/{branch}",
+            cwd=clone,
+        )
+        try:
+            save_tracker(worktree / TRACKER, tracker)
+            run("git", "add", str(TRACKER), cwd=worktree)
+            message = f"chore: mark {task_id} in progress"
+            run("git", "commit", "--quiet", "-m", message, cwd=worktree)
+            run("git", "push", "--quiet", remote, f"HEAD:refs/heads/{branch}", cwd=worktree)
+        finally:
+            run("git", "worktree", "remove", "--force", str(worktree), cwd=clone)
+    return True
+
+
+def ensure_draft_pull_request(clone: Path, base: str, task: dict[str, Any]) -> str:
+    """Return the task branch's open pull request URL, opening a draft when there is none."""
+    branch = task_branch(task["id"])
+    listed = run(
+        "gh",
+        "pr",
+        "list",
+        "--head",
+        branch,
+        "--base",
+        base,
+        "--state",
+        "open",
+        "--json",
+        "number,url",
+        cwd=clone,
+    )
+    pulls = json.loads(listed)
+    if pulls:
+        return pulls[0]["url"]
+    return run(
+        "gh",
+        "pr",
+        "create",
+        "--draft",
+        "--base",
+        base,
+        "--head",
+        branch,
+        "--title",
+        f"{task['id']}: {task['title']}",
+        "--body",
+        f"Task: {task['id']}",
+        cwd=clone,
+    )
+
+
+def task_pull_requests(clone: Path, task_id: str) -> list[dict[str, Any]]:
+    """List the open pull requests into the task branch with the commit each points at."""
+    listed = run(
+        "gh",
+        "pr",
+        "list",
+        "--base",
+        task_branch(task_id),
+        "--state",
+        "open",
+        "--json",
+        "number,url,headRefOid",
+        cwd=clone,
+    )
+    return json.loads(listed)
 
 
 def effective_tracker(tracker: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
@@ -244,6 +351,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="directory holding scripts/; defaults to the enclosing git checkout",
     )
+    parser.add_argument(
+        "--clone",
+        type=Path,
+        help="git checkout that git and gh run in; defaults to --repo-root",
+    )
     parser.add_argument("--state-file", type=Path)
     parser.add_argument(
         "--tracker-file",
@@ -271,6 +383,7 @@ def parse_args() -> argparse.Namespace:
 
 def schedule(
     repo_root: Path,
+    clone: Path,
     args: argparse.Namespace,
     state_file: Path,
     pulls: list[dict[str, Any]],
@@ -278,7 +391,7 @@ def schedule(
     tracker = (
         json.loads(args.tracker_file.read_text())
         if args.tracker_file
-        else load_tracker(repo_root, args.remote, args.branch)
+        else load_tracker(clone, args.remote, args.branch)
     )
     if args.tracker_snapshot:
         write_json(args.tracker_snapshot, tracker)
@@ -305,6 +418,7 @@ def main() -> int:
     repo_root = (
         args.repo_root or Path(run("git", "rev-parse", "--show-toplevel", cwd=Path.cwd()))
     ).resolve()
+    clone = (args.clone or repo_root).resolve()
     state_file = (args.state_file or default_state_file(repo_root)).resolve()
     lock_handle = acquire_lock(state_file)
     try:
@@ -313,7 +427,7 @@ def main() -> int:
         if "pull_request" in payload and not pull:
             print("event is not a merged pull request; nothing to do")
             return 0
-        schedule(repo_root, args, state_file, [pull] if pull else [])
+        schedule(repo_root, clone, args, state_file, [pull] if pull else [])
         return 0
     finally:
         lock_handle.close()

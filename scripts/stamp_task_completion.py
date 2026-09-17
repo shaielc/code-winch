@@ -10,9 +10,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from task_scheduler import failure_detail, run, task_id_for_pr
+from task_scheduler import TRACKER, failure_detail, run, save_tracker, task_id_for_pr
 
-TRACKER = Path("docs/workplan/tasks.json")
 BOT_NAME = "github-actions[bot]"
 BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
 
@@ -22,10 +21,6 @@ def load_tracker(path: Path) -> dict[str, Any]:
     if tracker.get("schema_version") != 1:
         raise ValueError(f"unsupported tracker schema in {path}")
     return tracker
-
-
-def save_tracker(path: Path, tracker: dict[str, Any]) -> None:
-    path.write_text(json.dumps(tracker, indent=2) + "\n")
 
 
 def contains_base(repo_root: Path, remote: str, branch: str) -> bool:

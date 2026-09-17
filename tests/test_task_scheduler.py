@@ -1,7 +1,11 @@
+import copy
 import importlib.util
 import io
+import json
+import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
@@ -150,6 +154,193 @@ class TaskSchedulerTests(unittest.TestCase):
                 for value in fields.values():
                     self.assertIn(value, prompt)
                 self.assertNotIn("$", prompt)
+
+
+TASK = {"id": "P0-001", "title": "Upstream"}
+TRACKER = {
+    "schema_version": 1,
+    "tasks": [{**TASK, "status": "pending", "owner": None, "blocked_reason": None}],
+}
+
+
+def git(cwd: Path, *arguments: str) -> str:
+    return task_scheduler.run("git", *arguments, cwd=cwd)
+
+
+def pushes(spy) -> list[tuple[str, ...]]:
+    return [call.args for call in spy.call_args_list if call.args[:2] == ("git", "push")]
+
+
+class TaskBranchTests(unittest.TestCase):
+    def setUp(self):
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name)
+        isolated = patch.dict(
+            os.environ, {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+        )
+        isolated.start()
+        self.addCleanup(isolated.stop)
+
+        self.origin = self.root / "origin.git"
+        git(self.root, "init", "--quiet", "--bare", "--initial-branch=main", str(self.origin))
+        seed = self.clone("seed")
+        (seed / task_scheduler.TRACKER).parent.mkdir(parents=True)
+        # Not save_tracker's layout, so only a tracker written by save_tracker matches it.
+        (seed / task_scheduler.TRACKER).write_text(json.dumps(TRACKER, indent=4))
+        git(seed, "add", ".")
+        git(seed, "commit", "--quiet", "-m", "seed")
+        git(seed, "push", "--quiet", "origin", "HEAD:main")
+
+    def clone(self, name: str) -> Path:
+        path = self.root / name
+        git(self.root, "clone", "--quiet", str(self.origin), str(path))
+        git(path, "config", "user.name", "Scheduler Test")
+        git(path, "config", "user.email", "scheduler@example.com")
+        return path
+
+    def start(self, clone: Path) -> bool:
+        task_scheduler.ensure_task_branch(clone, "origin", "main", "P0-001")
+        return task_scheduler.push_opening_commit(clone, "origin", "P0-001")
+
+    def commits_ahead(self) -> str:
+        return git(self.origin, "rev-list", "--count", "main..task/P0-001")
+
+    def test_repeated_calls_create_the_branch_and_opening_commit_once(self):
+        clone = self.clone("worker")
+        with patch.object(task_scheduler, "run", wraps=task_scheduler.run) as spy:
+            self.assertTrue(self.start(clone))
+            self.assertEqual(len(pushes(spy)), 2)
+            spy.reset_mock()
+            self.assertFalse(self.start(clone))
+            self.assertEqual(pushes(spy), [])
+        self.assertEqual(self.commits_ahead(), "1")
+        self.assertEqual(len(git(clone, "worktree", "list").splitlines()), 1)
+
+    def test_a_second_clone_skips_the_opening_commit_already_on_origin(self):
+        self.start(self.clone("first"))
+        tip = git(self.origin, "rev-parse", "task/P0-001")
+        with patch.object(task_scheduler, "run", wraps=task_scheduler.run) as spy:
+            self.assertFalse(self.start(self.clone("second")))
+        self.assertEqual(pushes(spy), [])
+        self.assertEqual(git(self.origin, "rev-parse", "task/P0-001"), tip)
+
+    def test_the_committed_tracker_is_save_trackers_output_byte_for_byte(self):
+        self.start(self.clone("worker"))
+        tracker = copy.deepcopy(TRACKER)
+        tracker["tasks"][0]["status"] = "in_progress"
+        expected = self.root / "expected.json"
+        task_scheduler.save_tracker(expected, tracker)
+        committed = subprocess.run(
+            ("git", "show", f"task/P0-001:{task_scheduler.TRACKER}"),
+            cwd=self.origin,
+            check=True,
+            capture_output=True,
+        ).stdout
+        self.assertEqual(committed, expected.read_bytes())
+
+    def test_a_failed_push_still_removes_the_worktree(self):
+        clone = self.clone("worker")
+        task_scheduler.ensure_task_branch(clone, "origin", "main", "P0-001")
+        real_run = task_scheduler.run
+
+        def rejecting_push(*command, cwd, capture=True):
+            if command[:2] == ("git", "push"):
+                raise subprocess.CalledProcessError(1, command, stderr="rejected")
+            return real_run(*command, cwd=cwd, capture=capture)
+
+        with patch.object(task_scheduler, "run", side_effect=rejecting_push):
+            with self.assertRaises(subprocess.CalledProcessError):
+                task_scheduler.push_opening_commit(clone, "origin", "P0-001")
+        self.assertEqual(len(git(clone, "worktree", "list").splitlines()), 1)
+        self.assertEqual(self.commits_ahead(), "0")
+
+    def test_a_stale_clone_reads_and_branches_from_the_current_origin_main(self):
+        stale = self.clone("stale")
+        (stale / task_scheduler.TRACKER).write_text("{}")
+        other = self.clone("other")
+        tracker = copy.deepcopy(TRACKER)
+        tracker["tasks"][0]["title"] = "Renamed upstream"
+        task_scheduler.save_tracker(other / task_scheduler.TRACKER, tracker)
+        git(other, "commit", "--quiet", "-am", "rename")
+        git(other, "push", "--quiet", "origin", "HEAD:main")
+
+        self.assertEqual(task_scheduler.load_tracker(stale, "origin", "main"), tracker)
+        self.start(stale)
+        self.assertEqual(
+            git(self.origin, "rev-parse", "task/P0-001^"), git(self.origin, "rev-parse", "main")
+        )
+
+
+GH_STUB = """
+import json, os, sys
+
+with open(os.environ["GH_STUB_CALLS"], "a") as calls:
+    calls.write(json.dumps(sys.argv[1:]) + "\\n")
+if sys.argv[1:3] == ["pr", "list"]:
+    print(open(os.environ["GH_STUB_LIST"]).read())
+elif sys.argv[1:3] == ["pr", "create"]:
+    print("https://github.com/owner/repo/pull/8")
+"""
+
+
+class PullRequestTests(unittest.TestCase):
+    def setUp(self):
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name)
+        stub = self.root / "gh"
+        stub.write_text(f"#!{sys.executable}{GH_STUB}")
+        stub.chmod(0o755)
+        self.calls_file = self.root / "calls.jsonl"
+        self.listed = self.root / "listed.json"
+        environment = patch.dict(
+            os.environ,
+            {
+                "PATH": f"{self.root}{os.pathsep}{os.environ['PATH']}",
+                "GH_STUB_CALLS": str(self.calls_file),
+                "GH_STUB_LIST": str(self.listed),
+            },
+        )
+        environment.start()
+        self.addCleanup(environment.stop)
+
+    def calls(self) -> list[list[str]]:
+        return [json.loads(line) for line in self.calls_file.read_text().splitlines()]
+
+    def test_a_draft_is_created_when_no_pull_request_is_open(self):
+        self.listed.write_text("[]")
+        url = task_scheduler.ensure_draft_pull_request(self.root, "main", TASK)
+        self.assertEqual(url, "https://github.com/owner/repo/pull/8")
+        self.assertEqual(
+            self.calls(),
+            [
+                ["pr", "list", "--head", "task/P0-001", "--base", "main"]
+                + ["--state", "open", "--json", "number,url"],
+                ["pr", "create", "--draft", "--base", "main", "--head", "task/P0-001"]
+                + ["--title", "P0-001: Upstream", "--body", "Task: P0-001"],
+            ],
+        )
+
+    def test_an_open_pull_request_is_reused(self):
+        self.listed.write_text(
+            json.dumps([{"number": 7, "url": "https://github.com/owner/repo/pull/7"}])
+        )
+        url = task_scheduler.ensure_draft_pull_request(self.root, "main", TASK)
+        self.assertEqual(url, "https://github.com/owner/repo/pull/7")
+        self.assertEqual([call[:2] for call in self.calls()], [["pr", "list"]])
+
+    def test_open_pull_requests_into_the_task_branch_carry_their_head(self):
+        pulls = [{"number": 9, "url": "https://example/pr/9", "headRefOid": "0123abcd"}]
+        self.listed.write_text(json.dumps(pulls))
+        self.assertEqual(task_scheduler.task_pull_requests(self.root, "P0-001"), pulls)
+        self.assertEqual(
+            self.calls(),
+            [
+                ["pr", "list", "--base", "task/P0-001"]
+                + ["--state", "open", "--json", "number,url,headRefOid"]
+            ],
+        )
 
 
 if __name__ == "__main__":
