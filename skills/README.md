@@ -53,12 +53,15 @@ it in permanently.
 
 ### Dispatched task agents
 
-`scripts/task-prompt.md` instructs every dispatched agent to refine its task's
-brief: read the brief, `skills/task/SKILL.md`, and all applicable `AGENTS.md`
-files, then commit the refined brief as the first commit on the task's branch.
-Implementation starts from that commit. The root `AGENTS.md` points here too, so
-an agent that lands in the repository by any other route finds the same
-instructions.
+Each stage of a dispatched task has its own prompt.
+`scripts/task-refine-prompt.md` instructs the agent to refine its task's brief:
+read the brief, `skills/task/SKILL.md`, and all applicable `AGENTS.md` files,
+then commit the refined brief as the first commit on the task's branch.
+Implementation starts from that commit, under
+`scripts/task-implementation-prompt.md`. `scripts/task-audit-prompt.md` has
+Claude audit the implementation pull request and post the report as a review on
+it. The root `AGENTS.md` points here too, so an agent that lands in the
+repository by any other route finds the same instructions.
 
 Keep that wiring narrow. A dispatched agent is pointed at the skill addressed to
 it, not at every skill in this directory.

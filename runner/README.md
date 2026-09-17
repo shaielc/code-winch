@@ -85,11 +85,13 @@ submits newly available tasks with `codex cloud exec`. A lock file beside the
 state file prevents overlapping runs from dispatching the same task.
 
 What it dispatches is the first step of a task, not its implementation.
-`scripts/task-prompt.md` asks the agent to refine the task's brief against the
-code, following `skills/task/SKILL.md`. The agent commits the refined brief as
-the first commit on the task's branch and opens a draft pull request.
-Implementation starts from that commit. The panel's per-task **Refine** button
-dispatches the same step.
+`scripts/task-refine-prompt.md` asks the agent to refine the task's brief against
+the code, following `skills/task/SKILL.md`. The agent commits the refined brief
+as the first commit on the task's branch and opens a draft pull request. The
+panel's per-task **Refine** button dispatches the same step. Implementation
+starts from the refined brief's commit, under
+`scripts/task-implementation-prompt.md`, and `scripts/task-audit-prompt.md` asks
+Claude to audit the implementation pull request.
 
 That run also publishes the tracker it scheduled from to
 `/var/lib/code-winch/tracker.json`. The control panel reads that snapshot rather

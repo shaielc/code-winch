@@ -8,8 +8,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 
+REPO_ROOT = Path(__file__).parents[1]
 SPEC = importlib.util.spec_from_file_location(
-    "task_scheduler", Path(__file__).parents[1] / "scripts/task_scheduler.py"
+    "task_scheduler", REPO_ROOT / "scripts/task_scheduler.py"
 )
 task_scheduler = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader
@@ -133,6 +134,22 @@ class TaskSchedulerTests(unittest.TestCase):
                 task_scheduler.parse_args()
         with patch.object(sys, "argv", [*argv, "--state-file", "/var/lib/state.json"]):
             self.assertEqual(task_scheduler.parse_args().repo_root, Path("/opt/code-winch"))
+
+    def test_stage_prompts_render_with_their_fields(self):
+        task = {"id": "P0-001", "title": "Upstream", "brief": "phase-0/P0-001-upstream.md"}
+        pull = {"pr_url": "https://example/pr/1", "head": "0123abcd"}
+        stages = {
+            task_scheduler.PROMPT_TEMPLATE: task,
+            Path("scripts/task-refine-prompt.md"): task,
+            Path("scripts/task-audit-prompt.md"): {**task, **pull},
+        }
+        for path, fields in stages.items():
+            with self.subTest(path=path):
+                template = task_scheduler.load_prompt_template(REPO_ROOT, path)
+                prompt = template.substitute(fields)
+                for value in fields.values():
+                    self.assertIn(value, prompt)
+                self.assertNotIn("$", prompt)
 
 
 if __name__ == "__main__":

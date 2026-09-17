@@ -20,7 +20,7 @@ from typing import Any
 
 TASK_ID = re.compile(r"(?<![A-Z0-9])P\d+-\d{3}(?![A-Z0-9])", re.IGNORECASE)
 TASK_URL = re.compile(r"https?://\S+/codex/tasks/\S+")
-PROMPT_TEMPLATE = Path("scripts/task-prompt.md")
+PROMPT_TEMPLATE = Path("scripts/task-implementation-prompt.md")
 
 
 def run(*command: str, cwd: Path, capture: bool = True) -> str:
