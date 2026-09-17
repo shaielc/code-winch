@@ -84,6 +84,13 @@ scheduler overlays its in-flight leases on the tracker from `origin/main` and
 submits newly available tasks with `codex cloud exec`. A lock file beside the
 state file prevents overlapping runs from dispatching the same task.
 
+What it dispatches is the first step of a task, not its implementation.
+`scripts/task-prompt.md` asks the agent to refine the task's brief against the
+code, following `skills/task/SKILL.md`. The agent commits the refined brief as
+the first commit on the task's branch and opens a draft pull request.
+Implementation starts from that commit. The panel's per-task **Refine** button
+dispatches the same step.
+
 That run also publishes the tracker it scheduled from to
 `/var/lib/code-winch/tracker.json`. The control panel reads that snapshot rather
 than cloning the repository, so it holds no GitHub credentials, and it runs the

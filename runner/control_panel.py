@@ -382,7 +382,7 @@ def button(action: str, task_id: str, label: str) -> str:
 def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
     actions = ""
     if entry["id"] in runnable:
-        actions += button("run", entry["id"], "Run")
+        actions += button("run", entry["id"], "Refine")
     if entry["local"] and entry["status"] != "completed":
         actions += button("expire", entry["id"], "Expire")
     return actions
