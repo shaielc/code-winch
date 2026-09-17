@@ -1,0 +1,8 @@
+.git/
+.github/
+docs/
+tests/
+**/node_modules/
+**/dist/
+**/__pycache__/
+**/*.tsbuildinfo
