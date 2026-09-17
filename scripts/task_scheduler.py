@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Process GitHub merge events and dispatch available tasks to Codex Cloud."""
+"""Shared task/git helpers and a thin client for the control-panel API."""
 
 from __future__ import annotations
 
@@ -12,14 +12,12 @@ import re
 import subprocess
 import sys
 import tempfile
-import time
-from datetime import UTC, datetime
 from pathlib import Path
 from string import Template
 from typing import Any
 
 TASK_ID = re.compile(r"(?<![A-Z0-9])P\d+-\d{3}(?![A-Z0-9])", re.IGNORECASE)
-TASK_URL = re.compile(r"https?://\S+/codex/tasks/\S+")
+TASK_URL = re.compile(r"https?://\S+/codex/(?:cloud/)?tasks/\S+")
 PROMPT_TEMPLATE = Path("scripts/task-implementation-prompt.md")
 TRACKER = Path("docs/workplan/tasks.json")
 
@@ -32,6 +30,7 @@ def run(*command: str, cwd: Path, capture: bool = True) -> str:
         text=True,
         stdout=subprocess.PIPE if capture else None,
         stderr=subprocess.PIPE if capture else None,
+        timeout=300,
     )
     return result.stdout.strip() if capture else ""
 
@@ -103,13 +102,17 @@ def task_branch(task_id: str) -> str:
     return f"task/{task_id}"
 
 
-def ensure_task_branch(clone: Path, remote: str, base: str, task_id: str) -> None:
+def ensure_task_branch(clone: Path, remote: str, base: str, task_id: str,
+                       base_commit: str | None = None) -> None:
     """Create the task branch on the remote from the base branch unless it exists."""
     ref = f"refs/heads/{task_branch(task_id)}"
-    run("git", "fetch", "--quiet", remote, base, cwd=clone)
+    if base_commit is None:
+        run("git", "fetch", "--quiet", remote, base, cwd=clone)
     if not run("git", "ls-remote", "--heads", remote, ref, cwd=clone):
-        run("git", "push", "--quiet", remote, f"{remote}/{base}:{ref}", cwd=clone)
-    run("git", "fetch", "--quiet", remote, task_branch(task_id), cwd=clone)
+        source = base_commit or f"{remote}/{base}"
+        run("git", "push", "--quiet", remote, f"{source}:{ref}", cwd=clone)
+    run("git", "fetch", "--quiet", remote,
+        f"{ref}:refs/remotes/{remote}/{task_branch(task_id)}", cwd=clone)
 
 
 def push_opening_commit(clone: Path, remote: str, task_id: str) -> bool:
@@ -208,7 +211,7 @@ def effective_tracker(tracker: dict[str, Any], state: dict[str, Any]) -> dict[st
     overrides = state["tasks"]
     for task in effective["tasks"]:
         local = overrides.get(task["id"])
-        if local and task["status"] != "completed":
+        if local and local["status"] != "completed" and task["status"] != "completed":
             task["status"] = local["status"]
             task["owner"] = local.get("owner")
             task["blocked_reason"] = local.get("blocked_reason")
@@ -294,143 +297,25 @@ def prompt_for(template: Template, task: dict[str, Any]) -> str:
     return template.substitute(id=task["id"], title=task["title"], brief=task["brief"])
 
 
-def dispatch(
-    repo_root: Path,
-    state_file: Path,
-    state: dict[str, Any],
-    tasks: list[dict[str, Any]],
-    template: Template,
-    environment: str,
-    capacity: int,
-) -> None:
-    active = sum(1 for value in state["tasks"].values() if value["status"] == "in_progress")
-    for task in tasks[: max(0, capacity - active)]:
-        task_id = task["id"]
-        owner = f"codex-cloud:{task_id}:{int(time.time())}"
-        state["tasks"][task_id] = {
-            "status": "in_progress",
-            "owner": owner,
-            "blocked_reason": None,
-            "updated_at": datetime.now(UTC).isoformat(),
-        }
-        save_state(state_file, state)
-        try:
-            output = run(
-                "codex",
-                "cloud",
-                "exec",
-                "--env",
-                environment,
-                prompt_for(template, task),
-                cwd=repo_root,
-            )
-        except (OSError, subprocess.CalledProcessError) as error:
-            detail = failure_detail(error)
-            state["tasks"][task_id] = {
-                "status": "pending",
-                "owner": None,
-                "blocked_reason": None,
-                "launch_error": detail,
-                "updated_at": datetime.now(UTC).isoformat(),
-            }
-            save_state(state_file, state)
-            print(f"failed to dispatch {task_id}: {detail}", file=sys.stderr)
-            continue
-        state["tasks"][task_id]["task_url"] = task_url_from(output) or output
-        save_state(state_file, state)
-        print(f"dispatched {task_id}: {output}")
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--env", required=True, help="Codex Cloud environment ID")
-    parser.add_argument("--remote", default="origin")
-    parser.add_argument("--branch", default="main")
-    parser.add_argument(
-        "--repo-root",
-        type=Path,
-        help="directory holding scripts/; defaults to the enclosing git checkout",
-    )
-    parser.add_argument(
-        "--clone",
-        type=Path,
-        help="git checkout that git and gh run in; defaults to --repo-root",
-    )
-    parser.add_argument("--state-file", type=Path)
-    parser.add_argument(
-        "--tracker-file",
-        type=Path,
-        help="read the tracker from this file instead of the remote default branch",
-    )
-    parser.add_argument(
-        "--tracker-snapshot",
-        type=Path,
-        help="write the tracker this run scheduled from to this path",
-    )
-    parser.add_argument("--prompt-template", type=Path, default=PROMPT_TEMPLATE)
-    parser.add_argument("--task", help="dispatch only this task ID when it is available")
-    parser.add_argument("--max-concurrent", type=int, default=3)
-    parser.add_argument(
-        "--event-file",
-        type=Path,
-        help="GitHub Actions event file; omit for a manual run",
-    )
-    arguments = parser.parse_args()
-    if arguments.repo_root and not arguments.state_file:
-        parser.error("--state-file is required when --repo-root is not a git checkout")
-    return arguments
-
-
-def schedule(
-    repo_root: Path,
-    clone: Path,
-    args: argparse.Namespace,
-    state_file: Path,
-    pulls: list[dict[str, Any]],
-) -> None:
-    tracker = (
-        json.loads(args.tracker_file.read_text())
-        if args.tracker_file
-        else load_tracker(clone, args.remote, args.branch)
-    )
-    if args.tracker_snapshot:
-        write_json(args.tracker_snapshot, tracker)
-    state = load_state(state_file)
-    known_ids = {task["id"] for task in tracker["tasks"]}
-    changed = record_completions(state, pulls, known_ids)
-    if retire_completed(tracker, state) or changed:
-        save_state(state_file, state)
-    template = load_prompt_template(repo_root, args.prompt_template)
-    available = available_tasks(repo_root, effective_tracker(tracker, state))
-    if args.task:
-        requested = args.task.upper()
-        available = [task for task in available if task["id"] == requested]
-        if not available:
-            print(f"{requested} is not currently available; nothing to dispatch")
-            return
-    dispatch(
-        repo_root, state_file, state, available, template, args.env, args.max_concurrent
-    )
-
-
 def main() -> int:
-    args = parse_args()
-    repo_root = (
-        args.repo_root or Path(run("git", "rev-parse", "--show-toplevel", cwd=Path.cwd()))
-    ).resolve()
-    clone = (args.clone or repo_root).resolve()
-    state_file = (args.state_file or default_state_file(repo_root)).resolve()
-    lock_handle = acquire_lock(state_file)
-    try:
-        payload = json.loads(args.event_file.read_text()) if args.event_file else {}
-        pull = merged_pull_request(payload)
-        if "pull_request" in payload and not pull:
-            print("event is not a merged pull request; nothing to do")
-            return 0
-        schedule(repo_root, clone, args, state_file, [pull] if pull else [])
-        return 0
-    finally:
-        lock_handle.close()
+    """Compatibility command: scheduling lives exclusively in the control-panel API."""
+    from urllib.request import Request, urlopen
+
+    parser = argparse.ArgumentParser(description="Trigger the control-panel API")
+    parser.add_argument("--url", default=os.environ.get("CONTROL_PANEL_URL", "http://localhost:8765"))
+    parser.add_argument("--event-file", type=Path)
+    args = parser.parse_args()
+    token = os.environ.get("PANEL_TOKEN")
+    if not token:
+        parser.error("set PANEL_TOKEN")
+    path = "/api/events/merge" if args.event_file else "/api/sync"
+    body = args.event_file.read_bytes() if args.event_file else b"{}"
+    request = Request(args.url.rstrip("/") + path, data=body, headers={
+        "Authorization": "Bearer " + token, "Content-Type": "application/json",
+    })
+    with urlopen(request, timeout=840) as response:
+        print(response.read().decode())
+    return 0
 
 
 if __name__ == "__main__":

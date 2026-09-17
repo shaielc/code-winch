@@ -88,3 +88,25 @@ recovery previously hid the matching failures that caused the problem.
 Tracker merge conflicts become routine rather than occasional, fork
 contributions need automated stamping, or manual lease release becomes frequent
 enough that the underlying matching failure should be fixed instead.
+
+## Control-panel orchestration update (2026-09-17)
+
+The API in `workplan-control-panel/` now owns scheduling. GitHub Actions posts
+merged-main events; it neither checks out the repository nor runs Codex. The
+panel pulls a dedicated main checkout, reads the tracker, reserves available
+work, and creates task branches with their in-progress opening commits. It
+never writes status changes directly to main. The main tracker remains the
+sole authority for completion.
+
+The UI invokes the same API: Refine and Implement start cloud tasks from the
+prepared branch; Audit returns a formatted prompt naming an implementation PR
+and its current head for copying. The HTTP contract and deployment requirements
+are in `workplan-control-panel/README.md`.
+
+This replaces the earlier read-only panel and shared runner-state arrangement.
+The panel now holds its own GitHub write credential, checkout, Codex login, and
+state; the Actions runner has only its registration/work volumes and the API
+secret supplied to its notification job. Stage submission records survive
+restarts and prevent repeated clicks from duplicating a submission for the same
+branch revision. Uncertain submissions require operator reconciliation with
+Codex before their stage record is cleared.

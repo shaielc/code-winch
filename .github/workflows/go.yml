@@ -31,6 +31,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Test workplan control panel
+        run: python3 -m unittest discover -s tests -v
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:

@@ -58,17 +58,10 @@ docs](https://learn.chatgpt.com/docs/cloud) describe only the web UI flow.
 [openai/codex#24777](https://github.com/openai/codex/issues/24777) tracks the
 request for scriptable task and environment lifecycle management.
 
-## Consequences for the scheduler
+## Control-panel integration
 
-`exec` with no `--branch` resolves the base to the *current* branch of its
-working directory. `dispatch()` runs with `cwd=repo_root`, so tasks are based
-on whatever branch the checkout happens to be on, while `load_tracker()` reads
-the tracker from `origin/main`. Passing `--branch` closes that gap.
-
-In the path that matters this already lands correctly: the workflow runs on a
-merged pull request and checks out `github.event.pull_request.base.ref`, so the
-runner sits on an up-to-date `main` and dispatched tasks branch from it — the
-same revision the tracker was read from. The gap is latent rather than active,
-and it opens as soon as the scheduler is run by hand from a feature branch.
-`--branch` would make the intent explicit instead of incidental.
-
+The panel now passes `--branch task/<ID>` explicitly for both Refine and
+Implement. Merge notifications only prepare branches; they do not submit cloud
+tasks. Submission records and returned URLs are kept per stage and branch
+revision in panel state. Audit uses `gh pr list` to resolve the selected PR head
+and returns a formatted prompt without launching a cloud task.

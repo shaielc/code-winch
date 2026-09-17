@@ -6,3 +6,6 @@ tests/
 **/dist/
 **/__pycache__/
 **/*.tsbuildinfo
+
+**/.env
+**/compose.override.yml

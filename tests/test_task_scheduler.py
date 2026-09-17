@@ -131,14 +131,6 @@ class TaskSchedulerTests(unittest.TestCase):
         self.assertIn("environment not found", task_scheduler.failure_detail(error))
         self.assertEqual(task_scheduler.failure_detail(OSError("no codex")), "no codex")
 
-    def test_repo_root_requires_an_explicit_state_file(self):
-        argv = ["task_scheduler.py", "--env", "environment", "--repo-root", "/opt/code-winch"]
-        with patch.object(sys, "argv", argv), redirect_stderr(io.StringIO()):
-            with self.assertRaises(SystemExit):
-                task_scheduler.parse_args()
-        with patch.object(sys, "argv", [*argv, "--state-file", "/var/lib/state.json"]):
-            self.assertEqual(task_scheduler.parse_args().repo_root, Path("/opt/code-winch"))
-
     def test_stage_prompts_render_with_their_fields(self):
         task = {"id": "P0-001", "title": "Upstream", "brief": "phase-0/P0-001-upstream.md"}
         pull = {"pr_url": "https://example/pr/1", "head": "0123abcd"}

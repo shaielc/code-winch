@@ -7,5 +7,5 @@ change only docs/workplan/$brief. Do not implement the task. Commit the refined
 brief and open a pull request.
 
 Include `Task: $id` in the pull request body and no other task ID. Do not edit
-status fields in docs/workplan/tasks.json; automation stamps `completed` when the
-pull request is approved.
+status fields in docs/workplan/tasks.json; automation stamps `completed` only when the
+final task pull request into main is approved.

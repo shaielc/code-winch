@@ -1,148 +1,34 @@
 #!/usr/bin/env python3
-"""Serve a local control panel for the Code Winch task scheduler."""
+"""Serve the workplan API and its browser control panel."""
 
 from __future__ import annotations
 
 import argparse
-import fcntl
+import hmac
 import html
 import json
 import logging
 import os
 import subprocess
-from collections.abc import Iterator
-from contextlib import contextmanager
-from http import HTTPStatus
+import re
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import urlparse
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from service import ControlPanel, Problem
 
 LOGGER = logging.getLogger("control_panel")
 STATUS_ORDER = ["in_progress", "blocked", "pending", "completed"]
-SNAPSHOT_HINT = "run the Schedule available tasks workflow once so the runner publishes one"
-
-
-def load_tracker(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text())
-
-
-def load_state(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {"schema_version": 1, "tasks": {}}
-    state = json.loads(path.read_text())
-    if state.get("schema_version") != 1 or not isinstance(state.get("tasks"), dict):
-        raise ValueError(f"unsupported scheduler state in {path}")
-    return state
-
-
-def save_state(path: Path, state: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
-    temporary.replace(path)
-
-
-def lock_path(state_file: Path) -> Path:
-    return state_file.with_suffix(".lock")
-
-
-@contextmanager
-def scheduler_lock(state_file: Path) -> Iterator[bool]:
-    """Hold the scheduler lock, yielding False when the scheduler already owns it."""
-    path = lock_path(state_file)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a") as handle:
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            yield False
-            return
-        try:
-            yield True
-        finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
-
-
-def refresh(state_file: Path, tracker: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """Read the state with the overrides the tracker superseded retired, and report scheduler activity.
-
-    Mirrors the retirement the scheduler does on every run so a tracker that caught up with an
-    override does not leave the override sitting in the state volume until the next dispatch. The
-    entry stays behind as a record of the pull request and Codex task the work went through.
-    """
-    completed = {task["id"] for task in tracker["tasks"] if task["status"] == "completed"}
-    with scheduler_lock(state_file) as acquired:
-        state = load_state(state_file)
-        superseded = sorted(
-            task_id
-            for task_id in completed & set(state["tasks"])
-            if state["tasks"][task_id]["status"] != "completed"
-        )
-        for task_id in superseded:
-            state["tasks"][task_id]["status"] = "completed"
-            state["tasks"][task_id]["owner"] = None
-        if superseded:
-            LOGGER.warning(
-                "tracker superseded the overrides for %s (%s)",
-                ", ".join(superseded),
-                "retired" if acquired else "kept; the scheduler holds the state file",
-            )
-        if superseded and acquired:
-            save_state(state_file, state)
-        return state, not acquired
-
-
-def expire(state_file: Path, task_id: str) -> str:
-    with scheduler_lock(state_file) as acquired:
-        if not acquired:
-            return "the scheduler is running right now; try again once it finishes"
-        state = load_state(state_file)
-        if task_id not in state["tasks"]:
-            return f"{task_id} has no local override to expire"
-        del state["tasks"][task_id]
-        save_state(state_file, state)
-        return f"expired the local override for {task_id}"
-
-
-def run_scheduler(
-    repo_root: Path, tracker: Path, state_file: Path, environment: str, task_id: str | None
-) -> str:
-    if not environment:
-        return "set CODEX_ENV_ID in runner/.env so the panel can dispatch to Codex Cloud"
-    if not tracker.exists():
-        return f"no tracker snapshot at {tracker}; {SNAPSHOT_HINT}"
-
-    command = [
-        "python3",
-        "scripts/task_scheduler.py",
-        "--env",
-        environment,
-        "--repo-root",
-        str(repo_root),
-        "--tracker-file",
-        str(tracker),
-        "--state-file",
-        str(state_file),
-    ]
-    if task_id:
-        command += ["--task", task_id]
-    result = subprocess.run(
-        command, cwd=repo_root, capture_output=True, text=True, timeout=900, check=False
-    )
-    output = (result.stdout + result.stderr).strip() or "scheduler produced no output"
-    if result.returncode != 0:
-        return f"scheduler exited {result.returncode}: {output[:500]}"
-    return output[:500]
-
-
 def rows(tracker: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]:
     overrides = state["tasks"]
     result = []
     for task in tracker["tasks"]:
         # A retired entry no longer overrides the tracker, but it still carries the links.
         record = overrides.get(task["id"], {})
-        lease = record if task["status"] != "completed" else None
+        lease = record if task["status"] != "completed" and record.get("status") != "completed" else None
         result.append(
             {
                 "id": task["id"],
@@ -154,6 +40,7 @@ def rows(tracker: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]
                 "task_url": record.get("task_url"),
                 "pull_request": record.get("pull_request"),
                 "local": bool(lease),
+                "prepared": record.get("prepared", False),
             }
         )
     return result
@@ -221,7 +108,7 @@ def forest(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return trees + [build(entry) for entry in entries if entry["id"] not in placed]
 
 
-PAGE = """<!doctype html>
+PAGE = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Code Winch scheduler</title>
@@ -268,8 +155,8 @@ PAGE = """<!doctype html>
 </style>
 <header>
   <h1>Code Winch scheduler</h1>
-  <form method="post"><input type="hidden" name="action" value="run">
-    <button type="submit">Run scheduler</button></form>
+  <button type="button" data-action="sync">Sync main</button>
+  <label>API token <input id="token" type="password" autocomplete="off"></label>
   <button type="button" id="swap" hidden>Tree view</button>
 </header>
 <div class="sub">{summary}</div>
@@ -285,13 +172,67 @@ PAGE = """<!doctype html>
 <ul class="tree wrap" id="tree-view" hidden>
   {tree}
 </ul>
-<p class="note">Leases live in the scheduler state volume and apply only while the tracker has not
-recorded the task as completed. Expiring one releases the concurrency slot it holds, so only a lease
-that still holds one offers the option: a lease reading completed records a merged pull request, and
-once the tracker agrees it is retired in place, keeping its links on the row without overriding
-anything. The tree view nests each task under the dependency that unlocks it last, so a task waiting
-on several others appears once, under the deepest of them, and lists the rest beside its title.</p>
+<p class="note">Sync prepares available task branches from main. Refine and Implement launch Codex
+on the task branch; merge refinement changes there before starting implementation.
+Audit copies a prompt for an open implementation pull request into that branch.</p>
+<p id="result" role="status"></p>
+<textarea id="audit-prompt" hidden readonly aria-label="Audit prompt" rows="12" style="width:100%"></textarea>
+<button type="button" id="copy-prompt" hidden>Copy audit prompt</button>
 <script>
+  const result = document.getElementById("result");
+  const token = document.getElementById("token");
+  const audit = document.getElementById("audit-prompt");
+  const copy = document.getElementById("copy-prompt");
+  async function copyAudit() {{
+    try {{
+      await navigator.clipboard.writeText(audit.value);
+      result.textContent = "Audit prompt copied.";
+    }} catch (error) {{
+      audit.hidden = false;
+      audit.select();
+      result.textContent = "Clipboard unavailable. Copy the selected prompt, or use Copy audit prompt.";
+    }}
+  }}
+  copy.onclick = copyAudit;
+  document.querySelectorAll("[data-action]").forEach(button => {{
+    button.onclick = async () => {{
+      const action = button.dataset.action;
+      const endpoint = action === "sync" ? "api/sync" :
+        "api/tasks/" + encodeURIComponent(button.dataset.task) + "/" + action;
+      button.disabled = true;
+      result.textContent = "Working…";
+      try {{
+        const request = async body => {{
+          const response = await fetch(endpoint, {{method: "POST", headers: {{
+            "Authorization": "Bearer " + token.value, "Content-Type": "application/json"
+          }}, body: JSON.stringify(body)}});
+          return [response, await response.json()];
+        }};
+        let [response, data] = await request({{}});
+        if (!response.ok && action === "audit" && data.pull_requests?.length) {{
+          const selected = window.prompt("Choose implementation PR number: " +
+            data.pull_requests.map(p => p.number + ": " + p.url).join("\n"));
+          if (selected) [response, data] = await request({{pr_number: Number(selected)}});
+        }}
+        if (!response.ok) throw new Error(data.error || "Request failed");
+        if (action === "audit") {{
+          audit.value = data.prompt;
+          audit.hidden = false;
+          copy.hidden = false;
+          await copyAudit();
+        }} else if (action === "sync") {{
+          window.location.reload();
+        }} else {{
+          result.textContent = data.reused ? "Already submitted: " : "Submitted: ";
+          const link = document.createElement("a");
+          link.href = data.task_url; link.textContent = data.task_url;
+          link.target = "_blank"; link.rel = "noopener";
+          result.appendChild(link);
+        }}
+      }} catch (error) {{ result.textContent = error.message; }}
+      finally {{ button.disabled = false; }}
+    }};
+  }});
   const swap = document.getElementById("swap");
   const table = document.getElementById("table-view");
   const tree = document.getElementById("tree-view");
@@ -365,27 +306,15 @@ GITHUB_ICON = (
 
 
 def button(action: str, task_id: str, label: str) -> str:
-    """Render a form that posts to the page's own URL, naming the action in a field.
-
-    Omitting the action attribute keeps every link on the page relative, so the panel works
-    unchanged whether it is reached directly or through a reverse proxy that mounts it under a
-    path prefix. An absolute /expire would leave that prefix behind and miss the proxy's route.
-    """
-    return (
-        f'<form method="post">'
-        f'<input type="hidden" name="action" value="{html.escape(action)}">'
-        f'<input type="hidden" name="task_id" value="{html.escape(task_id)}">'
-        f'<button type="submit">{label}</button></form>'
-    )
+    return (f'<button type="button" data-action="{html.escape(action)}" '
+            f'data-task="{html.escape(task_id)}">{label}</button>')
 
 
 def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
-    actions = ""
-    if entry["id"] in runnable:
-        actions += button("run", entry["id"], "Refine")
-    if entry["local"] and entry["status"] != "completed":
-        actions += button("expire", entry["id"], "Expire")
-    return actions
+    if entry["prepared"] and entry["status"] == "in_progress":
+        return "".join(button(stage, entry["id"], label) for stage, label in
+                       (("refine", "Refine"), ("implement", "Implement"), ("audit", "Audit")))
+    return ""
 
 
 def source_of(entry: dict[str, Any]) -> str:
@@ -502,115 +431,121 @@ def render(tracker: dict[str, Any], state: dict[str, Any], message: str, busy: b
 
 
 class Handler(BaseHTTPRequestHandler):
-    tracker_path: Path
-    state_file: Path
-    repo_root: Path
-    environment: str
+    service: ControlPanel
+    token: str
 
     def log_message(self, *args: Any) -> None:
         return
 
-    def _send(self, status: HTTPStatus, body: bytes) -> None:
+    def send(self, status: int, body: bytes, content_type="application/json") -> None:
         self.send_response(status)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
 
-    def _redirect(self, message: str) -> None:
-        """Redirect back to the page itself, carrying the message in the query.
+    def respond(self, status: int, data: dict) -> None:
+        self.send(status, json.dumps(data).encode())
 
-        The location is a bare query so it resolves against whatever URL the browser is on,
-        which keeps any reverse proxy path prefix that an absolute /? would drop.
-        """
-        self.send_response(HTTPStatus.SEE_OTHER)
-        self.send_header("Location", "?" + urlencode({"msg": message}))
-        self.end_headers()
+    def authorized(self) -> bool:
+        expected = ("Bearer " + self.token).encode()
+        supplied = self.headers.get("Authorization", "").encode()
+        if not self.token or not hmac.compare_digest(supplied, expected):
+            self.respond(401, {"error": "A valid control-panel bearer token is required"})
+            return False
+        return True
 
     def do_GET(self) -> None:
-        path, _, query = self.path.partition("?")
-        if path != "/":
-            self._send(HTTPStatus.NOT_FOUND, b"not found")
+        path = urlparse(self.path).path
+        if path == "/healthz":
+            self.respond(200, {"status": "ok"})
             return
-        message = parse_qs(query).get("msg", [""])[0]
+        if path not in ("/", "/api/tasks"):
+            self.respond(404, {"error": "Not found"})
+            return
+        if path == "/api/tasks" and not self.authorized():
+            return
         try:
-            tracker: dict[str, Any] = {"tasks": []}
-            if self.tracker_path.exists():
-                tracker = load_tracker(self.tracker_path)
-            elif not message:
-                message = f"no tracker snapshot at {self.tracker_path}; {SNAPSHOT_HINT}"
-            state, busy = refresh(self.state_file, tracker)
-            page = render(tracker, state, message, busy)
-        except (OSError, ValueError) as error:
-            self._send(HTTPStatus.INTERNAL_SERVER_ERROR, str(error).encode())
-            return
-        self._send(HTTPStatus.OK, page.encode())
+            snapshot = self.service.snapshot()
+            if path == "/api/tasks":
+                self.respond(200, snapshot)
+            else:
+                message = "" if self.service.tracker_path.exists() else "Sync main to load the task tracker."
+                page = render(snapshot["tracker"], snapshot["state"], message, False)
+                self.send(200, page.encode(), "text/html; charset=utf-8")
+        except (OSError, ValueError):
+            self.respond(500, {"error": "Unable to read control-panel state"})
 
     def do_POST(self) -> None:
-        path, _, _ = self.path.partition("?")
-        if path != "/":
-            self._send(HTTPStatus.NOT_FOUND, b"not found")
+        if not self.authorized():
             return
-        length = int(self.headers.get("Content-Length") or 0)
-        form = parse_qs(self.rfile.read(length).decode())
-        action = (form.get("action") or [""])[0]
-        task_id = (form.get("task_id") or [""])[0].upper()
-
-        if action == "run":
-            self._redirect(
-                run_scheduler(
-                    self.repo_root,
-                    self.tracker_path,
-                    self.state_file,
-                    self.environment,
-                    task_id or None,
-                )
-            )
+        if self.headers.get_content_type() != "application/json":
+            self.respond(415, {"error": "Content-Type must be application/json"})
             return
-        if action == "expire":
-            self._redirect(expire(self.state_file, task_id) if task_id else "no task selected")
-            return
-        self._send(HTTPStatus.NOT_FOUND, b"not found")
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if not 0 < length <= 2_000_000:
+                raise Problem(413, "Request body must be between 1 and 2000000 bytes")
+            data = json.loads(self.rfile.read(length))
+            if not isinstance(data, dict):
+                raise ValueError("Expected a JSON object")
+            path = urlparse(self.path).path
+            match = re.fullmatch(r"/api/tasks/(P\d+-\d{3})/(refine|implement|audit)", path)
+            if path == "/api/events/merge":
+                if not isinstance(data.get("pull_request"), dict):
+                    raise ValueError("Expected a pull_request event")
+                result = self.service.sync(data)
+            elif path == "/api/sync":
+                result = self.service.sync()
+            elif match:
+                number = data.get("pr_number")
+                if number is not None and (type(number) is not int or number <= 0):
+                    raise ValueError("pr_number must be a positive integer")
+                result = self.service.stage(*match.groups(), pr_number=number)
+            else:
+                raise Problem(404, "Not found")
+            self.respond(200, result)
+        except Problem as error:
+            self.respond(error.status, {"error": str(error), **error.details})
+        except (ValueError, UnicodeError):
+            self.respond(400, {"error": "Invalid JSON request"})
+        except (OSError, subprocess.SubprocessError):
+            # Subprocess messages can contain credential-bearing URLs or prompt content.
+            LOGGER.error("Control-panel operation failed")
+            self.respond(502, {"error": "Repository operation failed; check checkout, credentials and remote availability"})
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--tracker",
-        type=Path,
-        help="tracker snapshot; defaults to tracker.json beside the state file",
-    )
+    parser.add_argument("--tracker", type=Path)
     parser.add_argument("--state-file", type=Path, required=True)
-    parser.add_argument(
-        "--repo-root",
-        type=Path,
-        default=Path("/opt/code-winch"),
-        help="directory holding the scripts/ the panel runs",
-    )
+    parser.add_argument("--repo-root", type=Path, default=Path("/opt/code-winch"))
+    parser.add_argument("--clone", type=Path, required=True, help="dedicated main checkout")
+    parser.add_argument("--max-concurrent", type=int, default=3)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--expire", metavar="TASK_ID")
     return parser.parse_args()
 
 
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = parse_args()
-    if args.expire:
-        print(expire(args.state_file, args.expire.upper()))
-        return 0
-
-    Handler.tracker_path = args.tracker or args.state_file.parent / "tracker.json"
-    Handler.state_file = args.state_file
-    Handler.repo_root = args.repo_root
-    Handler.environment = os.environ.get("CODEX_ENV_ID", "")
-
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"control panel on http://{args.host}:{args.port}")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
+    Handler.token = os.environ.get("PANEL_TOKEN", "")
+    if not Handler.token:
+        raise SystemExit("Set PANEL_TOKEN before starting the control panel")
+    Handler.service = ControlPanel(
+        args.repo_root, args.clone, args.state_file,
+        args.tracker or args.state_file.parent / "tracker.json",
+        os.environ.get("CODEX_ENV_ID", ""), args.max_concurrent,
+    )
+    with ThreadingHTTPServer((args.host, args.port), Handler) as server:
+        print(f"control panel on http://{args.host}:{args.port}")
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
     return 0
 
 

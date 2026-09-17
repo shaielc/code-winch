@@ -15,7 +15,7 @@ multi-agent workflows.
 - [Delivery roadmap](docs/roadmap.md)
 - [System state](docs/state.md)
 - [Architecture decisions](docs/decisions/README.md)
-- [Task runner deployment](runner/README.md)
+- [Workplan control panel](workplan-control-panel/README.md)
 
 ## Project status
 

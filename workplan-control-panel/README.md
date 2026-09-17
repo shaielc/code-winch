@@ -1,126 +1,109 @@
-# Code Winch task runner
+# Workplan control panel
 
-The repository-scoped self-hosted GitHub runner that dispatches workplan tasks
-to Codex Cloud, plus a local control panel over its scheduler state. It receives
-jobs over the GitHub Actions runner connection, so it needs outbound network
-access but no public webhook endpoint.
+The control panel owns task orchestration and exposes it as an HTTP API. The
+self-hosted GitHub runner only posts merge events. The browser UI remains at
+`http://localhost:8765/`, with the existing table and dependency-tree views.
+
+## Flow
+
+1. A pull request merges into `main`. The GitHub workflow posts its event to
+   `POST /api/events/merge`. Merges into task branches do not trigger scheduling.
+2. The panel pulls its dedicated `main` checkout with `git pull --ff-only` and
+   reads `docs/workplan/tasks.json` (the repository's task tracker).
+3. It selects pending tasks whose dependencies are completed, up to three active
+   tasks by default (`--max-concurrent`), and reserves them in durable local state.
+4. It creates `task/<ID>` from that main revision and pushes an opening commit
+   marking only that task `in_progress`. Repeated events reuse the branch and
+   commit; interrupted preparation resumes on the next sync. Main stays checked out.
+5. The UI exposes **Refine**, **Implement**, and **Audit** for prepared tasks.
+   Refine and Implement submit `codex cloud exec --branch task/<ID>` using their
+   respective templates in `scripts/`. Merge refinement changes into the task
+   branch before choosing Implement. Each agent is instructed to target that
+   branch with its pull request.
+6. Audit resolves an open implementation PR into the task branch and its current
+   head SHA, formats `scripts/task-audit-prompt.md`, and copies it to the clipboard.
+   If several PRs exist, the UI asks which number to use. It also displays the
+   prompt and a copy button, including when clipboard access is unavailable.
+
+The tracker on main is the authority for completion. Local records reserve work
+and retain cloud-task links; merge-event titles do not mark tasks completed.
+Refinement and implementation PRs target the task branch; the final task PR
+into main is the one the existing approval gate stamps completed.
+
+## API
+
+All `/api/` requests require `Authorization: Bearer <PANEL_TOKEN>`. POST bodies
+must be JSON objects. The UI asks for the same token and keeps it in page memory.
+The local UI and `/healthz` are readable without a token; keep the default
+loopback binding or protect the entire site through your reverse proxy.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | `/healthz` | Process health |
+| GET | `/api/tasks` | Tracker snapshot and local task/stage records |
+| POST | `/api/events/merge` | GitHub closed-PR event; only merges into main schedule |
+| POST | `/api/sync` | Pull main and prepare available tasks; body `{}` |
+| POST | `/api/tasks/<ID>/refine` | Submit the refinement prompt; body `{}` |
+| POST | `/api/tasks/<ID>/implement` | Submit the implementation prompt; body `{}` |
+| POST | `/api/tasks/<ID>/audit` | Return the audit prompt; optional `{"pr_number": 123}` |
+
+Operations share a state-file lock. Concurrent requests return 409 and can be
+retried. Repeating a successfully submitted stage at the same branch revision
+returns its existing URL. A submission with an uncertain outcome stays reserved:
+check Codex first, then stop the panel and remove only that entry from the task's
+`stages` map in `task-state.json` before retrying. Do not remove the whole task.
+This prevents a lost response from silently starting a second cloud task.
+
+The former scheduler CLI is now an HTTP client as well:
+
+```sh
+PANEL_TOKEN=... python3 scripts/task_scheduler.py --url http://localhost:8765
+```
 
 ## Install
 
-Run every command below from the repository root. Copy `runner/.env.example` to
-`runner/.env` and replace these three values:
+From the repository root, copy `workplan-control-panel/.env.example` to
+`workplan-control-panel/.env` and set:
 
 | Variable | Value |
 | --- | --- |
-| `GITHUB_URL` | The repository the runner registers with, replacing the `OWNER/REPOSITORY` placeholder. |
-| `RUNNER_TOKEN` | A registration token from the repository's **Settings → Actions → Runners → New self-hosted runner**. It expires about an hour after it is issued, so take it shortly before the first `up`. |
-| `CODEX_ENV_ID` | The Codex Cloud environment dispatched tasks run in. Empty in the example; the control panel refuses to dispatch without it. |
-
-The remaining variables have working defaults. `RUNNER_LABELS` must keep
-`code-winch` and `task-scheduler`, which is what the `runs-on` in
-`.github/workflows/task-scheduler.yml` selects.
-
-Then build:
+| `GITHUB_URL` | HTTPS repository URL |
+| `RUNNER_TOKEN` | Current registration token for the repository's Actions runner |
+| `GH_TOKEN` | Panel credential with repository contents write and pull-request read permissions |
+| `PANEL_TOKEN` | Shared API secret; also set Actions secret `CONTROL_PANEL_TOKEN` to this value |
+| `CODEX_ENV_ID` | Codex Cloud environment ID or label |
 
 ```sh
-docker compose --env-file runner/.env -f runner/compose.yml build
+docker compose --env-file workplan-control-panel/.env -f workplan-control-panel/compose.yml build
+./workplan-control-panel/codex_login.sh
+docker compose --env-file workplan-control-panel/.env -f workplan-control-panel/compose.yml up -d
 ```
 
-Codex authentication lives in a dedicated Docker volume. Populate it with the
-interactive login before starting the services:
+The panel clones main on first start. **Sync main** in the UI, or run the
+**Schedule available tasks** workflow, to prepare the initial tasks. Startup
+itself does not dispatch tasks. Scripts and prompts are baked into the image;
+rebuild after changing them.
 
-```sh
-docker compose --env-file runner/.env -f runner/compose.yml run --rm \
-  --entrypoint codex runner login
-docker compose --env-file runner/.env -f runner/compose.yml up -d
-```
+The workflow defaults to `http://control-panel:8765` on the Compose network. Set
+Actions variable `CONTROL_PANEL_URL` if your runner reaches the panel at another
+address. Use HTTPS when crossing hosts. Only the panel needs the Codex environment
+and repository-write credentials; the runner receives the API secret from Actions.
 
-`RUNNER_TOKEN` is only used for the initial registration, so an expired one in
-`runner/.env` is harmless afterwards; take a fresh token if the runner volume is
-removed and the runner has to re-register.
+`runner-config`, `runner-work`, `panel-checkout`, `scheduler-state`, and
+`codex-auth` volumes persist independently. The runner has no mount of the panel
+checkout, state, or Codex credentials. When upgrading the old shared-volume
+installation, stop it first and preserve its `task-state.json` in the new
+scheduler-state volume and its runner registration in runner-config; do not run
+old and new schedulers simultaneously.
 
-Set the repository Actions variable `CODEX_ENV_ID` to the same environment as
-well. The workflow reads the Actions variable and the control panel reads
-`runner/.env`, so both need it.
+Use `PANEL_BIND` and `PANEL_PORT` for local binding changes. Site-specific Compose
+changes belong in the gitignored `compose.override.yml`; `up.sh` includes it.
+Pin reviewed image digests and a tested `CODEX_VERSION` for repeatable deployments.
 
-Run the **Schedule available tasks** workflow once after installing to dispatch
-the dependency-free tasks and publish the first tracker snapshot.
+## Verification
 
-## Deployment overrides
-
-`compose.yml` is committed and deployment-neutral. Site-specific changes belong
-in `compose.override.yml`, which is gitignored and stays out of the project.
-Mappings merge key by key and sequences append, so an override adds to the
-committed definition rather than replacing it.
-
-Compose loads an override file automatically only when no `-f` flag is given, so
-every command must name both files:
-
-```sh
-docker compose --env-file runner/.env \
-  -f runner/compose.yml -f runner/compose.override.yml up -d
-```
-
-Set `COMPOSE_FILE` to avoid repeating them:
-
-```sh
-export COMPOSE_FILE=runner/compose.yml:runner/compose.override.yml
-```
-
-## Services
-
-`runner` is the Actions runner itself. `control-panel` serves the scheduler view
-on `127.0.0.1:8765`; override `PANEL_BIND` and `PANEL_PORT` to change the
-binding, or put the service on a reverse proxy network with an override.
-
-The two share the `scheduler-state` volume, which is their only coupling: the
-panel reads and writes state there and never talks to the runner directly.
-
-## How scheduling works
-
-When a pull request containing exactly one known task ID merges, the Actions
-workflow invokes `scripts/task_scheduler.py` with GitHub's event file. The
-scheduler overlays its in-flight leases on the tracker from `origin/main` and
-submits newly available tasks with `codex cloud exec`. A lock file beside the
-state file prevents overlapping runs from dispatching the same task.
-
-What it dispatches is the first step of a task, not its implementation.
-`scripts/task-refine-prompt.md` asks the agent to refine the task's brief against
-the code, following `skills/task/SKILL.md`. The agent commits the refined brief
-as the first commit on the task's branch and opens a draft pull request. The
-panel's per-task **Refine** button dispatches the same step. Implementation
-starts from the refined brief's commit, under
-`scripts/task-implementation-prompt.md`, and `scripts/task-audit-prompt.md` asks
-Claude to audit the implementation pull request.
-
-That run also publishes the tracker it scheduled from to
-`/var/lib/code-winch/tracker.json`. The control panel reads that snapshot rather
-than cloning the repository, so it holds no GitHub credentials, and it runs the
-scheduler from the copy of `scripts/` baked into the image. The snapshot
-refreshes on every scheduler run — the same event that changes the tracker — so
-a manual **Schedule available tasks** run is what picks up a tracker edit that
-did not arrive through a merged pull request. Until the first run publishes a
-snapshot, the panel shows an empty table and says so.
-
-The [active workplan tracker](../docs/workplan/tasks.json) on the default branch
-remains the sole authority for `completed`; a local entry overrides the tracker
-only until the tracker records the task as completed. At that point the entry
-is retired in place rather than deleted, so the row keeps linking the pull
-request and the Codex task the work went through. Expiring a lease releases the
-concurrency slot it holds. See
-[ADR-0004](../docs/decisions/0004-task-status-authority.md).
-
-Because the scripts are baked into the image, changing `scripts/` requires a
-rebuild before the panel runs the new version.
-
-## Operational notes
-
-The runner configuration, work directory, Codex credentials, and scheduler state
-survive container replacement in named volumes. Treat those volumes as secrets:
-the Codex volume holds the CLI login, and the scheduler-state volume also
-retains the GitHub runner credentials. Never mount the Docker socket into this
-runner.
-
-`.env.example` defaults to the latest runner image and Codex CLI. For repeatable
-deployments, replace `RUNNER_IMAGE` and `NODE_IMAGE` with reviewed image digests
-and `CODEX_VERSION` with a tested CLI version before building.
+`python3 -m unittest discover -s tests -v` exercises the API against a real local
+Git remote, including fresh main updates, dependency selection, branch/opening
+commits, retries, locking, authentication, both cloud prompts, and audit PR/head
+formatting. Cloud submissions and PR listing are mocked; no live provider account
+is required by the tests.
