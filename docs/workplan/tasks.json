@@ -99,7 +99,7 @@
       "title": "Start run execution",
       "phase": 0,
       "phase_name": "Foundation repair",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P0-003",
         "P0-006"
