@@ -22,7 +22,7 @@ skills/
 | Skill | Audience | Use it when |
 |---|---|---|
 | [`workplan`](workplan/SKILL.md) | planning agent | Creating, extending, updating, or auditing the plan in `docs/workplan/`, or closing it into `docs/state.md` |
-| [`task`](task/SKILL.md) | implementing agent | Implementing, finishing, reviewing, or auditing one task from `docs/workplan/` |
+| [`task`](task/SKILL.md) | task agent — refiner, implementer, or auditor, never two for one task | Refining one task's brief before implementation, or implementing, finishing, reviewing, or auditing that task |
 
 Audience matters. Say who a skill is for when you add one: an agent should be
 able to tell from the table whether a skill is addressed to it before loading
@@ -53,13 +53,18 @@ it in permanently.
 
 ### Dispatched task agents
 
-`scripts/task-prompt.md` instructs every dispatched implementer to read its
-brief, `skills/task/SKILL.md`, and all applicable `AGENTS.md` files. The root
-`AGENTS.md` points here too, so an agent that lands in the repository by any
-other route finds the same instructions.
+Each stage of a dispatched task has its own prompt.
+`scripts/task-refine-prompt.md` instructs the agent to refine its task's brief:
+read the brief, `skills/task/SKILL.md`, and all applicable `AGENTS.md` files,
+then commit the refined brief to the task's branch before any implementation.
+Implementation starts from the refined brief, under
+`scripts/task-implementation-prompt.md`. `scripts/task-audit-prompt.md` has
+Claude audit the implementation pull request and post the report as a review on
+it. The root `AGENTS.md` points here too, so an agent that lands in the
+repository by any other route finds the same instructions.
 
-Keep that wiring narrow. A dispatched implementer is pointed at the skill
-addressed to it, not at every skill in this directory.
+Keep that wiring narrow. A dispatched agent is pointed at the skill addressed to
+it, not at every skill in this directory.
 
 ### Claude Code
 

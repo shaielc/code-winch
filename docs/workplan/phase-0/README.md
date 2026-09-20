@@ -25,6 +25,9 @@ not cover what they appear to, and the use-case layer that was never written.
 - **The run round trip** — one seam per operator operation, each binding its own
   method on the delegating `httpapi.Backend`, each adding its own CLI command,
   each contributing its own e2e scenario (P0-006, P0-008 to P0-011).
+- **Start hardening** — the failure paths P0-008's audit found: output kept when
+  an append fails, a start interrupted before launch recovered, and attempt
+  transitions fenced by the run lease (P0-020 to P0-022).
 - **Memory store repair** — the run round trip was derived against PostgreSQL,
   skipping I3 and I4's first rung. P0-012 ships `storeProfile=memory`; P0-013
   through P0-018 revise each seam and the CI gate so `winchd` and `make e2e` run
@@ -64,6 +67,12 @@ not cover what they appear to, and the use-case layer that was never written.
 | P0-016 | Revise WebSocket stream for memory store profile | P0-010, P0-015 | swap | stream scenario without DB |
 | P0-017 | Revise stop run for memory store profile | P0-011, P0-014 | swap | stop scenario without DB |
 | P0-018 | Revise phase 0 closure for memory-backed e2e | P0-007, P0-016, P0-017, P0-012 | hardening | `make e2e` in CI without DB |
+| P0-020 | Keep run output when an event append fails | P0-008 | hardening | `run events` after an injected append failure |
+| P0-021 | Recover a start interrupted before launch | P0-008 | hardening | `run get` after a disconnected start |
+| P0-022 | Fence attempt transitions by the run lease | P0-008 | hardening | `run get` after a lease takeover |
+
+P0-019 is not used. It was allocated on an unmerged branch that pull request #54
+still cites, so reissuing it would make that record ambiguous.
 
 ### Dependency graph
 
@@ -86,6 +95,11 @@ P0-012 ──┬──► P0-013 ◄── P0-006
          │                                └──► P0-017 ◄── P0-011
          │
 P0-007 + P0-016 + P0-017 ──► P0-018
+
+Start hardening (revision edges; found by P0-008's audit):
+P0-008 ──┬──► P0-020
+         ├──► P0-021
+         └──► P0-022
 ```
 
 - **P0-004** waits on the profile it exercises (P0-003) and on the CLI it
@@ -99,6 +113,11 @@ P0-007 + P0-016 + P0-017 ──► P0-018
 - **P0-012** is available at open and can land before the postgres seams, but
   P0-013 through P0-018 carry `revision` edges and wait on P0-006 through
   P0-011 respectively.
+- **P0-020, P0-021, P0-022 → P0-008** are `revision` edges written after the
+  fact. The audit of P0-008's implementation found three failure paths. Its
+  main path met the brief, so they became hardening tasks rather than blocking
+  P0-008. Recorded in
+  [`../post-mortems/2026-09-16-a-plan-defect-read-from-one-implementation.md`](../post-mortems/2026-09-16-a-plan-defect-read-from-one-implementation.md).
 
 ### The e2e suite
 
@@ -115,14 +134,18 @@ scenario; P0-018 revises it for memory.
 | P0-011 / P0-017 | `create → start → stop → get` | `test/e2e/stop_test.go` |
 | P0-007 / P0-018 | `create → start → stream → input → stop` | `test/e2e/roundtrip_test.go` |
 
+P0-020 and P0-021 add fault-injection tests beside the suite
+(`test/e2e/append_failure_test.go`, `test/e2e/start_cancel_test.go`). They
+extend no scenario, and no memory repair revises them.
+
 ### Width
 
 | Metric | Value |
 |---|---|
 | Critical path | 10 — `P0-001 → P0-006 → P0-008 → P0-009 → P0-010 → P0-013 → P0-014 → P0-015 → P0-016 → P0-018` |
-| Average width | 18 ÷ 10 ≈ 1.8 |
+| Average width | 21 ÷ 10 = 2.1 |
 | Available at open | P0-001, P0-002, P0-003, P0-005, P0-012 |
-| Contract collisions | none between concurrently-available tasks |
+| Contract collisions | none between concurrently-available tasks. P0-020, P0-021, and P0-022 each declare a different rule over run lifecycle writes. P0-011's stop transitions follow whichever of those rules is at HEAD and redefine none, so no edge is needed. |
 
 Write collisions — a cost, not an edge. Whoever takes the second one rebases.
 
@@ -142,10 +165,19 @@ Write collisions — a cost, not an edge. Whoever takes the second one rebases.
 | P0-009 ↔ P0-011 | `cmd/winchd/main.go`, `internal/application/`, `cmd/winch/` |
 | P0-013 ↔ P0-014 | `cmd/winchd/main.go`, `test/e2e/` |
 | P0-007 ↔ P0-018 | `test/e2e/roundtrip_test.go`, `.github/workflows/go.yml` |
+| P0-020 ↔ P0-021 ↔ P0-022 | `internal/application/start.go`, `internal/application/start_test.go` |
+| P0-020 ↔ P0-021 | `docs/contracts.md` |
+| P0-020, P0-022 ↔ P0-009, P0-011, P0-014 | `cmd/winchd/main.go` |
+| P0-020, P0-021, P0-022 ↔ P0-009, P0-011 | `internal/application/` |
+| P0-022 ↔ P0-012 | `internal/adapters/memory/` |
 
 `cmd/winchd/main.go` attracts both the postgres seams and the memory repairs, but
 revision edges serialize the repairs after their targets. `docs/code-structure.md:119`
 keeps adapter registration explicit in the composition root.
+
+Of the start hardening tasks, dispatch P0-020 first. It reshapes the observation
+consumer that P0-009 and P0-010 build on, so landing it after them means
+rebasing it onto the input and stream paths.
 
 ## Deferrals in
 

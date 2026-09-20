@@ -17,3 +17,6 @@ deployments/.env
 
 # Local skill-discovery links; the skills themselves live in skills/
 .claude/
+
+workplan-control-panel/.env
+workplan-control-panel/compose.override.yml

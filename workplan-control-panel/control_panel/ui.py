@@ -1,148 +1,17 @@
-#!/usr/bin/env python3
-"""Serve a local control panel for the Code Winch task scheduler."""
+"""Render the control-panel page; buttons call the HTTP API."""
 
-from __future__ import annotations
-
-import argparse
-import fcntl
 import html
-import json
-import logging
-import os
-import subprocess
-from collections.abc import Iterator
-from contextlib import contextmanager
-from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import urlparse
 
-LOGGER = logging.getLogger("control_panel")
 STATUS_ORDER = ["in_progress", "blocked", "pending", "completed"]
-SNAPSHOT_HINT = "run the Schedule available tasks workflow once so the runner publishes one"
-
-
-def load_tracker(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text())
-
-
-def load_state(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {"schema_version": 1, "tasks": {}}
-    state = json.loads(path.read_text())
-    if state.get("schema_version") != 1 or not isinstance(state.get("tasks"), dict):
-        raise ValueError(f"unsupported scheduler state in {path}")
-    return state
-
-
-def save_state(path: Path, state: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
-    temporary.replace(path)
-
-
-def lock_path(state_file: Path) -> Path:
-    return state_file.with_suffix(".lock")
-
-
-@contextmanager
-def scheduler_lock(state_file: Path) -> Iterator[bool]:
-    """Hold the scheduler lock, yielding False when the scheduler already owns it."""
-    path = lock_path(state_file)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a") as handle:
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            yield False
-            return
-        try:
-            yield True
-        finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
-
-
-def refresh(state_file: Path, tracker: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """Read the state with the overrides the tracker superseded retired, and report scheduler activity.
-
-    Mirrors the retirement the scheduler does on every run so a tracker that caught up with an
-    override does not leave the override sitting in the state volume until the next dispatch. The
-    entry stays behind as a record of the pull request and Codex task the work went through.
-    """
-    completed = {task["id"] for task in tracker["tasks"] if task["status"] == "completed"}
-    with scheduler_lock(state_file) as acquired:
-        state = load_state(state_file)
-        superseded = sorted(
-            task_id
-            for task_id in completed & set(state["tasks"])
-            if state["tasks"][task_id]["status"] != "completed"
-        )
-        for task_id in superseded:
-            state["tasks"][task_id]["status"] = "completed"
-            state["tasks"][task_id]["owner"] = None
-        if superseded:
-            LOGGER.warning(
-                "tracker superseded the overrides for %s (%s)",
-                ", ".join(superseded),
-                "retired" if acquired else "kept; the scheduler holds the state file",
-            )
-        if superseded and acquired:
-            save_state(state_file, state)
-        return state, not acquired
-
-
-def expire(state_file: Path, task_id: str) -> str:
-    with scheduler_lock(state_file) as acquired:
-        if not acquired:
-            return "the scheduler is running right now; try again once it finishes"
-        state = load_state(state_file)
-        if task_id not in state["tasks"]:
-            return f"{task_id} has no local override to expire"
-        del state["tasks"][task_id]
-        save_state(state_file, state)
-        return f"expired the local override for {task_id}"
-
-
-def run_scheduler(
-    repo_root: Path, tracker: Path, state_file: Path, environment: str, task_id: str | None
-) -> str:
-    if not environment:
-        return "set CODEX_ENV_ID in runner/.env so the panel can dispatch to Codex Cloud"
-    if not tracker.exists():
-        return f"no tracker snapshot at {tracker}; {SNAPSHOT_HINT}"
-
-    command = [
-        "python3",
-        "scripts/task_scheduler.py",
-        "--env",
-        environment,
-        "--repo-root",
-        str(repo_root),
-        "--tracker-file",
-        str(tracker),
-        "--state-file",
-        str(state_file),
-    ]
-    if task_id:
-        command += ["--task", task_id]
-    result = subprocess.run(
-        command, cwd=repo_root, capture_output=True, text=True, timeout=900, check=False
-    )
-    output = (result.stdout + result.stderr).strip() or "scheduler produced no output"
-    if result.returncode != 0:
-        return f"scheduler exited {result.returncode}: {output[:500]}"
-    return output[:500]
-
-
 def rows(tracker: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]:
     overrides = state["tasks"]
     result = []
     for task in tracker["tasks"]:
         # A retired entry no longer overrides the tracker, but it still carries the links.
         record = overrides.get(task["id"], {})
-        lease = record if task["status"] != "completed" else None
+        lease = record if not record.get("expired") and task["status"] != "completed" and record.get("status") != "completed" else None
         result.append(
             {
                 "id": task["id"],
@@ -152,8 +21,11 @@ def rows(tracker: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]
                 "owner": (lease or task).get("owner"),
                 "updated_at": record.get("updated_at"),
                 "task_url": record.get("task_url"),
+                "stages": record.get("stages", {}),
                 "pull_request": record.get("pull_request"),
                 "local": bool(lease),
+                "prepared": record.get("prepared", False),
+                "prepare_error": record.get("prepare_error"),
             }
         )
     return result
@@ -221,7 +93,7 @@ def forest(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return trees + [build(entry) for entry in entries if entry["id"] not in placed]
 
 
-PAGE = """<!doctype html>
+PAGE = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Code Winch scheduler</title>
@@ -241,8 +113,9 @@ PAGE = """<!doctype html>
   tbody tr:target td {{ background: #3b82f61f; }}
   td.title {{ white-space: normal; min-width: 15rem; line-height: 1.45; }}
   td.deps {{ white-space: normal; min-width: 15rem; max-width: 19rem; line-height: 1.9; }}
-  td.owner {{ max-width: 11rem; overflow: hidden; text-overflow: ellipsis; }}
-  td.owner a, td.pr a {{ color: inherit; text-decoration: none; }}
+  td.conversation a, .node a[data-stage], td.pr a {{ color: inherit; text-decoration: none; }}
+  th.conversation {{ white-space: normal; }}
+  td.info {{ white-space: normal; min-width: 15rem; max-width: 24rem; font-size: .8rem; }}
   .icon {{ width: 1.35rem; height: 1.35rem; vertical-align: -.4em; fill: currentColor; opacity: .6; }}
   a:hover .icon {{ opacity: 1; }}
   td.deps code, .waits code {{ font-size: .78rem; padding: .1rem .4rem; border-radius: 4px; background: #8881; opacity: .55; }}
@@ -263,20 +136,29 @@ PAGE = """<!doctype html>
   .tag.completed {{ color: #16a34a; border-color: #16a34a66; background: #16a34a1a; font-weight: 600; }}
   .local {{ font-weight: 600; }}
   .note {{ opacity: .7; font-size: .8rem; margin-top: 1.75rem; max-width: 52rem; }}
+  .feedback {{ position: sticky; top: 0; z-index: 2; background: Canvas; padding: .75rem; border: 1px solid var(--line); }}
+  .feedback[data-error="true"] {{ border-color: #dc2626; color: #b91c1c; }}
+  .stage-reason {{ display: block; white-space: normal; font-size: .8rem; max-width: 24rem; }}
+  button:disabled {{ cursor: not-allowed; opacity: .55; }}
   form {{ display: inline; }}
   button {{ font: inherit; font-size: .8rem; padding: .3rem .8rem; margin-left: .4rem; cursor: pointer; border-radius: 6px; }}
 </style>
 <header>
   <h1>Code Winch scheduler</h1>
-  <form method="post"><input type="hidden" name="action" value="run">
-    <button type="submit">Run scheduler</button></form>
+  <button type="button" data-action="sync">Sync main</button>
+  <label>API token <input id="token" type="password" autocomplete="off"></label>
+  <button type="button" id="sign-in">Sign in</button>
+  <button type="button" id="sign-out" hidden>Sign out</button>
+  <span id="auth-status">Not signed in</span>
   <button type="button" id="swap" hidden>Tree view</button>
 </header>
+<div class="feedback" id="feedback" hidden><span id="result" role="alert" aria-live="assertive"></span>
+<a id="refresh" href="" hidden>Refresh task list</a></div>
 <div class="sub">{summary}</div>
 {message}
 <div class="wrap" id="table-view">
 <table>
-  <thead><tr><th>Task</th><th>Title</th><th>Depends on</th><th>Status</th><th>Source</th><th>Owner</th><th>Pull request</th><th>Updated</th><th></th></tr></thead>
+  <thead><tr><th>Task</th><th>Title</th><th>Stages</th><th class="conversation">Refine conversation</th><th class="conversation">Implement conversation</th><th>Info</th><th>Depends on</th><th>Status</th><th>Source</th><th>Pull request</th><th>Updated</th></tr></thead>
   <tbody>
   {rows}
   </tbody>
@@ -285,13 +167,137 @@ PAGE = """<!doctype html>
 <ul class="tree wrap" id="tree-view" hidden>
   {tree}
 </ul>
-<p class="note">Leases live in the scheduler state volume and apply only while the tracker has not
-recorded the task as completed. Expiring one releases the concurrency slot it holds, so only a lease
-that still holds one offers the option: a lease reading completed records a merged pull request, and
-once the tracker agrees it is retired in place, keeping its links on the row without overriding
-anything. The tree view nests each task under the dependency that unlocks it last, so a task waiting
-on several others appears once, under the deepest of them, and lists the rest beside its title.</p>
+<p class="note">Sync prepares available task branches from main. Refine and Implement launch Codex
+on the task branch; merge refinement changes there before starting implementation.
+Audit copies a prompt for an open implementation pull request into that branch.
+Expire releases a local reservation without cancelling cloud tasks or removing conversation links.</p>
+<textarea id="audit-prompt" hidden readonly aria-label="Audit prompt" rows="12" style="width:100%"></textarea>
+<button type="button" id="copy-prompt" hidden>Copy audit prompt</button>
 <script>
+  const result = document.getElementById("result");
+  const feedback = document.getElementById("feedback");
+  const refresh = document.getElementById("refresh");
+  const token = document.getElementById("token");
+  const authStatus = document.getElementById("auth-status");
+  const signInButton = document.getElementById("sign-in");
+  const signOutButton = document.getElementById("sign-out");
+  const audit = document.getElementById("audit-prompt");
+  const copy = document.getElementById("copy-prompt");
+  // The page is the mount point, so resolve calls against it however it is proxied.
+  const base = location.pathname.endsWith("/") ? location.pathname : location.pathname + "/";
+  refresh.href = location.pathname;
+  function signedIn(value) {{
+    authStatus.textContent = value ? "Signed in on this browser" : "Not signed in";
+    signOutButton.hidden = !value;
+  }}
+  function showMessage(message, error = false) {{
+    feedback.hidden = false;
+    feedback.dataset.error = String(error);
+    result.textContent = message;
+    feedback.scrollIntoView({{block: "nearest"}});
+  }}
+  async function request(path, body, bearer) {{
+    if (!bearer && !window.isSecureContext) bearer = token.value;
+    const headers = {{"X-Panel-Request": "1"}};
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    if (bearer) headers.Authorization = "Bearer " + bearer;
+    const response = await fetch(base + path, {{method: body === undefined ? "GET" : "POST",
+      credentials: "same-origin", headers, body: body === undefined ? undefined : JSON.stringify(body)}});
+    const text = await response.text();
+    let data;
+    try {{ data = JSON.parse(text); }} catch (_) {{ data = null; }}
+    if (response.status === 401) {{
+      signedIn(false);
+      token.focus();
+      throw new Error("Unauthorized (401). Enter a valid API token and sign in, then retry.");
+    }}
+    if (!response.ok) {{
+      const error = new Error(data?.error || "Request failed (HTTP " + response.status + "). Check the proxy and panel connection.");
+      error.data = data;
+      throw error;
+    }}
+    if (!data) throw new Error("The server returned an unexpected response (HTTP " + response.status + ").");
+    return data;
+  }}
+  async function signIn() {{
+    if (!window.isSecureContext) throw new Error("Browser sign-in requires HTTPS or localhost.");
+    await request("api/session", {{path: base}}, token.value);
+    token.value = "";
+    const session = await request("api/session");
+    if (!session.authenticated) throw new Error("The session cookie was not accepted. Use HTTPS and allow cookies for this site.");
+    signedIn(true);
+  }}
+  signInButton.onclick = async () => {{
+    try {{ await signIn(); showMessage("Signed in. This browser will remember the session for seven days."); }}
+    catch (error) {{ showMessage(error.message, true); }}
+  }};
+  signOutButton.onclick = async () => {{
+    try {{ await request("api/session/logout", {{path: base}}); token.value = ""; signedIn(false); showMessage("Signed out."); }}
+    catch (error) {{ showMessage(error.message, true); }}
+  }};
+  request("api/session").then(data => signedIn(data.authenticated)).catch(error => showMessage(error.message, true));
+  async function copyAudit() {{
+    try {{ await navigator.clipboard.writeText(audit.value); showMessage("Audit prompt copied."); }}
+    catch (error) {{
+      audit.hidden = false;
+      audit.select();
+      showMessage("Clipboard unavailable. Copy the selected prompt, or use Copy audit prompt.");
+    }}
+  }}
+  copy.onclick = copyAudit;
+  document.querySelectorAll("[data-action]").forEach(button => {{
+    button.onclick = async () => {{
+      const action = button.dataset.action;
+      const endpoint = action === "sync" ? "api/sync" :
+        "api/tasks/" + encodeURIComponent(button.dataset.task) + "/" + action;
+      button.disabled = true;
+      refresh.hidden = true;
+      showMessage("Working…");
+      try {{
+        if (token.value && window.isSecureContext) await signIn();
+        let data;
+        try {{ data = await request(endpoint, {{}}); }}
+        catch (error) {{
+          if (action !== "audit" || !error.data?.pull_requests?.length) throw error;
+          const selected = window.prompt("Choose implementation PR number: " +
+            error.data.pull_requests.map(p => p.number + ": " + p.url).join("\n"));
+          if (!selected) throw error;
+          data = await request(endpoint, {{pr_number: Number(selected)}});
+        }}
+        if (action === "sync") {{
+          while (data.status === "running") {{
+            showMessage("Syncing main and preparing task branches…");
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            data = await request("api/sync/" + encodeURIComponent(data.id));
+          }}
+          if (data.status === "failed") throw new Error(data.error);
+          window.location.reload();
+        }} else if (action === "audit") {{
+          audit.value = data.prompt; audit.hidden = false; copy.hidden = false;
+          await copyAudit();
+        }} else if (action === "expire") {{
+          window.location.reload();
+        }} else {{
+          showMessage(data.reused ? "Already submitted: " : "Submitted: ");
+          const link = document.createElement("a");
+          link.href = data.task_url; link.textContent = data.task_url;
+          link.target = "_blank"; link.rel = "noopener";
+          result.appendChild(link);
+          document.querySelectorAll("[data-conversations]").forEach(container => {{
+            if (container.dataset.conversations !== button.dataset.task ||
+                container.dataset.conversationStage !== action) return;
+            const conversation = container.querySelector('[data-stage="' + action + '"]');
+            conversation.href = data.task_url;
+            conversation.hidden = false;
+            container.querySelector(".no-conversation").hidden = true;
+          }});
+        }}
+      }} catch (error) {{
+        showMessage(error.message, true);
+        if (action === "sync") refresh.hidden = false;
+      }} finally {{ button.disabled = false; }}
+    }};
+  }});
   const swap = document.getElementById("swap");
   const table = document.getElementById("table-view");
   const tree = document.getElementById("tree-view");
@@ -311,6 +317,8 @@ NODE = """<li>
   <div class="node" id="tree-{id}">
     <code>{id}</code><span class="name">{title}</span>
     <span class="tag {status}">{status}</span>{waits}{actions}
+    <span>Refine: {refine}</span><span>Implement: {implement}</span>
+    <span class="stage-reason">{info}</span>
   </div>
   {children}
 </li>"""
@@ -318,13 +326,15 @@ NODE = """<li>
 ROW = """<tr id="{id}">
   <td><code>{id}</code></td>
   <td class="title">{title}</td>
+  <td class="actions">{actions}</td>
+  <td class="conversation">{refine}</td>
+  <td class="conversation">{implement}</td>
+  <td class="info">{info}</td>
   <td class="deps">{deps}</td>
   <td><span class="tag {status}">{status}</span></td>
   <td>{source}</td>
-  <td class="owner" title="{hint}">{owner}</td>
   <td class="pr">{pull_request}</td>
   <td>{updated}</td>
-  <td class="actions">{actions}</td>
 </tr>"""
 
 
@@ -364,28 +374,49 @@ GITHUB_ICON = (
 )
 
 
-def button(action: str, task_id: str, label: str) -> str:
-    """Render a form that posts to the page's own URL, naming the action in a field.
+def button(action: str, task_id: str, label: str, reason: str = "") -> str:
+    disabled = f' disabled title="{html.escape(reason)}"' if reason else ""
+    return (f'<button type="button" data-action="{html.escape(action)}" '
+            f'data-task="{html.escape(task_id)}"{disabled}>{label}</button>')
 
-    Omitting the action attribute keeps every link on the page relative, so the panel works
-    unchanged whether it is reached directly or through a reverse proxy that mounts it under a
-    path prefix. An absolute /expire would leave that prefix behind and miss the proxy's route.
-    """
-    return (
-        f'<form method="post">'
-        f'<input type="hidden" name="action" value="{html.escape(action)}">'
-        f'<input type="hidden" name="task_id" value="{html.escape(task_id)}">'
-        f'<button type="submit">{label}</button></form>'
-    )
+
+def stage_reason(entry: dict[str, Any], runnable: set[str]) -> str:
+    if entry["local"] and entry["prepared"] and entry["status"] == "in_progress":
+        return ""
+    if entry["status"] == "completed":
+        reason = "Task completed."
+    elif entry.get("prepare_error"):
+        reason = entry["prepare_error"]
+    elif entry["status"] == "in_progress" or entry["id"] in runnable:
+        reason = "Sync main to prepare this task; available tasks wait for scheduler capacity."
+    else:
+        reason = "Waiting for dependencies or a blocked task to be released."
+    return reason
 
 
 def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
-    actions = ""
-    if entry["id"] in runnable:
-        actions += button("run", entry["id"], "Run")
+    reason = stage_reason(entry, runnable)
+    actions = "".join(button(stage, entry["id"], label, reason) for stage, label in
+                       (("refine", "Refine"), ("implement", "Implement"), ("audit", "Audit")))
     if entry["local"] and entry["status"] != "completed":
         actions += button("expire", entry["id"], "Expire")
     return actions
+
+
+def conversation_cell(entry: dict[str, Any], stage: str) -> str:
+    submitted = [record for record in entry["stages"].values()
+                 if record.get("stage") == stage and record.get("status") == "submitted"
+                 and link_target(record.get("task_url"))]
+    latest = max(submitted, key=lambda record: record.get("updated_at", "")) if submitted else {}
+    url = link_target(latest.get("task_url"))
+    target = f'href="{html.escape(url)}"' if url else "hidden"
+    label = f"Open {stage} conversation"
+    return (
+        f'<span data-conversations="{html.escape(entry["id"])}" data-conversation-stage="{stage}">'
+        f'<a {target} data-stage="{stage}" target="_blank" rel="noopener" '
+        f'title="{label}" aria-label="{label}">{CODEX_ICON}</a>'
+        f'<span class="no-conversation"{" hidden" if url else ""}>—</span></span>'
+    )
 
 
 def source_of(entry: dict[str, Any]) -> str:
@@ -402,19 +433,6 @@ def link_target(value: Any) -> str:
     url = str(value or "").strip()
     parsed = urlparse(url)
     return url if parsed.scheme in ("http", "https") and parsed.netloc else ""
-
-
-def owner_cell(entry: dict[str, Any]) -> tuple[str, str]:
-    """Render the owner cell and the tooltip that carries whatever the cell leaves out."""
-    owner = entry["owner"] or "—"
-    url = link_target(entry["task_url"])
-    if not url:
-        return html.escape(owner), owner
-    link = (
-        f'<a href="{html.escape(url)}" target="_blank" rel="noopener" '
-        f'title="open the Codex conversation">{CODEX_ICON}</a>'
-    )
-    return link, f"{owner} — {url}" if entry["owner"] else url
 
 
 def pull_request_cell(entry: dict[str, Any]) -> str:
@@ -451,6 +469,9 @@ def branches(nodes: list[dict[str, Any]], runnable: set[str], done: set[str]) ->
                 status=html.escape(entry["status"]),
                 waits=f'<span class="waits">also waits on {waits}</span>' if waits else "",
                 actions=actions_for(entry, runnable),
+                refine=conversation_cell(entry, "refine"),
+                implement=conversation_cell(entry, "implement"),
+                info=html.escape(stage_reason(entry, runnable)),
                 children=(
                     f'<ul>{branches(node["children"], runnable, done)}</ul>'
                     if node["children"]
@@ -476,7 +497,6 @@ def render(tracker: dict[str, Any], state: dict[str, Any], message: str, busy: b
     body = []
     for entry in entries:
         deps = chips(entry["depends_on"], done, "")
-        owner, hint = owner_cell(entry)
         body.append(
             ROW.format(
                 id=html.escape(entry["id"]),
@@ -484,8 +504,9 @@ def render(tracker: dict[str, Any], state: dict[str, Any], message: str, busy: b
                 deps=deps or "—",
                 status=html.escape(entry["status"]),
                 source=source_of(entry),
-                owner=owner,
-                hint=html.escape(hint),
+                refine=conversation_cell(entry, "refine"),
+                implement=conversation_cell(entry, "implement"),
+                info=html.escape(stage_reason(entry, runnable)) or "—",
                 pull_request=pull_request_cell(entry),
                 updated=html.escape((entry["updated_at"] or "—")[:16].replace("T", " ")),
                 actions=actions_for(entry, runnable),
@@ -499,120 +520,3 @@ def render(tracker: dict[str, Any], state: dict[str, Any], message: str, busy: b
         rows="\n  ".join(body),
         tree=branches(forest(entries), runnable, done),
     )
-
-
-class Handler(BaseHTTPRequestHandler):
-    tracker_path: Path
-    state_file: Path
-    repo_root: Path
-    environment: str
-
-    def log_message(self, *args: Any) -> None:
-        return
-
-    def _send(self, status: HTTPStatus, body: bytes) -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def _redirect(self, message: str) -> None:
-        """Redirect back to the page itself, carrying the message in the query.
-
-        The location is a bare query so it resolves against whatever URL the browser is on,
-        which keeps any reverse proxy path prefix that an absolute /? would drop.
-        """
-        self.send_response(HTTPStatus.SEE_OTHER)
-        self.send_header("Location", "?" + urlencode({"msg": message}))
-        self.end_headers()
-
-    def do_GET(self) -> None:
-        path, _, query = self.path.partition("?")
-        if path != "/":
-            self._send(HTTPStatus.NOT_FOUND, b"not found")
-            return
-        message = parse_qs(query).get("msg", [""])[0]
-        try:
-            tracker: dict[str, Any] = {"tasks": []}
-            if self.tracker_path.exists():
-                tracker = load_tracker(self.tracker_path)
-            elif not message:
-                message = f"no tracker snapshot at {self.tracker_path}; {SNAPSHOT_HINT}"
-            state, busy = refresh(self.state_file, tracker)
-            page = render(tracker, state, message, busy)
-        except (OSError, ValueError) as error:
-            self._send(HTTPStatus.INTERNAL_SERVER_ERROR, str(error).encode())
-            return
-        self._send(HTTPStatus.OK, page.encode())
-
-    def do_POST(self) -> None:
-        path, _, _ = self.path.partition("?")
-        if path != "/":
-            self._send(HTTPStatus.NOT_FOUND, b"not found")
-            return
-        length = int(self.headers.get("Content-Length") or 0)
-        form = parse_qs(self.rfile.read(length).decode())
-        action = (form.get("action") or [""])[0]
-        task_id = (form.get("task_id") or [""])[0].upper()
-
-        if action == "run":
-            self._redirect(
-                run_scheduler(
-                    self.repo_root,
-                    self.tracker_path,
-                    self.state_file,
-                    self.environment,
-                    task_id or None,
-                )
-            )
-            return
-        if action == "expire":
-            self._redirect(expire(self.state_file, task_id) if task_id else "no task selected")
-            return
-        self._send(HTTPStatus.NOT_FOUND, b"not found")
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--tracker",
-        type=Path,
-        help="tracker snapshot; defaults to tracker.json beside the state file",
-    )
-    parser.add_argument("--state-file", type=Path, required=True)
-    parser.add_argument(
-        "--repo-root",
-        type=Path,
-        default=Path("/opt/code-winch"),
-        help="directory holding the scripts/ the panel runs",
-    )
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--expire", metavar="TASK_ID")
-    return parser.parse_args()
-
-
-def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    args = parse_args()
-    if args.expire:
-        print(expire(args.state_file, args.expire.upper()))
-        return 0
-
-    Handler.tracker_path = args.tracker or args.state_file.parent / "tracker.json"
-    Handler.state_file = args.state_file
-    Handler.repo_root = args.repo_root
-    Handler.environment = os.environ.get("CODEX_ENV_ID", "")
-
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"control panel on http://{args.host}:{args.port}")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

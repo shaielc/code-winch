@@ -14,11 +14,11 @@ set -euo pipefail
 runner_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ ! -f "$runner_dir/.env" ]]; then
-  echo "runner/.env is missing; copy runner/.env.example and set GITHUB_URL" >&2
+  echo "workplan-control-panel/.env is missing; copy workplan-control-panel/.env.example and set GITHUB_URL" >&2
   exit 1
 fi
 
-NETWORK_MODE=host docker compose \
+docker compose \
   --env-file "$runner_dir/.env" \
   -f "$runner_dir/compose.yml" \
-  run  --rm --entrypoint codex runner "$@"
+  run  --rm --entrypoint codex control-panel login "$@"

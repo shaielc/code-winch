@@ -1,0 +1,49 @@
+services:
+  runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        RUNNER_IMAGE: ${RUNNER_IMAGE:-ghcr.io/actions/actions-runner:latest}
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-bookworm-slim}
+        CODEX_VERSION: ${CODEX_VERSION:-latest}
+    image: code-winch-control-panel:local
+    init: true
+    restart: unless-stopped
+    environment:
+      GITHUB_URL: ${GITHUB_URL:?Set GITHUB_URL in workplan-control-panel/.env}
+      RUNNER_TOKEN: ${RUNNER_TOKEN:-}
+      RUNNER_NAME: ${RUNNER_NAME:-code-winch-local}
+      RUNNER_LABELS: ${RUNNER_LABELS:-code-winch,task-scheduler}
+    volumes:
+      - runner-work:/home/runner/_work
+      - runner-config:/var/lib/code-winch
+
+  control-panel:
+    image: code-winch-control-panel:local
+    init: true
+    restart: unless-stopped
+    entrypoint: [/usr/local/bin/code-winch-panel]
+    environment:
+      GITHUB_URL: ${GITHUB_URL:?Set GITHUB_URL in workplan-control-panel/.env}
+      GH_TOKEN: ${GH_TOKEN:?Set GH_TOKEN for branch writes and PR reads}
+      PANEL_TOKEN: ${PANEL_TOKEN:?Set PANEL_TOKEN}
+      CODEX_ENV_ID: ${CODEX_ENV_ID:-}
+      GIT_AUTHOR_NAME: ${GIT_AUTHOR_NAME:-Code Winch}
+      GIT_AUTHOR_EMAIL: ${GIT_AUTHOR_EMAIL:-code-winch@users.noreply.github.com}
+      GIT_COMMITTER_NAME: ${GIT_AUTHOR_NAME:-Code Winch}
+      GIT_COMMITTER_EMAIL: ${GIT_AUTHOR_EMAIL:-code-winch@users.noreply.github.com}
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "${PANEL_BIND:-127.0.0.1}:${PANEL_PORT:-8765}:8765"
+    volumes:
+      - codex-auth:/home/runner/.codex
+      - panel-checkout:/var/lib/code-winch/checkout
+      - scheduler-state:/var/lib/code-winch/state
+
+volumes:
+  codex-auth:
+  runner-work:
+  runner-config:
+  panel-checkout:
+  scheduler-state:

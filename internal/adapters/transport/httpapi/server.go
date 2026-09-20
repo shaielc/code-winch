@@ -27,6 +27,11 @@ var (
 	ErrIdempotencyConflict = errors.New("idempotency conflict")
 	ErrPreconditionFailed  = errors.New("precondition failed")
 	ErrValidation          = errors.New("validation failed")
+	// ErrUnsupportedProfile refuses a run whose persisted harness and sandbox
+	// profiles name a pair this deployment did not construct. It is deliberately
+	// distinct from ErrValidation: the request is well formed and the fields are
+	// immutable once the run exists, so there is nothing for the caller to correct.
+	ErrUnsupportedProfile = errors.New("unsupported harness and sandbox profile")
 )
 
 // Backend is the inward application boundary used by the HTTP adapter. Actor is
@@ -298,6 +303,8 @@ func (s *server) backendProblem(w http.ResponseWriter, r *http.Request, err erro
 		s.problem(w, r, 409, "idempotency_conflict", "Idempotency conflict", "Use a new Idempotency-Key for a different request.")
 	case errors.Is(err, ErrPreconditionFailed):
 		s.problem(w, r, 412, "precondition_failed", "Precondition failed", "Read the run and retry with its current ETag.")
+	case errors.Is(err, ErrUnsupportedProfile):
+		s.problem(w, r, 422, "unsupported_profile", "Unsupported profile", "This deployment cannot run the run's harness and sandbox profile pair.")
 	case errors.Is(err, ErrValidation):
 		s.problem(w, r, 422, "validation_failed", "Validation failed", "Correct the invalid fields and retry.")
 	default:

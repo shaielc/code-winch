@@ -26,8 +26,8 @@ Establish which mode applies before doing anything else.
    counter, whatever phase they land in; never renumber. This
    is where revision tasks arrive: a defect found while implementing, a failed
    task audit, a write collision that needed more than a rebase.
-3. **Update** — status, ownership, or blocked reason changed. See *Keeping
-   status true*.
+3. **Update** — status, ownership, or blocked reason changed; or a merged change
+   wrote outside its task's write set. See *Keeping status true* and *Report it*.
 4. **Audit** — report coverage gaps, invariant violations, and unreachable code
    without changing the plan.
 5. **Close** — the plan is finished or is being abandoned. Record what the
@@ -45,8 +45,8 @@ correct — it is what makes the whole-system map useful — but a brief written
 before its phase's dependencies exist is a hypothesis, and contact with the code
 is where it gets tested against reality.
 
-Every brief follows the anatomy in the shared model. The three sections that
-carry the most weight, and that a draft most often leaves thin:
+Every brief follows the anatomy in the shared model. The sections that carry the
+most weight, and that a draft most often leaves thin:
 
 - **Runtime reachability** — never empty. A task that cannot name the
   composition root, profile, and command that reach its code fits none of the
@@ -55,9 +55,14 @@ carry the most weight, and that a draft most often leaves thin:
   concurrency derivable, and they are not interchangeable: an overlapping write
   set is a merge warning, an overlapping contract surface is a missing
   dependency edge. A brief that declares neither is asserting width instead of
-  showing it.
+  showing it. Derive the write set from the Scope bullets, as the shared model
+  describes; it is a forecast, not a boundary.
 - **Demonstration** — commands a person can actually run, and what they should
   see. Not a formality, and not a restatement of the test names.
+- **Acceptance criteria** — when the objective promises a guarantee, the
+  criteria name the failures that would break it and what a person observes in
+  each. Criteria that describe only the happy path leave the implementer and the
+  auditor each to pick their own failures.
 
 Deferrals name an ID that exists in `tasks.json` at the moment the deferral is
 written. Writing a deferral therefore sometimes means creating the owning task
@@ -378,6 +383,8 @@ In close mode, only the last item applies. In every other mode:
 - Every brief has a non-empty **Runtime reachability** section and declares its
   **write set** and its **contract surfaces**.
 - Every brief has a **Demonstration** with commands a person can actually run.
+- Every guarantee a brief's objective states has acceptance criteria naming the
+  failures that would break it, and every write set is derived from its Scope.
 - Every dependency edge names compile, contract, semantic, or revision in one
   clause, and no `revision` edge was written before the implementation it
   revises exists.

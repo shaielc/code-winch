@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   pull_request:
     types: [closed]
+    branches: [main]
 
 concurrency:
   group: code-winch-task-scheduler
@@ -14,22 +15,39 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: [self-hosted, code-winch, task-scheduler]
     timeout-minutes: 15
-    permissions:
-      contents: read
-
+    permissions: {}
     steps:
-      - name: Check out the merged revision
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.ref }}
-
-      - name: Dispatch available tasks
+      - name: Notify control panel
         env:
-          CODEX_ENV_ID: ${{ vars.CODEX_ENV_ID }}
+          PANEL_URL: ${{ vars.CONTROL_PANEL_URL || 'http://control-panel:8765' }}
+          PANEL_TOKEN: ${{ secrets.CONTROL_PANEL_TOKEN }}
         run: |
-          test -n "$CODEX_ENV_ID"
-          python3 scripts/task_scheduler.py \
-            --event-file "$GITHUB_EVENT_PATH" \
-            --env "$CODEX_ENV_ID" \
-            --state-file /var/lib/code-winch/task-state.json \
-            --tracker-snapshot /var/lib/code-winch/tracker.json
+          test -n "$PANEL_TOKEN"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            endpoint=api/sync
+            body='{}'
+          else
+            endpoint=api/events/merge
+            body="@$GITHUB_EVENT_PATH"
+          fi
+          response=$(curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
+            -H "Authorization: Bearer $PANEL_TOKEN" \
+            -H 'Content-Type: application/json' \
+            --data-binary "$body" "${PANEL_URL%/}/$endpoint")
+          job_id=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$response")
+          deadline=$((SECONDS + 810))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            response=$(curl --fail-with-body --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
+              -H "Authorization: Bearer $PANEL_TOKEN" \
+              "${PANEL_URL%/}/api/sync/$job_id")
+            status=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])' <<< "$response")
+            case "$status" in
+              succeeded) echo "$response"; exit 0 ;;
+              failed) echo "$response"; exit 1 ;;
+            esac
+            sleep 2
+          done
+          echo "Timed out waiting for control-panel sync; inspect the panel before retrying."
+          exit 1

@@ -84,6 +84,7 @@ paths:
         "404": { $ref: "#/components/responses/ProblemRunNotFound" }
         "409": { $ref: "#/components/responses/ProblemStateConflict" }
         "412": { $ref: "#/components/responses/ProblemPreconditionFailed" }
+        "422": { $ref: "#/components/responses/ProblemUnsupportedProfile" }
         "428": { $ref: "#/components/responses/ProblemPreconditionRequired" }
   /runs/{runId}/stop:
     parameters:
@@ -239,6 +240,9 @@ components:
     ProblemPreconditionRequired:
       description: If-Match is required for this command.
       content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" }, example: { type: "https://code-winch.dev/problems/precondition-required", title: "Precondition required", status: 428, code: "precondition_required", detail: "Supply the run's current ETag in If-Match.", requestId: "01K0EXAMPLE00000000000000" } } }
+    ProblemUnsupportedProfile:
+      description: The run's harness and sandbox profile pair is not supported by this deployment.
+      content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" }, example: { type: "https://code-winch.dev/problems/unsupported-profile", title: "Unsupported profile", status: 422, code: "unsupported_profile", detail: "This deployment cannot run the run's harness and sandbox profile pair.", requestId: "01K0EXAMPLE00000000000000" } } }
     ProblemValidationFailed:
       description: One or more request fields are invalid.
       content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" }, example: { type: "https://code-winch.dev/problems/validation-failed", title: "Validation failed", status: 422, code: "validation_failed", detail: "Correct the invalid fields and retry.", requestId: "01K0EXAMPLE00000000000000", errors: [{ field: "workspacePath", code: "required", message: "workspacePath is required" }] } } }

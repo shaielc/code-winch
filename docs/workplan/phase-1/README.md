@@ -45,6 +45,7 @@ absent from this table is not owned.
 | Same round trip against `storeProfile=postgres` (I4 swap) | P0-018 | Standing suite runs on memory only; postgres parity is not yet a gated scenario |
 | Postgres-backed e2e as I4 swap | P0-013 | Create/read e2e defaults to memory; postgres is selectable but not parity-gated |
 | Browser `winch_session` establishment | P0-011 | `httpapi.SetSessionCookie` exists and has no caller, so a browser is served the SPA and gets 401 from every API call |
+| Truthful terminal state for a run the daemon was stopped under | P0-008 | Shutdown releases the sandbox and the run lease but writes no terminal state, so the attempt stays `running`; `supervisor.Reconcile` decides what became of it and nothing calls it at startup |
 
 When this phase is derived, each row becomes a task or is re-deferred
 explicitly. Deriving the phase and leaving a row unowned is a coverage defect.

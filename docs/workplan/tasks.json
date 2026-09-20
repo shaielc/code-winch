@@ -99,7 +99,7 @@
       "title": "Start run execution",
       "phase": 0,
       "phase_name": "Foundation repair",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P0-003",
         "P0-006"
@@ -243,6 +243,45 @@
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-018-revise-finalize-for-memory-e2e.md"
+    },
+    {
+      "id": "P0-020",
+      "title": "Keep run output when an event append fails",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": [
+        "P0-008"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-020-keep-output-when-append-fails.md"
+    },
+    {
+      "id": "P0-021",
+      "title": "Recover a start interrupted before launch",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": [
+        "P0-008"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-021-recover-interrupted-start.md"
+    },
+    {
+      "id": "P0-022",
+      "title": "Fence attempt transitions by the run lease",
+      "phase": 0,
+      "phase_name": "Foundation repair",
+      "status": "pending",
+      "depends_on": [
+        "P0-008"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-022-fence-attempt-transitions.md"
     }
   ]
 }

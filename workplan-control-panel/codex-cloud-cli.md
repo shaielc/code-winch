@@ -1,7 +1,7 @@
 # What Codex Cloud tells us
 
-Reference for what `scripts/task_scheduler.py` can learn about the tasks it
-dispatches. Checked against `codex-cli` 0.144.5 and the `cloud-tasks` sources in
+Reference for what the control panel can learn about the tasks it dispatches.
+Checked against `codex-cli` 0.144.5 and the `cloud-tasks` sources in
 [openai/codex](https://github.com/openai/codex/blob/main/codex-rs/cloud-tasks/src/lib.rs);
 `.env.example` pins `CODEX_VERSION=latest`, so re-check after a CLI bump.
 
@@ -32,8 +32,8 @@ follow-up call needs is its last path segment.
 
 Task status is a four-state enum: `pending`, `ready`, `applied`, `error`.
 
-Two `exec` flags we do not pass: `--attempts N` runs best-of-N and shows up as
-`attempt_total`, and `--branch` sets the base branch. `--env` accepts an
+`--attempts N` runs best-of-N and shows up as `attempt_total`; `--branch` sets
+the base branch, which the panel supplies explicitly. `--env` accepts an
 environment *label* such as `shaielc/code-winch`, not only the opaque ID, so
 `CODEX_ENV_ID` does not strictly have to be the ID.
 
@@ -58,17 +58,8 @@ docs](https://learn.chatgpt.com/docs/cloud) describe only the web UI flow.
 [openai/codex#24777](https://github.com/openai/codex/issues/24777) tracks the
 request for scriptable task and environment lifecycle management.
 
-## Consequences for the scheduler
+## Control-panel integration
 
-`exec` with no `--branch` resolves the base to the *current* branch of its
-working directory. `dispatch()` runs with `cwd=repo_root`, so tasks are based
-on whatever branch the checkout happens to be on, while `load_tracker()` reads
-the tracker from `origin/main`. Passing `--branch` closes that gap.
-
-In the path that matters this already lands correctly: the workflow runs on a
-merged pull request and checks out `github.event.pull_request.base.ref`, so the
-runner sits on an up-to-date `main` and dispatched tasks branch from it — the
-same revision the tracker was read from. The gap is latent rather than active,
-and it opens as soon as the scheduler is run by hand from a feature branch.
-`--branch` would make the intent explicit instead of incidental.
-
+The panel passes `--branch task/<ID>` for Refine and Implement, and keeps the
+submission URL per stage and branch revision. Audit formats a prompt using the
+selected pull request and its current head; it does not submit a cloud task.
