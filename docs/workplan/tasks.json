@@ -12,7 +12,7 @@
       "title": "Repair CI test gates",
       "phase": 0,
       "phase_name": "Foundation repair",
-      "status": "pending",
+      "status": "in_progress",
       "depends_on": [],
       "owner": null,
       "blocked_reason": null,
