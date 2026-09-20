@@ -166,6 +166,8 @@ Audit copies a prompt for an open implementation pull request into that branch.<
   const token = document.getElementById("token");
   const audit = document.getElementById("audit-prompt");
   const copy = document.getElementById("copy-prompt");
+  // The page is the mount point, so resolve calls against it however it is proxied.
+  const base = location.pathname.endsWith("/") ? location.pathname : location.pathname + "/";
   async function copyAudit() {{
     try {{
       await navigator.clipboard.writeText(audit.value);
@@ -180,8 +182,8 @@ Audit copies a prompt for an open implementation pull request into that branch.<
   document.querySelectorAll("[data-action]").forEach(button => {{
     button.onclick = async () => {{
       const action = button.dataset.action;
-      const endpoint = action === "sync" ? "api/sync" :
-        "api/tasks/" + encodeURIComponent(button.dataset.task) + "/" + action;
+      const endpoint = base + (action === "sync" ? "api/sync" :
+        "api/tasks/" + encodeURIComponent(button.dataset.task) + "/" + action);
       button.disabled = true;
       result.textContent = "Working…";
       try {{
