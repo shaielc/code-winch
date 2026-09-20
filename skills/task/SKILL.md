@@ -19,7 +19,7 @@ they carry the repository's boundaries and its verification commands.
 
 1. **Refine the brief** — before the task is implemented, check its brief
    against HEAD and the plan, make it concrete enough to implement from, and
-   commit it as the first commit on the task's branch.
+   commit it to the task's branch before any implementation.
 2. **Implement** — build the change the brief describes, demonstrate it, and
    open the pull request.
 3. **Audit** — judge one task against HEAD and report whether its acceptance
@@ -84,15 +84,10 @@ Then make the brief concrete, in the sections it already has:
 Refine toward what the design set and the code at HEAD require, never toward an
 implementation that already exists.
 
-The artifact is one commit that changes only the brief, made as the first commit
-on the task's branch. Implementation starts from it.
+The artifact changes only the brief, and is committed to the task's branch
+before any implementation. Implementation starts from it.
 
 ## Implementing
-
-**Start from the refined brief.** The first commit on the task's branch refines
-the brief. Follow its Scope, including items that add a task or re-own a
-deferral. If the code proves part of the refined brief wrong, stop and report
-which part and why, so the brief can be revised rather than worked around.
 
 **Leave the system runnable and deployable.** Every commit starts, and deploys,
 and the standing scenario suite stays green. This binds during the task, not
@@ -252,8 +247,8 @@ not settle.
 - Every deferral names a task ID that exists in `tasks.json`.
 - No undeclared contract surface changed; files written outside the write set
   are listed in the pull request.
-- A refinement is one commit that changes only the brief, first on the task's
-  branch.
+- A refinement changes only the brief, and lands before any implementation
+  commit on the task's branch.
 - Contract changes carry their design document or ADR update.
 - The system starts and deploys at HEAD.
 - `Task: <ID>` is in the pull request body; no status field was edited.
