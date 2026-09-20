@@ -152,7 +152,7 @@
       "title": "Ship controllable in-memory store profile",
       "phase": 0,
       "phase_name": "Foundation repair",
-      "status": "pending",
+      "status": "in_progress",
       "depends_on": [],
       "owner": null,
       "blocked_reason": null,
