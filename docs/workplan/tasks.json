@@ -139,7 +139,7 @@
       "title": "Stop run",
       "phase": 0,
       "phase_name": "Foundation repair",
-      "status": "pending",
+      "status": "in_progress",
       "depends_on": [
         "P0-008"
       ],
