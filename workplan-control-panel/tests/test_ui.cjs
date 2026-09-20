@@ -14,8 +14,15 @@ function browser(pathname, respond, secure = true) {
   const elements = new Map(), requests = [];
   const buttons = ['sync', 'refine', 'implement', 'audit', 'expire'].map(action =>
     Object.assign(element(), {dataset: {action, task: 'P0-001'}}));
-  const conversations = [element(), element()];
-  conversations.forEach(c => c.dataset.conversations = 'P0-001');
+  const conversations = ['refine', 'implement', 'refine', 'implement'].map(stage => {
+    const container = element(), link = element(), placeholder = element();
+    container.dataset = {conversations: 'P0-001', conversationStage: stage};
+    link.dataset.stage = stage;
+    link.hidden = true;
+    container.children = [link, placeholder];
+    container.querySelector = selector => selector === '.no-conversation' ? placeholder : link;
+    return container;
+  });
   const get = id => {if (!elements.has(id)) elements.set(id, element()); return elements.get(id);};
   const location = {pathname, reload() {this.reloaded = true;}};
   const context = {location, window: {location, isSecureContext: secure},
@@ -64,8 +71,10 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
     for (const button of client.buttons) await button.onclick();
     assert.ok(client.location.reloaded);
     for (const container of client.conversations) {
-      assert.deepEqual(container.children.filter(c => typeof c === 'object').map(c => c.textContent),
-        ['Refine conversation', 'Implement conversation']);
+      const [link, placeholder] = container.children;
+      assert.equal(link.href, 'https://chatgpt.com/codex/tasks/' + container.dataset.conversationStage);
+      assert.equal(link.hidden, false);
+      assert.equal(placeholder.hidden, true);
     }
     await client.get('sign-out').onclick();
     assert.equal(client.get('auth-status').textContent, 'Not signed in');

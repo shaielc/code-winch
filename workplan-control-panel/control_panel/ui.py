@@ -113,8 +113,9 @@ PAGE = r"""<!doctype html>
   tbody tr:target td {{ background: #3b82f61f; }}
   td.title {{ white-space: normal; min-width: 15rem; line-height: 1.45; }}
   td.deps {{ white-space: normal; min-width: 15rem; max-width: 19rem; line-height: 1.9; }}
-  td.owner {{ max-width: 11rem; overflow: hidden; text-overflow: ellipsis; }}
-  td.owner a, td.pr a {{ color: inherit; text-decoration: none; }}
+  td.conversation a, .node a[data-stage], td.pr a {{ color: inherit; text-decoration: none; }}
+  th.conversation {{ white-space: normal; }}
+  td.info {{ white-space: normal; min-width: 15rem; max-width: 24rem; font-size: .8rem; }}
   .icon {{ width: 1.35rem; height: 1.35rem; vertical-align: -.4em; fill: currentColor; opacity: .6; }}
   a:hover .icon {{ opacity: 1; }}
   td.deps code, .waits code {{ font-size: .78rem; padding: .1rem .4rem; border-radius: 4px; background: #8881; opacity: .55; }}
@@ -157,7 +158,7 @@ PAGE = r"""<!doctype html>
 {message}
 <div class="wrap" id="table-view">
 <table>
-  <thead><tr><th>Task</th><th>Title</th><th>Stages</th><th>Depends on</th><th>Status</th><th>Source</th><th>Owner</th><th>Pull request</th><th>Updated</th></tr></thead>
+  <thead><tr><th>Task</th><th>Title</th><th>Stages</th><th class="conversation">Refine conversation</th><th class="conversation">Implement conversation</th><th>Info</th><th>Depends on</th><th>Status</th><th>Source</th><th>Pull request</th><th>Updated</th></tr></thead>
   <tbody>
   {rows}
   </tbody>
@@ -283,15 +284,12 @@ Expire releases a local reservation without cancelling cloud tasks or removing c
           link.target = "_blank"; link.rel = "noopener";
           result.appendChild(link);
           document.querySelectorAll("[data-conversations]").forEach(container => {{
-            if (container.dataset.conversations !== button.dataset.task) return;
-            const conversation = document.createElement("a");
+            if (container.dataset.conversations !== button.dataset.task ||
+                container.dataset.conversationStage !== action) return;
+            const conversation = container.querySelector('[data-stage="' + action + '"]');
             conversation.href = data.task_url;
-            conversation.textContent = action === "refine" ? "Refine conversation" : "Implement conversation";
-            conversation.dataset.stage = action;
-            conversation.target = "_blank"; conversation.rel = "noopener";
-            const previous = container.querySelector('[data-stage="' + action + '"]');
-            if (previous) previous.replaceWith(conversation);
-            else container.append(" ", conversation);
+            conversation.hidden = false;
+            container.querySelector(".no-conversation").hidden = true;
           }});
         }}
       }} catch (error) {{
@@ -319,6 +317,8 @@ NODE = """<li>
   <div class="node" id="tree-{id}">
     <code>{id}</code><span class="name">{title}</span>
     <span class="tag {status}">{status}</span>{waits}{actions}
+    <span>Refine: {refine}</span><span>Implement: {implement}</span>
+    <span class="stage-reason">{info}</span>
   </div>
   {children}
 </li>"""
@@ -327,10 +327,12 @@ ROW = """<tr id="{id}">
   <td><code>{id}</code></td>
   <td class="title">{title}</td>
   <td class="actions">{actions}</td>
+  <td class="conversation">{refine}</td>
+  <td class="conversation">{implement}</td>
+  <td class="info">{info}</td>
   <td class="deps">{deps}</td>
   <td><span class="tag {status}">{status}</span></td>
   <td>{source}</td>
-  <td class="owner" title="{hint}">{owner}</td>
   <td class="pr">{pull_request}</td>
   <td>{updated}</td>
 </tr>"""
@@ -378,9 +380,9 @@ def button(action: str, task_id: str, label: str, reason: str = "") -> str:
             f'data-task="{html.escape(task_id)}"{disabled}>{label}</button>')
 
 
-def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
-    actions = conversation_links(entry)
-    ready = entry["local"] and entry["prepared"] and entry["status"] == "in_progress"
+def stage_reason(entry: dict[str, Any], runnable: set[str]) -> str:
+    if entry["local"] and entry["prepared"] and entry["status"] == "in_progress":
+        return ""
     if entry["status"] == "completed":
         reason = "Task completed."
     elif entry.get("prepare_error"):
@@ -389,28 +391,32 @@ def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
         reason = "Sync main to prepare this task; available tasks wait for scheduler capacity."
     else:
         reason = "Waiting for dependencies or a blocked task to be released."
-    actions += "".join(button(stage, entry["id"], label, "" if ready else reason) for stage, label in
+    return reason
+
+
+def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
+    reason = stage_reason(entry, runnable)
+    actions = "".join(button(stage, entry["id"], label, reason) for stage, label in
                        (("refine", "Refine"), ("implement", "Implement"), ("audit", "Audit")))
-    if not ready:
-        actions += f'<span class="stage-reason">{html.escape(reason)}</span>'
     if entry["local"] and entry["status"] != "completed":
         actions += button("expire", entry["id"], "Expire")
     return actions
 
 
-def conversation_links(entry: dict[str, Any]) -> str:
-    links = []
-    for stage, label in (("refine", "Refine conversation"), ("implement", "Implement conversation")):
-        submitted = [record for record in entry["stages"].values()
-                     if record.get("stage") == stage and record.get("status") == "submitted"
-                     and link_target(record.get("task_url"))]
-        if submitted:
-            latest = max(submitted, key=lambda record: record.get("updated_at", ""))
-            links.append(
-                f'<a href="{html.escape(latest["task_url"])}" data-stage="{stage}" '
-                f'target="_blank" rel="noopener">{label}</a>'
-            )
-    return f'<span data-conversations="{html.escape(entry["id"])}">{" · ".join(links)}</span>'
+def conversation_cell(entry: dict[str, Any], stage: str) -> str:
+    submitted = [record for record in entry["stages"].values()
+                 if record.get("stage") == stage and record.get("status") == "submitted"
+                 and link_target(record.get("task_url"))]
+    latest = max(submitted, key=lambda record: record.get("updated_at", "")) if submitted else {}
+    url = link_target(latest.get("task_url"))
+    target = f'href="{html.escape(url)}"' if url else "hidden"
+    label = f"Open {stage} conversation"
+    return (
+        f'<span data-conversations="{html.escape(entry["id"])}" data-conversation-stage="{stage}">'
+        f'<a {target} data-stage="{stage}" target="_blank" rel="noopener" '
+        f'title="{label}" aria-label="{label}">{CODEX_ICON}</a>'
+        f'<span class="no-conversation"{" hidden" if url else ""}>—</span></span>'
+    )
 
 
 def source_of(entry: dict[str, Any]) -> str:
@@ -427,19 +433,6 @@ def link_target(value: Any) -> str:
     url = str(value or "").strip()
     parsed = urlparse(url)
     return url if parsed.scheme in ("http", "https") and parsed.netloc else ""
-
-
-def owner_cell(entry: dict[str, Any]) -> tuple[str, str]:
-    """Render the owner cell and the tooltip that carries whatever the cell leaves out."""
-    owner = entry["owner"] or "—"
-    url = link_target(entry["task_url"])
-    if not url:
-        return html.escape(owner), owner
-    link = (
-        f'<a href="{html.escape(url)}" target="_blank" rel="noopener" '
-        f'title="open the Codex conversation">{CODEX_ICON}</a>'
-    )
-    return link, f"{owner} — {url}" if entry["owner"] else url
 
 
 def pull_request_cell(entry: dict[str, Any]) -> str:
@@ -476,6 +469,9 @@ def branches(nodes: list[dict[str, Any]], runnable: set[str], done: set[str]) ->
                 status=html.escape(entry["status"]),
                 waits=f'<span class="waits">also waits on {waits}</span>' if waits else "",
                 actions=actions_for(entry, runnable),
+                refine=conversation_cell(entry, "refine"),
+                implement=conversation_cell(entry, "implement"),
+                info=html.escape(stage_reason(entry, runnable)),
                 children=(
                     f'<ul>{branches(node["children"], runnable, done)}</ul>'
                     if node["children"]
@@ -501,7 +497,6 @@ def render(tracker: dict[str, Any], state: dict[str, Any], message: str, busy: b
     body = []
     for entry in entries:
         deps = chips(entry["depends_on"], done, "")
-        owner, hint = owner_cell(entry)
         body.append(
             ROW.format(
                 id=html.escape(entry["id"]),
@@ -509,8 +504,9 @@ def render(tracker: dict[str, Any], state: dict[str, Any], message: str, busy: b
                 deps=deps or "—",
                 status=html.escape(entry["status"]),
                 source=source_of(entry),
-                owner=owner,
-                hint=html.escape(hint),
+                refine=conversation_cell(entry, "refine"),
+                implement=conversation_cell(entry, "implement"),
+                info=html.escape(stage_reason(entry, runnable)) or "—",
                 pull_request=pull_request_cell(entry),
                 updated=html.escape((entry["updated_at"] or "—")[:16].replace("T", " ")),
                 actions=actions_for(entry, runnable),
