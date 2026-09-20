@@ -43,9 +43,7 @@ well.
 Briefs are drafts until their phase opens. Writing all of them up front is
 correct — it is what makes the whole-system map useful — but a brief written
 before its phase's dependencies exist is a hypothesis, and contact with the code
-is where it gets tested against reality. That test is the refinement in
-`skills/task/SKILL.md`, run when a task is dispatched. It checks the brief
-against HEAD and makes its Scope concrete before implementation.
+is where it gets tested against reality.
 
 Every brief follows the anatomy in the shared model. The sections that carry the
 most weight, and that a draft most often leaves thin:
