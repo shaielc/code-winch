@@ -1,6 +1,6 @@
 ---
 name: task
-description: Refine one workplan task's brief against the code into something concrete to implement from, carry the task from its brief to a finished, demonstrated change, or judge whether a task that claims completion actually holds. Use when a task is dispatched and its brief needs refining before implementation, when picking up a task ID from docs/workplan/, implementing or finishing the change for one, reviewing the pull request that implements one, or auditing a single task's acceptance criteria against HEAD. Keeps attention on that one brief — its shape, its declared surfaces, its demonstration, and its verification.
+description: Refine, implement, or audit one task of the implementation workplan in docs/workplan/. Use when a prompt is about a single task — dispatching one, naming its ID, working on its brief, building or finishing the change that implements it, reviewing that pull request, or judging its claim to be complete. Keeps attention on that one brief — its shape, its declared surfaces, its demonstration, and its verification. Plan-level work belongs to the workplan skill.
 ---
 
 # Task
