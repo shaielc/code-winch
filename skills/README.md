@@ -56,8 +56,8 @@ it in permanently.
 Each stage of a dispatched task has its own prompt.
 `scripts/task-refine-prompt.md` instructs the agent to refine its task's brief:
 read the brief, `skills/task/SKILL.md`, and all applicable `AGENTS.md` files,
-then commit the refined brief as the first commit on the task's branch.
-Implementation starts from that commit, under
+then commit the refined brief to the task's branch before any implementation.
+Implementation starts from the refined brief, under
 `scripts/task-implementation-prompt.md`. `scripts/task-audit-prompt.md` has
 Claude audit the implementation pull request and post the report as a review on
 it. The root `AGENTS.md` points here too, so an agent that lands in the

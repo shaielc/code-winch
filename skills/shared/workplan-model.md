@@ -331,13 +331,6 @@ Name the files actually expected. A directory is a legitimate entry when the
 task genuinely owns it — creates it, or rewrites most of it — but not as
 shorthand for files the planner could have listed.
 
-Derive the write set from the scope, one bullet at a time, by naming the files
-that carry each bullet. A required response or refusal brings the API document
-and its problem mapping. A new runtime control brings the configuration loader,
-and a new command brings operator documentation. An entry names a file; it does
-not restrict what the task may do there. Restrictions belong in Scope or
-Non-goals.
-
 A write set is a forecast, not a boundary. A change that writes outside it lists
 those files, and the write set and the phase's collision report are updated
 from that list. A file outside the forecast is not a deviation; scope is judged

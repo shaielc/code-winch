@@ -43,9 +43,7 @@ well.
 Briefs are drafts until their phase opens. Writing all of them up front is
 correct — it is what makes the whole-system map useful — but a brief written
 before its phase's dependencies exist is a hypothesis, and contact with the code
-is where it gets tested against reality. That test is the refinement in
-`skills/task/SKILL.md`, run when a task is dispatched. It checks the brief
-against HEAD and makes its Scope concrete before implementation.
+is where it gets tested against reality.
 
 Every brief follows the anatomy in the shared model. The sections that carry the
 most weight, and that a draft most often leaves thin:
@@ -61,11 +59,10 @@ most weight, and that a draft most often leaves thin:
   describes; it is a forecast, not a boundary.
 - **Demonstration** — commands a person can actually run, and what they should
   see. Not a formality, and not a restatement of the test names.
-- **Acceptance criteria** — when the objective promises a guarantee (durability,
-  fencing, recovery, no orphaned processes), the criteria name the failures that
-  would break it and what a person observes in each. Criteria that describe only
-  the happy path leave the implementer and the auditor each to pick their own
-  failures.
+- **Acceptance criteria** — when the objective promises a guarantee, the
+  criteria name the failures that would break it and what a person observes in
+  each. Criteria that describe only the happy path leave the implementer and the
+  auditor each to pick their own failures.
 
 Deferrals name an ID that exists in `tasks.json` at the moment the deferral is
 written. Writing a deferral therefore sometimes means creating the owning task
@@ -186,10 +183,6 @@ two are one task.
 
 Report the numbers and justify any chain that is long relative to its phase; do
 not adopt a target width in the abstract.
-
-A write set is a forecast, and merged changes correct it. When a merged pull
-request lists files written outside its task's write set, add them to the brief
-and recompute the phase's write-collision set.
 
 ## Close procedure
 

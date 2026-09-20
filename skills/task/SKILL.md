@@ -1,6 +1,6 @@
 ---
 name: task
-description: Refine one workplan task's brief against the code into something concrete to implement from, carry the task from its brief to a finished, demonstrated change, or judge whether a task that claims completion actually holds. Use when a task is dispatched and its brief needs refining before implementation, when picking up a task ID from docs/workplan/, implementing or finishing the change for one, reviewing the pull request that implements one, or auditing a single task's acceptance criteria against HEAD. Keeps attention on that one brief — its shape, its declared surfaces, its demonstration, and its verification.
+description: Refine, implement, or audit one task of the implementation workplan in docs/workplan/. Use when a prompt is about a single task — dispatching one, naming its ID, working on its brief, building or finishing the change that implements it, reviewing that pull request, or judging its claim to be complete. Keeps attention on that one brief — its shape, its declared surfaces, its demonstration, and its verification. Plan-level work belongs to the workplan skill.
 ---
 
 # Task
@@ -19,7 +19,7 @@ they carry the repository's boundaries and its verification commands.
 
 1. **Refine the brief** — before the task is implemented, check its brief
    against HEAD and the plan, make it concrete enough to implement from, and
-   commit it as the first commit on the task's branch.
+   commit it to the task's branch before any implementation.
 2. **Implement** — build the change the brief describes, demonstrate it, and
    open the pull request.
 3. **Audit** — judge one task against HEAD and report whether its acceptance
@@ -59,11 +59,10 @@ Check, with evidence — a command with its observed output, or a `file:line`:
 2. **Deferrals into this task** — search every brief's Deferrals table, every
    phase's *Deferrals in* register, and the tree for this task's ID. Carry each
    hit into Scope, or add a Scope item that gives it a different owner.
-3. **Objective against criteria** — every guarantee the Objective states, such
-   as durability, fencing, recovery, or no orphaned processes, ends one of three
-   ways. Acceptance criteria name the failures that would break it and what a
-   person observes in each. Or it is narrowed out of the Objective. Or a Scope
-   item gives it to a hardening task.
+3. **Objective against criteria** — every guarantee the Objective states ends
+   one of three ways. Acceptance criteria name the failures that would break it
+   and what a person observes in each. Or it is narrowed out of the Objective.
+   Or a Scope item gives it to a hardening task.
 4. **Demonstration** — the tools and existing commands it uses are present where
    it will run, and each expectation can be observed without false matches.
 
@@ -84,15 +83,10 @@ Then make the brief concrete, in the sections it already has:
 Refine toward what the design set and the code at HEAD require, never toward an
 implementation that already exists.
 
-The artifact is one commit that changes only the brief, made as the first commit
-on the task's branch. Implementation starts from it.
+The artifact changes only the brief, and is committed to the task's branch
+before any implementation. Implementation starts from it.
 
 ## Implementing
-
-**Start from the refined brief.** The first commit on the task's branch refines
-the brief. Follow its Scope, including items that add a task or re-own a
-deferral. If the code proves part of the refined brief wrong, stop and report
-which part and why, so the brief can be revised rather than worked around.
 
 **Leave the system runnable and deployable.** Every commit starts, and deploys,
 and the standing scenario suite stays green. This binds during the task, not
@@ -226,9 +220,9 @@ instead the code of an already-completed task, the remedy is a revision task
 against it, which belongs to the `workplan` skill rather than to this one.
 
 The audit reports; it does not act on its findings. It does not create tasks,
-add deferral rows, edit the brief it judges, or write a post-mortem in the same
-change as its verdict. Those are plan changes, made separately once a person
-has accepted the finding.
+add deferral rows, or edit the brief it judges in the same change as its
+verdict. Those are plan changes, made separately once a person has accepted the
+finding.
 
 ## Review rounds
 
@@ -252,8 +246,8 @@ not settle.
 - Every deferral names a task ID that exists in `tasks.json`.
 - No undeclared contract surface changed; files written outside the write set
   are listed in the pull request.
-- A refinement is one commit that changes only the brief, first on the task's
-  branch.
+- A refinement changes only the brief, and lands before any implementation
+  commit on the task's branch.
 - Contract changes carry their design document or ADR update.
 - The system starts and deploys at HEAD.
 - `Task: <ID>` is in the pull request body; no status field was edited.
