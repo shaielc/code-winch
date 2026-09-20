@@ -184,10 +184,6 @@ two are one task.
 Report the numbers and justify any chain that is long relative to its phase; do
 not adopt a target width in the abstract.
 
-A write set is a forecast, and merged changes correct it. When a merged pull
-request lists files written outside its task's write set, add them to the brief
-and recompute the phase's write-collision set.
-
 ## Close procedure
 
 Close ends a plan. It reads what happened, writes the record to `docs/state.md`,
