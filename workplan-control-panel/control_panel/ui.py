@@ -11,7 +11,7 @@ def rows(tracker: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]
     for task in tracker["tasks"]:
         # A retired entry no longer overrides the tracker, but it still carries the links.
         record = overrides.get(task["id"], {})
-        lease = record if task["status"] != "completed" and record.get("status") != "completed" else None
+        lease = record if not record.get("expired") and task["status"] != "completed" and record.get("status") != "completed" else None
         result.append(
             {
                 "id": task["id"],
@@ -21,6 +21,7 @@ def rows(tracker: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]
                 "owner": (lease or task).get("owner"),
                 "updated_at": record.get("updated_at"),
                 "task_url": record.get("task_url"),
+                "stages": record.get("stages", {}),
                 "pull_request": record.get("pull_request"),
                 "local": bool(lease),
                 "prepared": record.get("prepared", False),
@@ -157,7 +158,8 @@ PAGE = r"""<!doctype html>
 </ul>
 <p class="note">Sync prepares available task branches from main. Refine and Implement launch Codex
 on the task branch; merge refinement changes there before starting implementation.
-Audit copies a prompt for an open implementation pull request into that branch.</p>
+Audit copies a prompt for an open implementation pull request into that branch.
+Expire releases a local reservation without cancelling cloud tasks or removing conversation links.</p>
 <p id="result" role="status"></p>
 <textarea id="audit-prompt" hidden readonly aria-label="Audit prompt" rows="12" style="width:100%"></textarea>
 <button type="button" id="copy-prompt" hidden>Copy audit prompt</button>
@@ -205,7 +207,7 @@ Audit copies a prompt for an open implementation pull request into that branch.<
           audit.hidden = false;
           copy.hidden = false;
           await copyAudit();
-        }} else if (action === "sync") {{
+        }} else if (action === "sync" || action === "expire") {{
           window.location.reload();
         }} else {{
           result.textContent = data.reused ? "Already submitted: " : "Submitted: ";
@@ -213,6 +215,17 @@ Audit copies a prompt for an open implementation pull request into that branch.<
           link.href = data.task_url; link.textContent = data.task_url;
           link.target = "_blank"; link.rel = "noopener";
           result.appendChild(link);
+          document.querySelectorAll("[data-conversations]").forEach(container => {{
+            if (container.dataset.conversations !== button.dataset.task) return;
+            const conversation = document.createElement("a");
+            conversation.href = data.task_url;
+            conversation.textContent = action === "refine" ? "Refine conversation" : "Implement conversation";
+            conversation.dataset.stage = action;
+            conversation.target = "_blank"; conversation.rel = "noopener";
+            const previous = container.querySelector('[data-stage="' + action + '"]');
+            if (previous) previous.replaceWith(conversation);
+            else container.append(" ", conversation);
+          }});
         }}
       }} catch (error) {{ result.textContent = error.message; }}
       finally {{ button.disabled = false; }}
@@ -296,10 +309,28 @@ def button(action: str, task_id: str, label: str) -> str:
 
 
 def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
-    if entry["prepared"] and entry["status"] == "in_progress":
-        return "".join(button(stage, entry["id"], label) for stage, label in
-                       (("refine", "Refine"), ("implement", "Implement"), ("audit", "Audit")))
-    return ""
+    actions = conversation_links(entry)
+    if entry["local"] and entry["status"] != "completed":
+        if entry["prepared"] and entry["status"] == "in_progress":
+            actions += "".join(button(stage, entry["id"], label) for stage, label in
+                              (("refine", "Refine"), ("implement", "Implement"), ("audit", "Audit")))
+        actions += button("expire", entry["id"], "Expire")
+    return actions
+
+
+def conversation_links(entry: dict[str, Any]) -> str:
+    links = []
+    for stage, label in (("refine", "Refine conversation"), ("implement", "Implement conversation")):
+        submitted = [record for record in entry["stages"].values()
+                     if record.get("stage") == stage and record.get("status") == "submitted"
+                     and link_target(record.get("task_url"))]
+        if submitted:
+            latest = max(submitted, key=lambda record: record.get("updated_at", ""))
+            links.append(
+                f'<a href="{html.escape(latest["task_url"])}" data-stage="{stage}" '
+                f'target="_blank" rel="noopener">{label}</a>'
+            )
+    return f'<span data-conversations="{html.escape(entry["id"])}">{" · ".join(links)}</span>'
 
 
 def source_of(entry: dict[str, Any]) -> str:

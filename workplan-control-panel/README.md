@@ -31,6 +31,9 @@ submit the corresponding prompt to Codex Cloud on the task branch. Merge the
 refinement PR into that branch before implementing. **Audit** copies a prompt
 naming an open implementation PR and its current head; when several PRs exist,
 the UI asks which to use. A text field is available if clipboard access fails.
+Both views include separate Refine and Implement conversation links. **Expire**
+releases the local reservation while keeping those links; it does not cancel
+cloud tasks. A later sync can select the task again.
 
 All `/api/` routes require `Authorization: Bearer <PANEL_TOKEN>`; POST bodies must
 be JSON objects. Enter the token in the UI to use its buttons. The UI and
@@ -45,6 +48,7 @@ protect the entire site behind a reverse proxy.
 | POST | `/api/sync` | `{}`; pull main and prepare available tasks |
 | POST | `/api/tasks/<ID>/refine` | `{}`; submit refinement |
 | POST | `/api/tasks/<ID>/implement` | `{}`; submit implementation |
+| POST | `/api/tasks/<ID>/expire` | `{}`; release the local reservation, retaining conversation links |
 | POST | `/api/tasks/<ID>/audit` | Optional `{"pr_number": 123}`; return formatted prompt |
 
 Concurrent operations return 409. Repeating a submitted stage at the same branch

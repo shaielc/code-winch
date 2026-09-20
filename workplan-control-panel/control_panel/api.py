@@ -80,13 +80,15 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(data, dict):
                 raise ValueError("Expected a JSON object")
             path = urlparse(self.path).path
-            match = re.fullmatch(r"/api/tasks/(P\d+-\d{3})/(refine|implement|audit)", path)
+            match = re.fullmatch(r"/api/tasks/(P\d+-\d{3})/(refine|implement|audit|expire)", path)
             if path == "/api/events/merge":
                 if not isinstance(data.get("pull_request"), dict):
                     raise ValueError("Expected a pull_request event")
                 result = self.scheduler.sync(data)
             elif path == "/api/sync":
                 result = self.scheduler.sync()
+            elif match and match[2] == "expire":
+                result = self.scheduler.expire(match[1])
             elif match:
                 number = data.get("pr_number")
                 if number is not None and (type(number) is not int or number <= 0):

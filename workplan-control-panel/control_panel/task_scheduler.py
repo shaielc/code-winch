@@ -73,11 +73,12 @@ class TaskScheduler:
             # survives process death and branch helpers safely reuse an existing branch.
             pending = [t for t in tracker["tasks"] if t["id"] in state["tasks"]
                        and state["tasks"][t["id"]]["status"] == "in_progress"
+                       and not state["tasks"][t["id"]].get("expired")
                        and not state["tasks"][t["id"]].get("prepared")]
             prepared = []
             for task in pending + selected:
                 record = state["tasks"].setdefault(task["id"], {})
-                record.update(status="in_progress", branch=repository.task_branch(task["id"]),
+                record.update(status="in_progress", expired=False, branch=repository.task_branch(task["id"]),
                               owner="control-panel", updated_at=datetime.now(UTC).isoformat())
                 task_state.write_json(self.state_file, state)
                 repository.ensure_task_branch(self.clone, "origin", "main", task["id"], base_commit=base)
@@ -92,9 +93,23 @@ class TaskScheduler:
         if task is None:
             raise TaskError(404, "Unknown task")
         record = state["tasks"].get(task_id, {})
-        if task["status"] == "completed" or record.get("status") != "in_progress" or not record.get("prepared"):
+        if task["status"] == "completed" or record.get("expired") or record.get("status") != "in_progress" or not record.get("prepared"):
             raise TaskError(409, "Sync and prepare an available task before choosing a stage")
         return task, record
+
+    def expire(self, task_id: str):
+        """Release a local reservation, retaining its conversation history."""
+        with self.locked():
+            state = task_state.load_state(self.state_file)
+            task = next((t for t in self.tracker()["tasks"] if t["id"] == task_id), None)
+            if task is None:
+                raise TaskError(404, "Unknown task")
+            record = state["tasks"].get(task_id)
+            if not record or task["status"] == "completed" or record.get("status") == "completed":
+                raise TaskError(409, "This task has no active local reservation to expire")
+            record.update(expired=True, owner=None, updated_at=datetime.now(UTC).isoformat())
+            task_state.write_json(self.state_file, state)
+            return {"expired": task_id}
 
     def stage(self, task_id: str, stage: str, pr_number: int | None = None):
         if stage not in ("refine", "implement", "audit"):

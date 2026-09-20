@@ -43,7 +43,7 @@ def effective_tracker(tracker: dict[str, Any], state: dict[str, Any]) -> dict[st
     overrides = state["tasks"]
     for task in effective["tasks"]:
         local = overrides.get(task["id"])
-        if local and local["status"] != "completed" and task["status"] != "completed":
+        if local and not local.get("expired") and local["status"] != "completed" and task["status"] != "completed":
             task["status"] = local["status"]
             task["owner"] = local.get("owner")
             task["blocked_reason"] = local.get("blocked_reason")

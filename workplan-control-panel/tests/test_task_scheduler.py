@@ -83,6 +83,50 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.assertIn('>' + label + '</button>', page)
         self.assertIn('navigator.clipboard.writeText', page)
 
+    def test_expire_releases_reservation_and_retains_stage_conversations(self):
+        self.panel.sync()
+        urls = ['https://chatgpt.com/codex/tasks/refine', 'https://chatgpt.com/codex/tasks/implement']
+        with patch.object(codex, 'submit', side_effect=urls):
+            self.panel.stage('P0-001', 'refine')
+            self.panel.stage('P0-001', 'implement')
+        before = self.panel.snapshot()
+        page = render(before['tracker'], before['state'], '', False)
+        self.assertEqual(page.count('data-action="expire"'), 2)
+        self.assertEqual(self.panel.expire('P0-001'), {'expired': 'P0-001'})
+        snapshot = self.panel.snapshot()
+        effective = task_state.effective_tracker(snapshot['tracker'], snapshot['state'])
+        self.assertEqual(effective['tasks'][0]['status'], 'pending')
+        self.assertEqual(snapshot['state']['tasks']['P0-001']['stages'], before['state']['tasks']['P0-001']['stages'])
+        with self.assertRaises(TaskError):
+            self.panel.stage('P0-001', 'implement')
+        page = render(snapshot['tracker'], snapshot['state'], '', False)
+        self.assertNotIn('data-action="expire"', page)
+        for stage, url in zip(('refine', 'implement'), urls):
+            self.assertEqual(page.count(f'href="{url}" data-stage="{stage}"'), 2)
+        # A later sync reclaims the existing branch exactly once, retaining history.
+        self.assertEqual(self.panel.sync()['prepared'], ['P0-001'])
+        self.assertEqual(self.commits_ahead(), '1')
+        with patch.object(codex, 'submit') as submit:
+            self.assertTrue(self.panel.stage('P0-001', 'refine')['reused'])
+            submit.assert_not_called()
+
+    def test_expire_respects_lock_and_completed_tracker(self):
+        self.panel.sync()
+        lock = task_state.acquire_lock(self.panel.state_file)
+        try:
+            with self.assertRaises(TaskError) as error:
+                self.panel.expire('P0-001')
+            self.assertEqual(error.exception.status, 409)
+        finally:
+            lock.close()
+        tracker = self.panel.tracker()
+        tracker['tasks'][0]['status'] = 'completed'
+        task_state.write_json(self.panel.tracker_path, tracker)
+        with self.assertRaises(TaskError):
+            self.panel.expire('P0-001')
+        with self.assertRaises(TaskError):
+            self.panel.expire('P0-002')
+
     def test_audit_formats_selected_pr_head_without_launching(self):
         self.panel.sync()
         pulls = [{'number': n, 'url': f'https://github.com/owner/repo/pull/{n}', 'headRefOid': f'head{n}'} for n in (7, 8)]
@@ -131,6 +175,10 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.assertEqual(data['prepared'], ['P0-001'])
             self.assertEqual(request('/api/tasks/P0-999/refine')[0], 404)
             self.assertEqual(request('/api/tasks/P0-002/refine')[0], 409)
+            self.assertEqual(request('/api/tasks/P0-001/expire', token='wrong')[0], 401)
+            self.assertFalse(self.panel.snapshot()['state']['tasks']['P0-001']['expired'])
+            self.assertEqual(request('/api/tasks/P0-001/expire'), (200, {'expired': 'P0-001'}))
+            self.assertEqual(request('/api/tasks/P0-999/expire')[0], 404)
         finally:
             server.shutdown()
             server.server_close()
