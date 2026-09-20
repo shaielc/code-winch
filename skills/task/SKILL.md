@@ -226,9 +226,9 @@ instead the code of an already-completed task, the remedy is a revision task
 against it, which belongs to the `workplan` skill rather than to this one.
 
 The audit reports; it does not act on its findings. It does not create tasks,
-add deferral rows, edit the brief it judges, or write a post-mortem in the same
-change as its verdict. Those are plan changes, made separately once a person
-has accepted the finding.
+add deferral rows, or edit the brief it judges in the same change as its
+verdict. Those are plan changes, made separately once a person has accepted the
+finding.
 
 ## Review rounds
 
