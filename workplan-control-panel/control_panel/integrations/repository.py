@@ -63,7 +63,9 @@ def push_opening_commit(clone: Path, remote: str, task_id: str) -> bool:
     """
     branch = task_branch(task_id)
     tracker = json.loads(run("git", "show", f"{remote}/{branch}:{TRACKER}", cwd=clone))
-    task = next(item for item in tracker["tasks"] if item["id"] == task_id)
+    task = next((item for item in tracker["tasks"] if item["id"] == task_id), None)
+    if task is None:
+        raise ValueError("Task branch does not contain its tracker entry")
     if task["status"] == "in_progress":
         return False
 

@@ -24,9 +24,12 @@ On a merge into main, the runner posts to `/api/events/merge`. The panel pulls
 its dedicated main checkout, reads `docs/workplan/tasks.json`, and selects pending
 tasks whose dependencies are completed. It creates `task/<ID>` with an opening
 in-progress commit, up to three active tasks by default (`--max-concurrent`).
-Retries reuse prepared branches. The main tracker remains authoritative for completion.
+Sync returns HTTP 202 with a job ID; the UI and runner poll its status.
+This keeps Git operations from holding a proxy connection open. Preparation
+failures name the task and operation, and retries reuse prepared branches. The main tracker remains authoritative for completion.
 
-The UI at `/` retains table and dependency-tree views. **Refine** and **Implement**
+The UI at `/` retains table and dependency-tree views. Stage buttons are always
+visible, with reasons when disabled; errors appear above the task list. **Refine** and **Implement**
 submit the corresponding prompt to Codex Cloud on the task branch. Merge the
 refinement PR into that branch before implementing. **Audit** copies a prompt
 naming an open implementation PR and its current head; when several PRs exist,
@@ -35,8 +38,14 @@ Both views include separate Refine and Implement conversation links. **Expire**
 releases the local reservation while keeping those links; it does not cancel
 cloud tasks. A later sync can select the task again.
 
-All `/api/` routes require `Authorization: Bearer <PANEL_TOKEN>`; POST bodies must
-be JSON objects. Enter the token in the UI to use its buttons. The UI and
+API clients use `Authorization: Bearer <PANEL_TOKEN>`; POST bodies must be JSON
+objects. In the UI, enter the token and **Sign in** to remember this browser for
+seven days. The browser stores a signed `HttpOnly; Secure; SameSite=Strict`
+session cookie scoped to the proxy mount path; it never stores the API token.
+Persistent sign-in requires HTTPS (or localhost); plain HTTP can still use a
+token temporarily in page memory. **Sign out** deletes this browser's cookie;
+rotating `PANEL_TOKEN` invalidates all sessions. Cookie-authenticated POSTs require
+`X-Panel-Request: 1`; the panel does not allow cross-origin requests. The UI and
 `/healthz` are readable without authentication, so retain the loopback binding or
 protect the entire site behind a reverse proxy.
 
@@ -44,14 +53,20 @@ protect the entire site behind a reverse proxy.
 | --- | --- | --- |
 | GET | `/healthz` | Process health |
 | GET | `/api/tasks` | Tracker and local task/stage records |
-| POST | `/api/events/merge` | GitHub closed-PR event; ignores non-main merges |
-| POST | `/api/sync` | `{}`; pull main and prepare available tasks |
+| GET | `/api/session` | Browser authentication status |
+| POST | `/api/session` | Bearer token plus `{"path": "/panel/"}`; create browser session |
+| POST | `/api/session/logout` | `{"path": "/panel/"}`; clear browser session |
+| POST | `/api/events/merge` | GitHub closed-PR event; returns 202 and a sync job ID |
+| POST | `/api/sync` | `{}`; returns 202 and a sync job ID |
+| GET | `/api/sync/<ID>` | `running`, `succeeded` with result, or `failed` with error |
 | POST | `/api/tasks/<ID>/refine` | `{}`; submit refinement |
 | POST | `/api/tasks/<ID>/implement` | `{}`; submit implementation |
 | POST | `/api/tasks/<ID>/expire` | `{}`; release the local reservation, retaining conversation links |
 | POST | `/api/tasks/<ID>/audit` | Optional `{"pr_number": 123}`; return formatted prompt |
 
-Concurrent operations return 409. Repeating a submitted stage at the same branch
+Concurrent sync requests share a job and request a fresh pass over main. Job
+status is retained until restart; task reservations remain on disk. Other
+concurrent operations return 409. Repeating a submitted stage at the same branch
 revision returns its existing URL. If a submission has an uncertain outcome,
 check Codex before stopping the panel and clearing that entry from the task's
 `stages` map in `task-state.json`; retries otherwise remain blocked.
@@ -63,6 +78,7 @@ the panel also requires GitHub CLI and an authenticated Codex CLI:
 
 ```sh
 python3 -m unittest discover -s tests -v
+node tests/test_ui.cjs
 PANEL_TOKEN=... CODEX_ENV_ID=... python3 -m control_panel \
   --clone=/path/to/dedicated-main-checkout --state-file=/path/to/state/task-state.json
 ```

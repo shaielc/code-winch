@@ -30,8 +30,24 @@ jobs:
             endpoint=api/events/merge
             body="@$GITHUB_EVENT_PATH"
           fi
-          curl --fail-with-body --silent --show-error \
-            --connect-timeout 10 --max-time 840 \
+          response=$(curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
             -H "Authorization: Bearer $PANEL_TOKEN" \
             -H 'Content-Type: application/json' \
-            --data-binary "$body" "${PANEL_URL%/}/$endpoint"
+            --data-binary "$body" "${PANEL_URL%/}/$endpoint")
+          job_id=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$response")
+          deadline=$((SECONDS + 810))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            response=$(curl --fail-with-body --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
+              -H "Authorization: Bearer $PANEL_TOKEN" \
+              "${PANEL_URL%/}/api/sync/$job_id")
+            status=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])' <<< "$response")
+            case "$status" in
+              succeeded) echo "$response"; exit 0 ;;
+              failed) echo "$response"; exit 1 ;;
+            esac
+            sleep 2
+          done
+          echo "Timed out waiting for control-panel sync; inspect the panel before retrying."
+          exit 1

@@ -25,6 +25,7 @@ def rows(tracker: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]
                 "pull_request": record.get("pull_request"),
                 "local": bool(lease),
                 "prepared": record.get("prepared", False),
+                "prepare_error": record.get("prepare_error"),
             }
         )
     return result
@@ -134,6 +135,10 @@ PAGE = r"""<!doctype html>
   .tag.completed {{ color: #16a34a; border-color: #16a34a66; background: #16a34a1a; font-weight: 600; }}
   .local {{ font-weight: 600; }}
   .note {{ opacity: .7; font-size: .8rem; margin-top: 1.75rem; max-width: 52rem; }}
+  .feedback {{ position: sticky; top: 0; z-index: 2; background: Canvas; padding: .75rem; border: 1px solid var(--line); }}
+  .feedback[data-error="true"] {{ border-color: #dc2626; color: #b91c1c; }}
+  .stage-reason {{ display: block; white-space: normal; font-size: .8rem; max-width: 24rem; }}
+  button:disabled {{ cursor: not-allowed; opacity: .55; }}
   form {{ display: inline; }}
   button {{ font: inherit; font-size: .8rem; padding: .3rem .8rem; margin-left: .4rem; cursor: pointer; border-radius: 6px; }}
 </style>
@@ -141,13 +146,18 @@ PAGE = r"""<!doctype html>
   <h1>Code Winch scheduler</h1>
   <button type="button" data-action="sync">Sync main</button>
   <label>API token <input id="token" type="password" autocomplete="off"></label>
+  <button type="button" id="sign-in">Sign in</button>
+  <button type="button" id="sign-out" hidden>Sign out</button>
+  <span id="auth-status">Not signed in</span>
   <button type="button" id="swap" hidden>Tree view</button>
 </header>
+<div class="feedback" id="feedback" hidden><span id="result" role="alert" aria-live="assertive"></span>
+<a id="refresh" href="" hidden>Refresh task list</a></div>
 <div class="sub">{summary}</div>
 {message}
 <div class="wrap" id="table-view">
 <table>
-  <thead><tr><th>Task</th><th>Title</th><th>Depends on</th><th>Status</th><th>Source</th><th>Owner</th><th>Pull request</th><th>Updated</th><th></th></tr></thead>
+  <thead><tr><th>Task</th><th>Title</th><th>Stages</th><th>Depends on</th><th>Status</th><th>Source</th><th>Owner</th><th>Pull request</th><th>Updated</th></tr></thead>
   <tbody>
   {rows}
   </tbody>
@@ -160,57 +170,114 @@ PAGE = r"""<!doctype html>
 on the task branch; merge refinement changes there before starting implementation.
 Audit copies a prompt for an open implementation pull request into that branch.
 Expire releases a local reservation without cancelling cloud tasks or removing conversation links.</p>
-<p id="result" role="status"></p>
 <textarea id="audit-prompt" hidden readonly aria-label="Audit prompt" rows="12" style="width:100%"></textarea>
 <button type="button" id="copy-prompt" hidden>Copy audit prompt</button>
 <script>
   const result = document.getElementById("result");
+  const feedback = document.getElementById("feedback");
+  const refresh = document.getElementById("refresh");
   const token = document.getElementById("token");
+  const authStatus = document.getElementById("auth-status");
+  const signInButton = document.getElementById("sign-in");
+  const signOutButton = document.getElementById("sign-out");
   const audit = document.getElementById("audit-prompt");
   const copy = document.getElementById("copy-prompt");
   // The page is the mount point, so resolve calls against it however it is proxied.
   const base = location.pathname.endsWith("/") ? location.pathname : location.pathname + "/";
+  refresh.href = location.pathname;
+  function signedIn(value) {{
+    authStatus.textContent = value ? "Signed in on this browser" : "Not signed in";
+    signOutButton.hidden = !value;
+  }}
+  function showMessage(message, error = false) {{
+    feedback.hidden = false;
+    feedback.dataset.error = String(error);
+    result.textContent = message;
+    feedback.scrollIntoView({{block: "nearest"}});
+  }}
+  async function request(path, body, bearer) {{
+    if (!bearer && !window.isSecureContext) bearer = token.value;
+    const headers = {{"X-Panel-Request": "1"}};
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    if (bearer) headers.Authorization = "Bearer " + bearer;
+    const response = await fetch(base + path, {{method: body === undefined ? "GET" : "POST",
+      credentials: "same-origin", headers, body: body === undefined ? undefined : JSON.stringify(body)}});
+    const text = await response.text();
+    let data;
+    try {{ data = JSON.parse(text); }} catch (_) {{ data = null; }}
+    if (response.status === 401) {{
+      signedIn(false);
+      token.focus();
+      throw new Error("Unauthorized (401). Enter a valid API token and sign in, then retry.");
+    }}
+    if (!response.ok) {{
+      const error = new Error(data?.error || "Request failed (HTTP " + response.status + "). Check the proxy and panel connection.");
+      error.data = data;
+      throw error;
+    }}
+    if (!data) throw new Error("The server returned an unexpected response (HTTP " + response.status + ").");
+    return data;
+  }}
+  async function signIn() {{
+    if (!window.isSecureContext) throw new Error("Browser sign-in requires HTTPS or localhost.");
+    await request("api/session", {{path: base}}, token.value);
+    token.value = "";
+    const session = await request("api/session");
+    if (!session.authenticated) throw new Error("The session cookie was not accepted. Use HTTPS and allow cookies for this site.");
+    signedIn(true);
+  }}
+  signInButton.onclick = async () => {{
+    try {{ await signIn(); showMessage("Signed in. This browser will remember the session for seven days."); }}
+    catch (error) {{ showMessage(error.message, true); }}
+  }};
+  signOutButton.onclick = async () => {{
+    try {{ await request("api/session/logout", {{path: base}}); token.value = ""; signedIn(false); showMessage("Signed out."); }}
+    catch (error) {{ showMessage(error.message, true); }}
+  }};
+  request("api/session").then(data => signedIn(data.authenticated)).catch(error => showMessage(error.message, true));
   async function copyAudit() {{
-    try {{
-      await navigator.clipboard.writeText(audit.value);
-      result.textContent = "Audit prompt copied.";
-    }} catch (error) {{
+    try {{ await navigator.clipboard.writeText(audit.value); showMessage("Audit prompt copied."); }}
+    catch (error) {{
       audit.hidden = false;
       audit.select();
-      result.textContent = "Clipboard unavailable. Copy the selected prompt, or use Copy audit prompt.";
+      showMessage("Clipboard unavailable. Copy the selected prompt, or use Copy audit prompt.");
     }}
   }}
   copy.onclick = copyAudit;
   document.querySelectorAll("[data-action]").forEach(button => {{
     button.onclick = async () => {{
       const action = button.dataset.action;
-      const endpoint = base + (action === "sync" ? "api/sync" :
-        "api/tasks/" + encodeURIComponent(button.dataset.task) + "/" + action);
+      const endpoint = action === "sync" ? "api/sync" :
+        "api/tasks/" + encodeURIComponent(button.dataset.task) + "/" + action;
       button.disabled = true;
-      result.textContent = "Working…";
+      refresh.hidden = true;
+      showMessage("Working…");
       try {{
-        const request = async body => {{
-          const response = await fetch(endpoint, {{method: "POST", headers: {{
-            "Authorization": "Bearer " + token.value, "Content-Type": "application/json"
-          }}, body: JSON.stringify(body)}});
-          return [response, await response.json()];
-        }};
-        let [response, data] = await request({{}});
-        if (!response.ok && action === "audit" && data.pull_requests?.length) {{
+        if (token.value && window.isSecureContext) await signIn();
+        let data;
+        try {{ data = await request(endpoint, {{}}); }}
+        catch (error) {{
+          if (action !== "audit" || !error.data?.pull_requests?.length) throw error;
           const selected = window.prompt("Choose implementation PR number: " +
-            data.pull_requests.map(p => p.number + ": " + p.url).join("\n"));
-          if (selected) [response, data] = await request({{pr_number: Number(selected)}});
+            error.data.pull_requests.map(p => p.number + ": " + p.url).join("\n"));
+          if (!selected) throw error;
+          data = await request(endpoint, {{pr_number: Number(selected)}});
         }}
-        if (!response.ok) throw new Error(data.error || "Request failed");
-        if (action === "audit") {{
-          audit.value = data.prompt;
-          audit.hidden = false;
-          copy.hidden = false;
+        if (action === "sync") {{
+          while (data.status === "running") {{
+            showMessage("Syncing main and preparing task branches…");
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            data = await request("api/sync/" + encodeURIComponent(data.id));
+          }}
+          if (data.status === "failed") throw new Error(data.error);
+          window.location.reload();
+        }} else if (action === "audit") {{
+          audit.value = data.prompt; audit.hidden = false; copy.hidden = false;
           await copyAudit();
-        }} else if (action === "sync" || action === "expire") {{
+        }} else if (action === "expire") {{
           window.location.reload();
         }} else {{
-          result.textContent = data.reused ? "Already submitted: " : "Submitted: ";
+          showMessage(data.reused ? "Already submitted: " : "Submitted: ");
           const link = document.createElement("a");
           link.href = data.task_url; link.textContent = data.task_url;
           link.target = "_blank"; link.rel = "noopener";
@@ -227,8 +294,10 @@ Expire releases a local reservation without cancelling cloud tasks or removing c
             else container.append(" ", conversation);
           }});
         }}
-      }} catch (error) {{ result.textContent = error.message; }}
-      finally {{ button.disabled = false; }}
+      }} catch (error) {{
+        showMessage(error.message, true);
+        if (action === "sync") refresh.hidden = false;
+      }} finally {{ button.disabled = false; }}
     }};
   }});
   const swap = document.getElementById("swap");
@@ -257,13 +326,13 @@ NODE = """<li>
 ROW = """<tr id="{id}">
   <td><code>{id}</code></td>
   <td class="title">{title}</td>
+  <td class="actions">{actions}</td>
   <td class="deps">{deps}</td>
   <td><span class="tag {status}">{status}</span></td>
   <td>{source}</td>
   <td class="owner" title="{hint}">{owner}</td>
   <td class="pr">{pull_request}</td>
   <td>{updated}</td>
-  <td class="actions">{actions}</td>
 </tr>"""
 
 
@@ -303,17 +372,28 @@ GITHUB_ICON = (
 )
 
 
-def button(action: str, task_id: str, label: str) -> str:
+def button(action: str, task_id: str, label: str, reason: str = "") -> str:
+    disabled = f' disabled title="{html.escape(reason)}"' if reason else ""
     return (f'<button type="button" data-action="{html.escape(action)}" '
-            f'data-task="{html.escape(task_id)}">{label}</button>')
+            f'data-task="{html.escape(task_id)}"{disabled}>{label}</button>')
 
 
 def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
     actions = conversation_links(entry)
+    ready = entry["local"] and entry["prepared"] and entry["status"] == "in_progress"
+    if entry["status"] == "completed":
+        reason = "Task completed."
+    elif entry.get("prepare_error"):
+        reason = entry["prepare_error"]
+    elif entry["status"] == "in_progress" or entry["id"] in runnable:
+        reason = "Sync main to prepare this task; available tasks wait for scheduler capacity."
+    else:
+        reason = "Waiting for dependencies or a blocked task to be released."
+    actions += "".join(button(stage, entry["id"], label, "" if ready else reason) for stage, label in
+                       (("refine", "Refine"), ("implement", "Implement"), ("audit", "Audit")))
+    if not ready:
+        actions += f'<span class="stage-reason">{html.escape(reason)}</span>'
     if entry["local"] and entry["status"] != "completed":
-        if entry["prepared"] and entry["status"] == "in_progress":
-            actions += "".join(button(stage, entry["id"], label) for stage, label in
-                              (("refine", "Refine"), ("implement", "Implement"), ("audit", "Audit")))
         actions += button("expire", entry["id"], "Expire")
     return actions
 

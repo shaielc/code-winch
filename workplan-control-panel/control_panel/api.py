@@ -14,6 +14,8 @@ from urllib.parse import urlparse
 
 from .task_scheduler import TaskScheduler, TaskError
 from .ui import render
+from . import sessions
+from .integrations.process import failure_message
 
 LOGGER = logging.getLogger("control_panel")
 
@@ -25,23 +27,37 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args: Any) -> None:
         return
 
-    def send(self, status: int, body: bytes, content_type="application/json") -> None:
+    def send(self, status: int, body: bytes, content_type="application/json", cookie=None) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
         self.end_headers()
         self.wfile.write(body)
 
-    def respond(self, status: int, data: dict) -> None:
-        self.send(status, json.dumps(data).encode())
+    def respond(self, status: int, data: dict, cookie=None) -> None:
+        self.send(status, json.dumps(data).encode(), cookie=cookie)
 
-    def authorized(self) -> bool:
+    def bearer_valid(self) -> bool:
         expected = ("Bearer " + self.token).encode()
         supplied = self.headers.get("Authorization", "").encode()
-        if not self.token or not hmac.compare_digest(supplied, expected):
-            self.respond(401, {"error": "A valid control-panel bearer token is required"})
+        return bool(self.token) and hmac.compare_digest(supplied, expected)
+
+    def authenticated(self) -> bool:
+        if self.headers.get("Authorization"):
+            return self.bearer_valid()
+        return sessions.valid(self.token, self.headers.get("Cookie", ""))
+
+    def authorized(self) -> bool:
+        if not self.authenticated():
+            self.respond(401, {"error": "Unauthorized. Enter a valid API token and sign in."})
+            return False
+        if (self.command == "POST" and not self.bearer_valid()
+                and self.headers.get("X-Panel-Request") != "1"):
+            self.respond(403, {"error": "Browser requests require the panel request header"})
             return False
         return True
 
@@ -49,6 +65,17 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/healthz":
             self.respond(200, {"status": "ok"})
+            return
+        if path == "/api/session":
+            self.respond(200, {"authenticated": self.authenticated()})
+            return
+        if path.startswith("/api/sync/"):
+            if not self.authorized():
+                return
+            try:
+                self.respond(200, self.scheduler.sync_status(path.rsplit("/", 1)[1]))
+            except TaskError as error:
+                self.respond(error.status, {"error": str(error)})
             return
         if path not in ("/", "/api/tasks"):
             self.respond(404, {"error": "Not found"})
@@ -81,12 +108,23 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Expected a JSON object")
             path = urlparse(self.path).path
             match = re.fullmatch(r"/api/tasks/(P\d+-\d{3})/(refine|implement|audit|expire)", path)
-            if path == "/api/events/merge":
+            if path == "/api/session":
+                if not self.bearer_valid():
+                    self.respond(401, {"error": "Enter a valid API token to sign in."})
+                    return
+                self.respond(200, {"authenticated": True}, sessions.cookie(self.token, data.get("path", "/")))
+                return
+            elif path == "/api/session/logout":
+                self.respond(200, {"authenticated": False}, sessions.cookie(self.token, data.get("path", "/"), clear=True))
+                return
+            elif path == "/api/events/merge":
                 if not isinstance(data.get("pull_request"), dict):
                     raise ValueError("Expected a pull_request event")
-                result = self.scheduler.sync(data)
+                self.respond(202, self.scheduler.start_sync(data))
+                return
             elif path == "/api/sync":
-                result = self.scheduler.sync()
+                self.respond(202, self.scheduler.start_sync())
+                return
             elif match and match[2] == "expire":
                 result = self.scheduler.expire(match[1])
             elif match:
@@ -101,10 +139,9 @@ class Handler(BaseHTTPRequestHandler):
             self.respond(error.status, {"error": str(error), **error.details})
         except (ValueError, UnicodeError):
             self.respond(400, {"error": "Invalid JSON request"})
-        except (OSError, subprocess.SubprocessError):
-            # Subprocess messages can contain credential-bearing URLs or prompt content.
+        except (OSError, subprocess.SubprocessError) as error:
             LOGGER.error("Control-panel operation failed")
-            self.respond(502, {"error": "Repository operation failed; check checkout, credentials and remote availability"})
+            self.respond(502, {"error": failure_message(error)})
 
 
 def parse_args() -> argparse.Namespace:

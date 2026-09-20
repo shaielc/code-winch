@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 import unittest
 from http.client import HTTPConnection
 from unittest.mock import patch
@@ -54,7 +55,7 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
 
     def test_preparation_recovers_after_push_failure(self):
         with patch.object(repository, 'push_opening_commit', side_effect=OSError('offline')):
-            with self.assertRaises(OSError):
+            with self.assertRaises(TaskError):
                 self.panel.sync()
         self.assertEqual(self.panel.sync()['prepared'], ['P0-001'])
         self.assertEqual(self.commits_ahead(), '1')
@@ -153,14 +154,60 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.panel.sync()
         self.assertEqual((self.panel.clone / 'untracked').read_text(), 'keep me')
 
+    def test_background_sync_returns_before_git_finishes_and_reports_failure(self):
+        entered, release = threading.Event(), threading.Event()
+        def slow_sync(event):
+            entered.set()
+            release.wait(3)
+            raise TaskError(502, "Main refreshed, but task preparation failed", prepared=[])
+        with patch.object(self.panel, 'sync', side_effect=slow_sync):
+            job = self.panel.start_sync()
+            self.assertTrue(entered.wait(1))
+            self.assertEqual(self.panel.sync_status(job['id'])['status'], 'running')
+            release.set()
+            deadline = time.monotonic() + 3
+            while self.panel.sync_status(job['id'])['status'] == 'running' and time.monotonic() < deadline:
+                time.sleep(0.01)
+            result = self.panel.sync_status(job['id'])
+            self.assertEqual(result['status'], 'failed')
+            self.assertIn('preparation failed', result['error'])
+
+    def test_new_merge_during_sync_requests_another_main_pull(self):
+        entered, release = threading.Event(), threading.Event()
+        def sync(event):
+            entered.set()
+            release.wait(3)
+            return {'prepared': []}
+        with patch.object(self.panel, 'sync', side_effect=sync) as sync_call:
+            job = self.panel.start_sync()
+            self.assertTrue(entered.wait(1))
+            again = self.panel.start_sync({'action': 'closed'})
+            self.assertEqual(again['id'], job['id'])
+            release.set()
+            deadline = time.monotonic() + 3
+            while self.panel.sync_status(job['id'])['status'] == 'running' and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertEqual(self.panel.sync_status(job['id'])['status'], 'succeeded')
+            self.assertEqual(sync_call.call_count, 2)
+
+    def test_in_progress_main_task_without_local_state_gets_prepared(self):
+        seed = self.root / 'seed'
+        tracker = json.loads((seed / repository.TRACKER).read_text())
+        tracker['tasks'][0]['status'] = 'in_progress'
+        repository.save_tracker(seed / repository.TRACKER, tracker)
+        git(seed, 'commit', '-am', 'existing task in progress')
+        git(seed, 'push', 'origin', 'main')
+        self.assertEqual(self.panel.sync()['prepared'], ['P0-001'])
+        self.assertTrue(self.panel.snapshot()['state']['tasks']['P0-001']['prepared'])
+
     def test_http_auth_validation_and_merge_flow(self):
         handler = type('TestHandler', (Handler,), {'scheduler': self.panel, 'token': 'test-token'})
         server = ThreadingHTTPServer(('127.0.0.1', 0), handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        def request(path, body='{}', token='test-token'):
+        def request(path, body='{}', token='test-token', method='POST'):
             connection = HTTPConnection(*server.server_address, timeout=5)
-            connection.request('POST', path, body, {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token})
+            connection.request(method, path, body if method == 'POST' else None, {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token})
             response = connection.getresponse()
             result = response.status, json.loads(response.read())
             connection.close()
@@ -171,8 +218,14 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.assertEqual(request('/api/sync', body='{')[0], 400)
             self.assertFalse(self.panel.state_file.exists())
             status, data = request('/api/events/merge', json.dumps({'action': 'closed', 'pull_request': {'merged_at': 'today', 'base': {'ref': 'main'}}}))
-            self.assertEqual(status, 200)
-            self.assertEqual(data['prepared'], ['P0-001'])
+            self.assertEqual(status, 202)
+            deadline = time.monotonic() + 5
+            job_id = data['id']
+            while data['status'] == 'running' and time.monotonic() < deadline:
+                time.sleep(0.01)
+                status, data = request('/api/sync/' + job_id, method='GET')
+            self.assertEqual(data['status'], 'succeeded')
+            self.assertEqual(data['result']['prepared'], ['P0-001'])
             self.assertEqual(request('/api/tasks/P0-999/refine')[0], 404)
             self.assertEqual(request('/api/tasks/P0-002/refine')[0], 409)
             self.assertEqual(request('/api/tasks/P0-001/expire', token='wrong')[0], 401)

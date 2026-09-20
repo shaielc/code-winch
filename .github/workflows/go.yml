@@ -36,7 +36,9 @@ jobs:
 
       - name: Test workplan control panel
         working-directory: workplan-control-panel
-        run: python3 -m unittest discover -s tests -v
+        run: |
+          python3 -m unittest discover -s tests -v
+          node tests/test_ui.cjs
 
       - name: Set up Go
         uses: actions/setup-go@v5

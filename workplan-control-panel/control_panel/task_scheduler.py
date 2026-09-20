@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import json
+import logging
+import threading
+import uuid
 import subprocess
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -10,6 +13,7 @@ from typing import Any
 
 from . import prompts, state as task_state
 from .integrations import codex, repository
+from .integrations.process import failure_message
 
 
 class TaskError(Exception):
@@ -27,6 +31,54 @@ class TaskScheduler:
         self.clone = clone
         self.state_file, self.tracker_path = state_file, tracker_path
         self.environment, self.capacity = environment, capacity
+        self._jobs_lock = threading.Lock()
+        self._jobs = {}
+        self._resync_requested = False
+
+    def start_sync(self, event=None):
+        """Return promptly so proxy timeouts cannot interrupt the HTTP response."""
+        with self._jobs_lock:
+            active = next((job for job in self._jobs.values() if job["status"] == "running"), None)
+            if active:
+                self._resync_requested = True
+                return dict(active)
+            job_id = uuid.uuid4().hex
+            job = {"id": job_id, "status": "running"}
+            # Bound retained results; task reservations themselves live on disk.
+            if len(self._jobs) >= 32:
+                self._jobs.pop(next(iter(self._jobs)))
+            self._jobs[job_id] = job
+        threading.Thread(target=self._run_sync, args=(job_id, event), daemon=True).start()
+        return {"id": job_id, "status": "running"}
+
+    def _run_sync(self, job_id, event):
+        try:
+            while True:
+                result = {"status": "succeeded", "result": self.sync(event)}
+                with self._jobs_lock:
+                    if self._resync_requested:
+                        self._resync_requested = False
+                        event = None
+                        continue
+                    self._jobs[job_id].update(result)
+                    return
+        except TaskError as error:
+            result = {"status": "failed", "error": str(error), **error.details}
+        except (OSError, subprocess.SubprocessError) as error:
+            result = {"status": "failed", "error": failure_message(error)}
+        except Exception:
+            # Do not log a command, prompt, or exception text that might contain secrets.
+            logging.getLogger("control_panel").error("Unexpected sync failure")
+            result = {"status": "failed", "error": "Sync failed unexpectedly; check the tracker and panel configuration."}
+        with self._jobs_lock:
+            self._resync_requested = False
+            self._jobs[job_id].update(result)
+
+    def sync_status(self, job_id):
+        with self._jobs_lock:
+            if job_id not in self._jobs:
+                raise TaskError(404, "Sync status is unavailable after a restart; retry Sync main.")
+            return dict(self._jobs[job_id])
 
     @contextmanager
     def locked(self):
@@ -71,18 +123,24 @@ class TaskScheduler:
             selected = available[:max(0, self.capacity - active)]
             # Retry incomplete preparation before claiming more work. The reservation
             # survives process death and branch helpers safely reuse an existing branch.
-            pending = [t for t in tracker["tasks"] if t["id"] in state["tasks"]
-                       and state["tasks"][t["id"]]["status"] == "in_progress"
-                       and not state["tasks"][t["id"]].get("expired")
-                       and not state["tasks"][t["id"]].get("prepared")]
+            pending = [t for t in effective["tasks"] if t["status"] == "in_progress"
+                       and not state["tasks"].get(t["id"], {}).get("expired")
+                       and not state["tasks"].get(t["id"], {}).get("prepared")]
             prepared = []
             for task in pending + selected:
                 record = state["tasks"].setdefault(task["id"], {})
                 record.update(status="in_progress", expired=False, branch=repository.task_branch(task["id"]),
                               owner="control-panel", updated_at=datetime.now(UTC).isoformat())
                 task_state.write_json(self.state_file, state)
-                repository.ensure_task_branch(self.clone, "origin", "main", task["id"], base_commit=base)
-                repository.push_opening_commit(self.clone, "origin", task["id"])
+                try:
+                    repository.ensure_task_branch(self.clone, "origin", "main", task["id"], base_commit=base)
+                    repository.push_opening_commit(self.clone, "origin", task["id"])
+                except (OSError, subprocess.SubprocessError, ValueError) as error:
+                    record["prepare_error"] = failure_message(error)
+                    task_state.write_json(self.state_file, state)
+                    raise TaskError(502, f"Main refreshed, but {task['id']} could not be prepared. "
+                                    + record["prepare_error"], prepared=prepared) from error
+                record.pop("prepare_error", None)
                 record["prepared"] = True
                 task_state.write_json(self.state_file, state)
                 prepared.append(task["id"])
