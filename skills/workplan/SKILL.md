@@ -59,11 +59,10 @@ most weight, and that a draft most often leaves thin:
   describes; it is a forecast, not a boundary.
 - **Demonstration** — commands a person can actually run, and what they should
   see. Not a formality, and not a restatement of the test names.
-- **Acceptance criteria** — when the objective promises a guarantee (durability,
-  fencing, recovery, no orphaned processes), the criteria name the failures that
-  would break it and what a person observes in each. Criteria that describe only
-  the happy path leave the implementer and the auditor each to pick their own
-  failures.
+- **Acceptance criteria** — when the objective promises a guarantee, the
+  criteria name the failures that would break it and what a person observes in
+  each. Criteria that describe only the happy path leave the implementer and the
+  auditor each to pick their own failures.
 
 Deferrals name an ID that exists in `tasks.json` at the moment the deferral is
 written. Writing a deferral therefore sometimes means creating the owning task

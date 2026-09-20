@@ -59,11 +59,10 @@ Check, with evidence — a command with its observed output, or a `file:line`:
 2. **Deferrals into this task** — search every brief's Deferrals table, every
    phase's *Deferrals in* register, and the tree for this task's ID. Carry each
    hit into Scope, or add a Scope item that gives it a different owner.
-3. **Objective against criteria** — every guarantee the Objective states, such
-   as durability, fencing, recovery, or no orphaned processes, ends one of three
-   ways. Acceptance criteria name the failures that would break it and what a
-   person observes in each. Or it is narrowed out of the Objective. Or a Scope
-   item gives it to a hardening task.
+3. **Objective against criteria** — every guarantee the Objective states ends
+   one of three ways. Acceptance criteria name the failures that would break it
+   and what a person observes in each. Or it is narrowed out of the Objective.
+   Or a Scope item gives it to a hardening task.
 4. **Demonstration** — the tools and existing commands it uses are present where
    it will run, and each expectation can be observed without false matches.
 
