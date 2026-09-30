@@ -17,7 +17,7 @@ class CheckoutConflict(Exception):
 def pull_main(clone: Path) -> tuple[dict[str, Any], str]:
     if run("git", "branch", "--show-current", cwd=clone) != "main":
         raise CheckoutConflict("The control-panel checkout must be on main")
-    if run("git", "status", "--porcelain", cwd=clone):
+    if run("git", "status", "--porcelain", '-uno', cwd=clone):
         raise CheckoutConflict("The control-panel checkout must be clean")
     run("git", "pull", "--ff-only", "origin", "main", cwd=clone)
     base = run("git", "rev-parse", "HEAD", cwd=clone)

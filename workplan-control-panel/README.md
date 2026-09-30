@@ -28,15 +28,24 @@ Sync returns HTTP 202 with a job ID; the UI and runner poll its status.
 This keeps Git operations from holding a proxy connection open. Preparation
 failures name the task and operation, and retries reuse prepared branches. The main tracker remains authoritative for completion.
 
+A scheduling pass fills free slots in tracker order, which cannot serve a task you
+want prepared next. `/api/tasks/<ID>/prepare` admits one named task instead, applying
+the same rules — the tracker's status, completed dependencies, and a free slot, unless
+the task already holds one. It refreshes main and answers with a job like a full sync,
+and refuses while another sync is running rather than coalescing and losing the
+selection. This is how a released reservation is taken back.
+
 The UI at `/` retains table and dependency-tree views. Stage buttons are always
 visible, with reasons when disabled; errors appear above the task list. **Refine** and **Implement**
 submit the corresponding prompt to Codex Cloud on the task branch. Merge the
 refinement PR into that branch before implementing. **Audit** copies a prompt
 naming an open implementation PR and its current head; when several PRs exist,
 the UI asks which to use. A text field is available if clipboard access fails.
-Both views include separate Refine and Implement conversation links. **Expire**
-releases the local reservation while keeping those links; it does not cancel
-cloud tasks. A later sync can select the task again.
+Both views include separate Refine and Implement conversation links. **Prepare**
+appears on a task the panel could admit now — available, mid-retry, or previously
+released — and claims that one task. **Expire** releases the local reservation while
+keeping those links, and the row's **⋯** menu expires a single stage record instead.
+Neither cancels a cloud task.
 
 API clients use `Authorization: Bearer <PANEL_TOKEN>`; POST bodies must be JSON
 objects. In the UI, enter the token and **Sign in** to remember this browser for
@@ -62,14 +71,26 @@ protect the entire site behind a reverse proxy.
 | POST | `/api/tasks/<ID>/refine` | `{}`; submit refinement |
 | POST | `/api/tasks/<ID>/implement` | `{}`; submit implementation |
 | POST | `/api/tasks/<ID>/expire` | `{}`; release the local reservation, retaining conversation links |
+| POST | `/api/tasks/<ID>/prepare` | `{}`; admit one named task; returns 202 and a sync job ID |
+| POST | `/api/tasks/<ID>/refine\|implement/expire` | `{}`; retire that stage's current submission so it can be sent again |
 | POST | `/api/tasks/<ID>/audit` | Optional `{"pr_number": 123}`; return formatted prompt |
 
 Concurrent sync requests share a job and request a fresh pass over main. Job
 status is retained until restart; task reservations remain on disk. Other
-concurrent operations return 409. Repeating a submitted stage at the same branch
-revision returns its existing URL. If a submission has an uncertain outcome,
-check Codex before stopping the panel and clearing that entry from the task's
-`stages` map in `task-state.json`; retries otherwise remain blocked.
+concurrent operations return 409.
+
+Repeating a submitted stage at the same branch revision returns its existing URL
+rather than launching a second cloud task. The branch revision is what scopes that:
+once a stage's pull request merges into the task branch, the tip moves and the stage
+is open again. Expiring a stage overrides it while the tip has not moved. Expiring
+retires the submission rather than deleting it, so its conversation stays linked, and
+a submission whose outcome is uncertain says so — Codex may have accepted it before
+the reply was lost, so check there first, because expiring can run it twice.
+
+`task-state.json` is written at schema version 2, which records stages as one list
+per stage. A version 1 file, which keyed each submission `"<stage>:<head>"` in a
+single map, is migrated when the panel reads it; an unrecognised version is refused
+rather than guessed at.
 
 ## Run and test
 

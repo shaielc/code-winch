@@ -1,0 +1,33 @@
+name: Control panel checks
+
+on:
+  push:
+    paths:
+      - 'workplan-control-panel/**'
+      - '.github/workflows/control-panel.yml'
+  pull_request:
+    paths:
+      - 'workplan-control-panel/**'
+      - '.github/workflows/control-panel.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: workplan-control-panel
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Test workplan control panel
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Test control panel UI
+        run: node tests/test_ui.cjs

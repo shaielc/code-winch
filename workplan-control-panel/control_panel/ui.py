@@ -4,6 +4,8 @@ import html
 from typing import Any
 from urllib.parse import urlparse
 
+from .integrations.codex import canonical_task_url
+
 STATUS_ORDER = ["in_progress", "blocked", "pending", "completed"]
 def rows(tracker: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]:
     overrides = state["tasks"]
@@ -104,7 +106,8 @@ PAGE = r"""<!doctype html>
   h1 {{ font-size: 1.3rem; margin: 0; }}
   .sub {{ opacity: .7; font-size: .875rem; margin-bottom: 1.75rem; }}
   .msg {{ padding: .75rem 1rem; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 1.5rem; }}
-  .wrap {{ overflow-x: auto; }}
+  /* Scrolling horizontally also clips vertically, so leave the last row's menu room to open. */
+  .wrap {{ overflow-x: auto; padding-bottom: 5.5rem; }}
   table {{ border-collapse: collapse; width: 100%; font-size: .9rem; }}
   th, td {{ text-align: left; padding: .8rem .75rem; border-bottom: 1px solid var(--line); white-space: nowrap; }}
   th {{ font-weight: 600; opacity: .65; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; }}
@@ -142,6 +145,14 @@ PAGE = r"""<!doctype html>
   button:disabled {{ cursor: not-allowed; opacity: .55; }}
   form {{ display: inline; }}
   button {{ font: inherit; font-size: .8rem; padding: .3rem .8rem; margin-left: .4rem; cursor: pointer; border-radius: 6px; }}
+  .menu {{ display: inline-block; position: relative; }}
+  .menu > summary {{ list-style: none; cursor: pointer; font-size: .8rem; margin-left: .4rem;
+    padding: .3rem .7rem; border: 1px solid var(--line); border-radius: 6px; }}
+  .menu > summary::-webkit-details-marker {{ display: none; }}
+  .menu > div {{ position: absolute; right: 0; z-index: 3; padding: .35rem; text-align: left;
+    background: Canvas; border: 1px solid var(--line); border-radius: 8px; white-space: nowrap;
+    display: flex; flex-direction: column; box-shadow: 0 2px 10px #0003; }}
+  .menu > div button {{ margin: .1rem 0; text-align: left; }}
 </style>
 <header>
   <h1>Code Winch scheduler</h1>
@@ -158,7 +169,7 @@ PAGE = r"""<!doctype html>
 {message}
 <div class="wrap" id="table-view">
 <table>
-  <thead><tr><th>Task</th><th>Title</th><th>Stages</th><th class="conversation">Refine conversation</th><th class="conversation">Implement conversation</th><th>Info</th><th>Depends on</th><th>Status</th><th>Source</th><th>Pull request</th><th>Updated</th></tr></thead>
+  <thead><tr><th>Task</th><th>Title</th><th>Stages</th><th class="conversation">Refine conversation</th><th class="conversation">Implement conversation</th><th>Depends on</th><th>Status</th><th>Source</th><th>Pull request</th><th>Updated</th><th>Info</th></tr></thead>
   <tbody>
   {rows}
   </tbody>
@@ -167,10 +178,13 @@ PAGE = r"""<!doctype html>
 <ul class="tree wrap" id="tree-view" hidden>
   {tree}
 </ul>
-<p class="note">Sync prepares available task branches from main. Refine and Implement launch Codex
-on the task branch; merge refinement changes there before starting implementation.
-Audit copies a prompt for an open implementation pull request into that branch.
-Expire releases a local reservation without cancelling cloud tasks or removing conversation links.</p>
+<p class="note">Sync main prepares every available task branch; Prepare claims one named task
+against a free scheduler slot. Refine and Implement launch Codex on the task branch; merge
+refinement changes there before starting implementation. Audit copies a prompt for an open
+implementation pull request into that branch. Repeating a stage at the same branch revision
+returns the conversation it already opened; the row menu expires that record so the stage can
+be sent again. Expire releases a local reservation. Neither expiry cancels a cloud task or
+removes a conversation link.</p>
 <textarea id="audit-prompt" hidden readonly aria-label="Audit prompt" rows="12" style="width:100%"></textarea>
 <button type="button" id="copy-prompt" hidden>Copy audit prompt</button>
 <script>
@@ -264,7 +278,8 @@ Expire releases a local reservation without cancelling cloud tasks or removing c
           if (!selected) throw error;
           data = await request(endpoint, {{pr_number: Number(selected)}});
         }}
-        if (action === "sync") {{
+        // Sync and Prepare both answer with a job envelope, not a result, and are polled.
+        if (action === "sync" || action === "prepare") {{
           while (data.status === "running") {{
             showMessage("Syncing main and preparing task branches…");
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -275,7 +290,7 @@ Expire releases a local reservation without cancelling cloud tasks or removing c
         }} else if (action === "audit") {{
           audit.value = data.prompt; audit.hidden = false; copy.hidden = false;
           await copyAudit();
-        }} else if (action === "expire") {{
+        }} else if (action.endsWith("expire")) {{
           window.location.reload();
         }} else {{
           showMessage(data.reused ? "Already submitted: " : "Submitted: ");
@@ -323,18 +338,23 @@ NODE = """<li>
   {children}
 </li>"""
 
+STAGE_MENU = """<details class="menu">
+  <summary title="Per-stage actions" aria-label="Per-stage actions">&#8943;</summary>
+  <div>{items}</div>
+</details>"""
+
 ROW = """<tr id="{id}">
   <td><code>{id}</code></td>
   <td class="title">{title}</td>
   <td class="actions">{actions}</td>
   <td class="conversation">{refine}</td>
   <td class="conversation">{implement}</td>
-  <td class="info">{info}</td>
   <td class="deps">{deps}</td>
   <td><span class="tag {status}">{status}</span></td>
   <td>{source}</td>
   <td class="pr">{pull_request}</td>
   <td>{updated}</td>
+  <td class="info">{info}</td>
 </tr>"""
 
 
@@ -374,10 +394,24 @@ GITHUB_ICON = (
 )
 
 
-def button(action: str, task_id: str, label: str, reason: str = "") -> str:
-    disabled = f' disabled title="{html.escape(reason)}"' if reason else ""
+def button(action: str, task_id: str, label: str, reason: str = "", hint: str = "") -> str:
+    if reason:
+        attributes = f' disabled title="{html.escape(reason)}"'
+    else:
+        attributes = f' title="{html.escape(hint)}"' if hint else ""
     return (f'<button type="button" data-action="{html.escape(action)}" '
-            f'data-task="{html.escape(task_id)}"{disabled}>{label}</button>')
+            f'data-task="{html.escape(task_id)}"{attributes}>{label}</button>')
+
+
+def preparable(entry: dict[str, Any], runnable: set[str]) -> bool:
+    """Whether the panel can admit this task now, by request rather than by scheduling pass.
+
+    An expired reservation lands here too: the overlay stops applying, so the entry reads at
+    the tracker's status while keeping the branch it already prepared.
+    """
+    if entry["status"] == "completed" or (entry["local"] and entry["prepared"]):
+        return False
+    return entry["status"] == "in_progress" or entry["id"] in runnable
 
 
 def stage_reason(entry: dict[str, Any], runnable: set[str]) -> str:
@@ -387,28 +421,64 @@ def stage_reason(entry: dict[str, Any], runnable: set[str]) -> str:
         reason = "Task completed."
     elif entry.get("prepare_error"):
         reason = entry["prepare_error"]
-    elif entry["status"] == "in_progress" or entry["id"] in runnable:
-        reason = "Sync main to prepare this task; available tasks wait for scheduler capacity."
+    elif preparable(entry, runnable):
+        reason = "Prepare this task before choosing a stage; preparation needs a free slot."
     else:
         reason = "Waiting for dependencies or a blocked task to be released."
     return reason
+
+
+def attempts_for(entry: dict[str, Any], stage: str) -> list[dict[str, Any]]:
+    """This stage's submissions, oldest first."""
+    return entry["stages"].get(stage, [])
+
+
+def stage_menu(entry: dict[str, Any]) -> str:
+    """Per-stage actions, which the row's own stage buttons have no room to express.
+
+    The page cannot know the branch revision without fetching it, so an item is offered
+    whenever the stage's newest submission is still standing and the panel decides whether
+    it applies to the revision the branch is on now.
+    """
+    if not any(attempts_for(entry, name) for name in ("refine", "implement")):
+        return ""
+    items = []
+    for stage in ("refine", "implement"):
+        attempts = attempts_for(entry, stage)
+        latest = attempts[-1] if attempts else None
+        if latest is None or latest["status"] == "expired":
+            items.append(button(f"{stage}/expire", entry["id"], f"Expire {stage}",
+                                reason=f"No {stage} submission is waiting to be expired."))
+        elif latest["status"] == "submitting":
+            # Not an override but a verdict on an unknown, and the risk runs the other way.
+            items.append(button(f"{stage}/expire", entry["id"], f"Expire {stage} (outcome unknown)",
+                                hint="Codex may have accepted this before the panel lost the "
+                                     "reply. Check Codex first: expiring can submit it twice."))
+        else:
+            items.append(button(f"{stage}/expire", entry["id"], f"Expire {stage}",
+                                hint=f"Submit {stage} again at the same branch revision."))
+    return STAGE_MENU.format(items="".join(items))
 
 
 def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
     reason = stage_reason(entry, runnable)
     actions = "".join(button(stage, entry["id"], label, reason) for stage, label in
                        (("refine", "Refine"), ("implement", "Implement"), ("audit", "Audit")))
+    if preparable(entry, runnable):
+        actions += button("prepare", entry["id"], "Prepare",
+                          hint="Refresh main, claim a scheduler slot, and prepare this branch.")
     if entry["local"] and entry["status"] != "completed":
         actions += button("expire", entry["id"], "Expire")
-    return actions
+    return actions + stage_menu(entry)
 
 
 def conversation_cell(entry: dict[str, Any], stage: str) -> str:
-    submitted = [record for record in entry["stages"].values()
-                 if record.get("stage") == stage and record.get("status") == "submitted"
-                 and link_target(record.get("task_url"))]
-    latest = max(submitted, key=lambda record: record.get("updated_at", "")) if submitted else {}
-    url = link_target(latest.get("task_url"))
+    # An expired attempt keeps its link: retiring a stage record must not lose the
+    # conversation it opened, which is the only trace of what was already asked for.
+    linked = [attempt for attempt in attempts_for(entry, stage)
+              if link_target(attempt.get("task_url"))]
+    # Records written before the cloud form was canonical still hold the bare one.
+    url = canonical_task_url(link_target(linked[-1]["task_url"])) if linked else ""
     target = f'href="{html.escape(url)}"' if url else "hidden"
     label = f"Open {stage} conversation"
     return (

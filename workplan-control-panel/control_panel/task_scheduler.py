@@ -35,11 +35,17 @@ class TaskScheduler:
         self._jobs = {}
         self._resync_requested = False
 
-    def start_sync(self, event=None):
+    def start_sync(self, event=None, only=None):
         """Return promptly so proxy timeouts cannot interrupt the HTTP response."""
+        if only is not None and not any(t["id"] == only for t in self.tracker()["tasks"]):
+            raise TaskError(404, "Unknown task")
         with self._jobs_lock:
             active = next((job for job in self._jobs.values() if job["status"] == "running"), None)
             if active:
+                # A scheduling pass coalesces into the running job, but a request to prepare
+                # one named task cannot: folding it in would silently drop the selection.
+                if only is not None:
+                    raise TaskError(409, "A sync is already running; retry when it finishes")
                 self._resync_requested = True
                 return dict(active)
             job_id = uuid.uuid4().hex
@@ -48,17 +54,18 @@ class TaskScheduler:
             if len(self._jobs) >= 32:
                 self._jobs.pop(next(iter(self._jobs)))
             self._jobs[job_id] = job
-        threading.Thread(target=self._run_sync, args=(job_id, event), daemon=True).start()
+        threading.Thread(target=self._run_sync, args=(job_id, event, only), daemon=True).start()
         return {"id": job_id, "status": "running"}
 
-    def _run_sync(self, job_id, event):
+    def _run_sync(self, job_id, event, only=None):
         try:
             while True:
-                result = {"status": "succeeded", "result": self.sync(event)}
+                result = {"status": "succeeded", "result": self.sync(event, only)}
                 with self._jobs_lock:
                     if self._resync_requested:
+                        # A merge landed mid-pass; finish as a full scheduling pass.
                         self._resync_requested = False
-                        event = None
+                        event, only = None, None
                         continue
                     self._jobs[job_id].update(result)
                     return
@@ -99,7 +106,26 @@ class TaskScheduler:
     def snapshot(self):
         return {"tracker": self.tracker(), "state": task_state.load_state(self.state_file)}
 
-    def sync(self, event: dict[str, Any] | None = None):
+    def requested(self, task_id: str, effective, done, active):
+        """Admit one named task, applying the rules the scheduling pass applies to a batch.
+
+        Preparation is idempotent, so a task already holding a lease is allowed through to
+        retry its branch work; it is only refused a slot it does not already occupy.
+        """
+        task = next((t for t in effective["tasks"] if t["id"] == task_id), None)
+        if task is None:
+            raise TaskError(404, "Unknown task")
+        if task["status"] not in ("pending", "in_progress"):
+            raise TaskError(409, f"{task_id} is {task['status']} and cannot be prepared")
+        unmet = sorted(set(task["depends_on"]) - done)
+        if unmet:
+            raise TaskError(409, f"{task_id} waits on {', '.join(unmet)}")
+        if task["status"] != "in_progress" and active >= self.capacity:
+            raise TaskError(409, f"All {self.capacity} scheduler slots are in flight; "
+                                 f"expire a lease before preparing {task_id}")
+        return [task]
+
+    def sync(self, event: dict[str, Any] | None = None, only: str | None = None):
         if event is not None:
             pull = event.get("pull_request")
             if (event.get("action") != "closed" or not isinstance(pull, dict)
@@ -117,15 +143,19 @@ class TaskScheduler:
             task_state.write_json(self.state_file, state)
             effective = task_state.effective_tracker(tracker, state)
             done = {t["id"] for t in tracker["tasks"] if t["status"] == "completed"}
-            available = [t for t in effective["tasks"]
-                         if t["status"] == "pending" and set(t["depends_on"]) <= done]
             active = sum(t["status"] == "in_progress" for t in effective["tasks"])
-            selected = available[:max(0, self.capacity - active)]
-            # Retry incomplete preparation before claiming more work. The reservation
-            # survives process death and branch helpers safely reuse an existing branch.
-            pending = [t for t in effective["tasks"] if t["status"] == "in_progress"
-                       and not state["tasks"].get(t["id"], {}).get("expired")
-                       and not state["tasks"].get(t["id"], {}).get("prepared")]
+            if only is not None:
+                # Preparing one named task stands alone: an unrelated task's failure
+                # must not fail the request the operator actually made.
+                pending, selected = [], self.requested(only, effective, done, active)
+            else:
+                available = [t for t in effective["tasks"]
+                             if t["status"] == "pending" and set(t["depends_on"]) <= done]
+                selected = available[:max(0, self.capacity - active)]
+                # Retry incomplete preparation before claiming more work. The reservation
+                # survives process death and branch helpers safely reuse an existing branch.
+                pending = [t for t in effective["tasks"] if t["status"] == "in_progress"
+                           and not state["tasks"].get(t["id"], {}).get("prepared")]
             prepared = []
             for task in pending + selected:
                 record = state["tasks"].setdefault(task["id"], {})
@@ -169,6 +199,32 @@ class TaskScheduler:
             task_state.write_json(self.state_file, state)
             return {"expired": task_id}
 
+    def expire_stage(self, task_id: str, stage: str):
+        """Override the idempotence head grants, so the stage can be sent again unchanged.
+
+        A moved branch tip releases a stage on its own; this releases one whose tip has not
+        moved. The attempt is marked rather than deleted, because it carries the only link to
+        the Codex conversation it opened. It needs no lease: a record can outlive the
+        reservation that created it, and clearing one is bookkeeping rather than scheduling.
+        """
+        if stage not in ("refine", "implement"):
+            raise TaskError(404, "Unknown stage")
+        with self.locked():
+            state = task_state.load_state(self.state_file)
+            if not any(t["id"] == task_id for t in self.tracker()["tasks"]):
+                raise TaskError(404, "Unknown task")
+            attempts = state["tasks"].get(task_id, {}).get("stages", {}).get(stage, [])
+            if not attempts:
+                raise TaskError(409, f"{task_id} has no recorded {stage} submission to expire")
+            head = repository.task_head(self.clone, task_id)
+            latest = task_state.live_attempt(attempts, head)
+            if latest is None:
+                raise TaskError(409, f"The {stage} stage of {task_id} has no live submission at "
+                                     "its current revision, so it can already be submitted")
+            latest.update(status="expired", updated_at=datetime.now(UTC).isoformat())
+            task_state.write_json(self.state_file, state)
+            return {"expired": task_id, "stage": stage, "head": head}
+
     def stage(self, task_id: str, stage: str, pr_number: int | None = None):
         if stage not in ("refine", "implement", "audit"):
             raise TaskError(404, "Unknown stage")
@@ -189,23 +245,27 @@ class TaskScheduler:
             if not self.environment:
                 raise TaskError(503, "Set CODEX_ENV_ID on the control panel")
             head = repository.task_head(self.clone, task_id)
-            stages = record.setdefault("stages", {})
-            key = f"{stage}:{head}"
-            previous = stages.get(key)
-            if previous:
-                if previous["status"] == "submitted":
-                    return {**previous, "reused": True}
-                raise TaskError(409, "The previous submission has an uncertain outcome; check Codex before clearing its stage record")
+            attempts = record.setdefault("stages", {}).setdefault(stage, [])
+            # Idempotence is scoped to the branch revision: the newest attempt against this
+            # one decides, and a tip that has moved on leaves nothing in the way.
+            latest = task_state.live_attempt(attempts, head)
+            if latest and latest["status"] == "submitted":
+                return {**latest, "stage": stage, "reused": True}
+            if latest:
+                raise TaskError(409, "The previous submission has an uncertain outcome; "
+                                f"check Codex, then expire the {stage} stage to submit again")
             prompt = template.substitute(fields) + f"\nBase your work and pull request on `{branch}`.\n"
-            stages[key] = {"status": "submitting", "stage": stage, "head": head,
-                           "updated_at": datetime.now(UTC).isoformat()}
+            attempts.append({"status": "submitting", "head": head,
+                             "updated_at": datetime.now(UTC).isoformat()})
             task_state.write_json(self.state_file, state)
             try:
                 url = codex.submit(self.clone, self.environment, branch, prompt)
             except (OSError, ValueError, subprocess.SubprocessError) as error:
-                # Preserve the reservation: a transport failure may happen after acceptance.
-                raise TaskError(502, "Codex submission failed; check Codex before clearing its stage record") from error
-            stages[key].update(status="submitted", task_url=url)
+                print(error)
+                # Preserve the attempt: a transport failure may happen after acceptance.
+                raise TaskError(502, "Codex submission failed; check Codex, then expire the "
+                                f"{stage} stage to submit again") from error
+            attempts[-1].update(status="submitted", task_url=url)
             record.update(task_url=url, updated_at=datetime.now(UTC).isoformat())
             task_state.write_json(self.state_file, state)
-            return stages[key]
+            return {**attempts[-1], "stage": stage}
