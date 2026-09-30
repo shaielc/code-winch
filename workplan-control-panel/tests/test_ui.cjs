@@ -67,7 +67,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
       if (route === 'api/tasks/P0-001/refine/expire') {
         return {status: 200, data: {expired: 'P0-001', stage: 'refine'}};
       }
-      return {status: 200, data: {task_url: 'https://chatgpt.com/codex/tasks/' + route.split('/').pop(), prompt: 'Audit'}};
+      return {status: 200, data: {task_url: 'https://chatgpt.com/codex/cloud/tasks/' + route.split('/').pop(), prompt: 'Audit'}};
     });
     await flush();
     client.get('token').value = 'valid-token';
@@ -84,7 +84,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
     assert.equal(paths.filter(path => path === 'api/sync/job1').length, 2);
     for (const container of client.conversations) {
       const [link, placeholder] = container.children;
-      assert.equal(link.href, 'https://chatgpt.com/codex/tasks/' + container.dataset.conversationStage);
+      assert.equal(link.href, 'https://chatgpt.com/codex/cloud/tasks/' + container.dataset.conversationStage);
       assert.equal(link.hidden, false);
       assert.equal(placeholder.hidden, true);
     }

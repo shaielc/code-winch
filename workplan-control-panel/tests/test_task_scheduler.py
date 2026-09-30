@@ -86,7 +86,8 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
 
     def test_expire_releases_reservation_and_retains_stage_conversations(self):
         self.panel.sync()
-        urls = ['https://chatgpt.com/codex/tasks/refine', 'https://chatgpt.com/codex/tasks/implement']
+        urls = ['https://chatgpt.com/codex/cloud/tasks/refine',
+                'https://chatgpt.com/codex/cloud/tasks/implement']
         with patch.object(codex, 'submit', side_effect=urls):
             self.panel.stage('P0-001', 'refine')
             self.panel.stage('P0-001', 'implement')
@@ -155,7 +156,8 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
 
     def test_expiring_a_stage_allows_one_resubmission_at_the_same_revision(self):
         self.panel.sync()
-        urls = ['https://chatgpt.com/codex/tasks/first', 'https://chatgpt.com/codex/tasks/second']
+        urls = ['https://chatgpt.com/codex/cloud/tasks/first',
+                'https://chatgpt.com/codex/cloud/tasks/second']
         with patch.object(codex, 'submit', side_effect=urls):
             first = self.panel.stage('P0-001', 'refine')
             self.assertEqual(first['task_url'], urls[0])
