@@ -43,8 +43,10 @@ reaches a truthful persisted terminal state and leaves no owned child processes.
   read again with `winch run get`.
 - Add `test/e2e/stop_test.go` using the daemon, PostgreSQL, fake harness,
   local sandbox, and helpers in `test/e2e/start_test.go`. Configure a
-  P0-003 transcript that keeps the process alive until stop (verify the fake
-  harness's `EarlyExit` behavior when selecting it), then exercise
+  P0-003 transcript with enough injected delay to keep the harness alive until
+  stop; `fakeHarnessConfig` sets `EarlyExit: true`, so an exhausted transcript
+  exits on its own. Confirm the started process is still alive before stopping,
+  then exercise
   `create → start → stop → get`. Poll the persisted run with a deadline,
   assert the policy above and an intact run identity, and inspect only the
   process or process group belonging to this test's execution. Add focused
@@ -82,7 +84,8 @@ reaches a truthful persisted terminal state and leaves no owned child processes.
 ## Demonstration
 
 Run the PostgreSQL-backed daemon with `WINCH_FAKE_HARNESS_TRANSCRIPT` set to
-a transcript that waits for stop, and the CLI configured with its API URL,
+a slow transcript and `WINCH_FAKE_HARNESS_DELAY` long enough to stop before
+transcript exhaustion, and the CLI configured with its API URL,
 token, and CSRF token. Use a unique workspace and record the harness process
 group for this run before stopping it:
 
