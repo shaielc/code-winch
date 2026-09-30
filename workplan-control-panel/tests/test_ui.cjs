@@ -12,8 +12,8 @@ function element() {
 }
 function browser(pathname, respond, secure = true) {
   const elements = new Map(), requests = [];
-  const buttons = ['sync', 'refine', 'implement', 'audit', 'expire'].map(action =>
-    Object.assign(element(), {dataset: {action, task: 'P0-001'}}));
+  const buttons = ['sync', 'refine', 'implement', 'audit', 'expire', 'prepare',
+    'refine/expire'].map(action => Object.assign(element(), {dataset: {action, task: 'P0-001'}}));
   const conversations = ['refine', 'implement', 'refine', 'implement'].map(stage => {
     const container = element(), link = element(), placeholder = element();
     container.dataset = {conversations: 'P0-001', conversationStage: stage};
@@ -59,8 +59,14 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
       assert.equal(options.credentials, 'same-origin');
       assert.equal(options.headers['X-Panel-Request'], '1');
       if (route === 'api/session/logout') {remembered = false; return {status: 200, data: {authenticated: false}};}
-      if (route === 'api/sync') return {status: 202, data: {id: 'job1', status: 'running'}};
+      // Prepare is polled like a sync; expiring a stage answers directly.
+      if (route === 'api/sync' || route === 'api/tasks/P0-001/prepare') {
+        return {status: 202, data: {id: 'job1', status: 'running'}};
+      }
       if (route === 'api/sync/job1') return {status: 200, data: {id: 'job1', status: 'succeeded'}};
+      if (route === 'api/tasks/P0-001/refine/expire') {
+        return {status: 200, data: {expired: 'P0-001', stage: 'refine'}};
+      }
       return {status: 200, data: {task_url: 'https://chatgpt.com/codex/tasks/' + route.split('/').pop(), prompt: 'Audit'}};
     });
     await flush();
@@ -70,6 +76,12 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
     assert.equal(client.get('auth-status').textContent, 'Signed in on this browser');
     for (const button of client.buttons) await button.onclick();
     assert.ok(client.location.reloaded);
+    assert.equal(client.get('feedback').dataset.error, 'false');
+    const paths = client.requests.map(request => request.url.slice(base.length));
+    assert.ok(paths.includes('api/tasks/P0-001/prepare'));
+    assert.ok(paths.includes('api/tasks/P0-001/refine/expire'));
+    // Sync and Prepare each polled the job rather than reading a result off the 202.
+    assert.equal(paths.filter(path => path === 'api/sync/job1').length, 2);
     for (const container of client.conversations) {
       const [link, placeholder] = container.children;
       assert.equal(link.href, 'https://chatgpt.com/codex/tasks/' + container.dataset.conversationStage);

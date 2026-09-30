@@ -111,6 +111,108 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.assertTrue(self.panel.stage('P0-001', 'refine')['reused'])
             submit.assert_not_called()
 
+    def test_expired_and_prepared_task_is_recoverable_by_request(self):
+        """The case a scheduling pass cannot serve: the slot is free but the queue is not."""
+        self.panel.capacity = 2
+        self.panel.sync()
+        self.panel.expire('P0-001')
+        # P0-002 depends on P0-001, so a scheduling pass has nothing else to offer either.
+        self.assertEqual(self.panel.sync()['prepared'], ['P0-001'])
+        self.panel.expire('P0-001')
+        record = self.panel.snapshot()['state']['tasks']['P0-001']
+        self.assertTrue(record['expired'] and record['prepared'])
+        self.assertEqual(self.panel.sync(only='P0-001')['prepared'], ['P0-001'])
+        record = self.panel.snapshot()['state']['tasks']['P0-001']
+        self.assertFalse(record['expired'])
+        self.assertTrue(record['prepared'])
+        self.assertEqual(self.commits_ahead(), '1')
+        # Admission by request still refuses what the scheduling pass would refuse.
+        with self.assertRaises(TaskError) as error:
+            self.panel.sync(only='P0-002')
+        self.assertEqual(error.exception.status, 409)
+        self.assertIn('waits on P0-001', str(error.exception))
+        with self.assertRaises(TaskError) as error:
+            self.panel.sync(only='P0-404')
+        self.assertEqual(error.exception.status, 404)
+
+    def test_requested_preparation_needs_a_free_slot_unless_it_holds_one(self):
+        # Independent on main, so only the free-slot rule can stand between them.
+        seed = self.root / 'seed'
+        tracker = json.loads((seed / repository.TRACKER).read_text())
+        tracker['tasks'][1]['depends_on'] = []
+        repository.save_tracker(seed / repository.TRACKER, tracker)
+        git(seed, 'commit', '-am', 'independent tasks')
+        git(seed, 'push', 'origin', 'main')
+        self.panel.sync()
+        self.assertEqual(self.panel.snapshot()['state']['tasks']['P0-001']['prepared'], True)
+        # Capacity is one and P0-001 holds it, so P0-002 cannot be admitted by request.
+        with self.assertRaises(TaskError) as error:
+            self.panel.sync(only='P0-002')
+        self.assertEqual(error.exception.status, 409)
+        self.assertIn('slots are in flight', str(error.exception))
+        # A task already holding its slot is admitted again, to retry its branch work.
+        self.assertEqual(self.panel.sync(only='P0-001')['prepared'], ['P0-001'])
+
+    def test_expiring_a_stage_allows_one_resubmission_at_the_same_revision(self):
+        self.panel.sync()
+        urls = ['https://chatgpt.com/codex/tasks/first', 'https://chatgpt.com/codex/tasks/second']
+        with patch.object(codex, 'submit', side_effect=urls):
+            first = self.panel.stage('P0-001', 'refine')
+            self.assertEqual(first['task_url'], urls[0])
+            self.assertTrue(self.panel.stage('P0-001', 'refine')['reused'])
+            result = self.panel.expire_stage('P0-001', 'refine')
+            self.assertEqual(result['expired'], 'P0-001')
+            self.assertEqual(result['stage'], 'refine')
+            # The override is spent by the resubmission, not standing.
+            second = self.panel.stage('P0-001', 'refine')
+            self.assertEqual(second['task_url'], urls[1])
+            self.assertFalse(second.get('reused'))
+            self.assertTrue(self.panel.stage('P0-001', 'refine')['reused'])
+        attempts = self.panel.snapshot()['state']['tasks']['P0-001']['stages']['refine']
+        self.assertEqual([a['status'] for a in attempts], ['expired', 'submitted'])
+        self.assertEqual([a['task_url'] for a in attempts], urls)
+        self.assertEqual({a['head'] for a in attempts}, {attempts[0]['head']})
+        # Both conversations survive the retirement; the page links the newest.
+        page = render(self.panel.tracker(), self.panel.snapshot()['state'], '', False)
+        self.assertEqual(page.count(f'href="{urls[1]}" data-stage="refine"'), 2)
+        self.assertNotIn(urls[0], page)
+
+    def test_expiring_a_stage_refuses_when_nothing_is_standing(self):
+        self.panel.sync()
+        with self.assertRaises(TaskError) as error:
+            self.panel.expire_stage('P0-001', 'refine')
+        self.assertEqual(error.exception.status, 409)
+        self.assertIn('no recorded refine submission', str(error.exception))
+        with patch.object(codex, 'submit', return_value='https://chatgpt.com/codex/tasks/one'):
+            self.panel.stage('P0-001', 'refine')
+        self.panel.expire_stage('P0-001', 'refine')
+        with self.assertRaises(TaskError) as error:
+            self.panel.expire_stage('P0-001', 'refine')
+        self.assertEqual(error.exception.status, 409)
+        self.assertIn('no live submission', str(error.exception))
+        for task_id, stage in (('P0-404', 'refine'), ('P0-001', 'audit')):
+            with self.assertRaises(TaskError) as error:
+                self.panel.expire_stage(task_id, stage)
+            self.assertEqual(error.exception.status, 404)
+
+    def test_a_moved_branch_revision_releases_a_stage_without_expiring_it(self):
+        self.panel.sync()
+        with patch.object(codex, 'submit', return_value='https://chatgpt.com/codex/tasks/one'):
+            self.panel.stage('P0-001', 'refine')
+        with patch.object(codex, 'submit', return_value='https://chatgpt.com/codex/tasks/two') as submit:
+            self.assertTrue(self.panel.stage('P0-001', 'refine')['reused'])
+            worker = self.clone('worker')
+            git(worker, 'checkout', '--quiet', '-b', 'task/P0-001', 'origin/task/P0-001')
+            (worker / 'refined.md').write_text('refined brief\n')
+            git(worker, 'add', '.')
+            git(worker, 'commit', '--quiet', '-m', 'refine the brief')
+            git(worker, 'push', '--quiet', 'origin', 'HEAD:task/P0-001')
+            self.assertFalse(self.panel.stage('P0-001', 'refine').get('reused'))
+            submit.assert_called_once()
+        attempts = self.panel.snapshot()['state']['tasks']['P0-001']['stages']['refine']
+        self.assertEqual([a['status'] for a in attempts], ['submitted', 'submitted'])
+        self.assertEqual(len({a['head'] for a in attempts}), 2)
+
     def test_expire_respects_lock_and_completed_tracker(self):
         self.panel.sync()
         lock = task_state.acquire_lock(self.panel.state_file)
@@ -141,7 +243,7 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.assertNotIn('$', result['prompt'])
             run.assert_not_called()
 
-    def test_lock_and_dirty_main_refuse_operations(self):
+    def test_lock_and_tracked_edits_refuse_sync_while_untracked_files_are_tolerated(self):
         lock = task_state.acquire_lock(self.panel.state_file)
         try:
             with self.assertRaises(TaskError) as error:
@@ -149,14 +251,22 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.assertEqual(error.exception.status, 409)
         finally:
             lock.close()
+        # A fast-forward pull cannot disturb an untracked file, so one does not hold up a
+        # sync; the checkout accumulates them and they are still left exactly where they are.
         (self.panel.clone / 'untracked').write_text('keep me')
-        with self.assertRaises(TaskError):
-            self.panel.sync()
+        self.assertEqual(self.panel.sync()['prepared'], ['P0-001'])
         self.assertEqual((self.panel.clone / 'untracked').read_text(), 'keep me')
+        # An edit to a tracked file does refuse, because the pull would be the thing to lose it.
+        tracked = self.panel.clone / repository.TRACKER
+        tracked.write_text(tracked.read_text() + '\n')
+        with self.assertRaises(TaskError) as error:
+            self.panel.sync()
+        self.assertEqual(error.exception.status, 409)
+        self.assertTrue(tracked.read_text().endswith('\n\n'))
 
     def test_background_sync_returns_before_git_finishes_and_reports_failure(self):
         entered, release = threading.Event(), threading.Event()
-        def slow_sync(event):
+        def slow_sync(event, only=None):
             entered.set()
             release.wait(3)
             raise TaskError(502, "Main refreshed, but task preparation failed", prepared=[])
@@ -174,7 +284,7 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
 
     def test_new_merge_during_sync_requests_another_main_pull(self):
         entered, release = threading.Event(), threading.Event()
-        def sync(event):
+        def sync(event, only=None):
             entered.set()
             release.wait(3)
             return {'prepared': []}
@@ -232,6 +342,25 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.assertFalse(self.panel.snapshot()['state']['tasks']['P0-001']['expired'])
             self.assertEqual(request('/api/tasks/P0-001/expire'), (200, {'expired': 'P0-001'}))
             self.assertEqual(request('/api/tasks/P0-999/expire')[0], 404)
+            # Preparing one task answers with a job envelope, exactly as a full sync does.
+            status, data = request('/api/tasks/P0-001/prepare')
+            self.assertEqual(status, 202)
+            # A second request cannot coalesce into that job without losing its selection.
+            self.assertEqual(request('/api/tasks/P0-002/prepare')[0], 409)
+            deadline = time.monotonic() + 5
+            while data['status'] == 'running' and time.monotonic() < deadline:
+                time.sleep(0.01)
+                status, data = request('/api/sync/' + data['id'], method='GET')
+            self.assertEqual(data['status'], 'succeeded')
+            self.assertEqual(data['result']['prepared'], ['P0-001'])
+            self.assertEqual(request('/api/tasks/P0-999/prepare')[0], 404)
+            # Expiring a stage is routed apart from expiring the task that owns it.
+            self.assertEqual(request('/api/tasks/P0-001/refine/expire')[0], 409)
+            with patch.object(codex, 'submit', return_value='https://chatgpt.com/codex/tasks/x'):
+                self.assertEqual(request('/api/tasks/P0-001/refine')[0], 200)
+            status, data = request('/api/tasks/P0-001/refine/expire')
+            self.assertEqual((status, data['expired'], data['stage']), (200, 'P0-001', 'refine'))
+            self.assertEqual(request('/api/tasks/P0-001/audit/expire')[0], 404)
         finally:
             server.shutdown()
             server.server_close()

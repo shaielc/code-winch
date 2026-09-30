@@ -107,7 +107,8 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(data, dict):
                 raise ValueError("Expected a JSON object")
             path = urlparse(self.path).path
-            match = re.fullmatch(r"/api/tasks/(P\d+-\d{3})/(refine|implement|audit|expire)", path)
+            match = re.fullmatch(r"/api/tasks/(P\d+-\d{3})/(refine|implement|audit|expire|prepare)", path)
+            stage_match = re.fullmatch(r"/api/tasks/(P\d+-\d{3})/(refine|implement)/expire", path)
             if path == "/api/session":
                 if not self.bearer_valid():
                     self.respond(401, {"error": "Enter a valid API token to sign in."})
@@ -125,6 +126,11 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/sync":
                 self.respond(202, self.scheduler.start_sync())
                 return
+            elif match and match[2] == "prepare":
+                self.respond(202, self.scheduler.start_sync(only=match[1]))
+                return
+            elif stage_match:
+                result = self.scheduler.expire_stage(*stage_match.groups())
             elif match and match[2] == "expire":
                 result = self.scheduler.expire(match[1])
             elif match:

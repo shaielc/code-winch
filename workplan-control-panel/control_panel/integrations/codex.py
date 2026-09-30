@@ -8,9 +8,17 @@ from .process import run
 TASK_URL = re.compile(r"https?://\S+/codex/(?:cloud/)?tasks/\S+")
 
 
+def canonical_task_url(url: str) -> str:
+    """Point a task URL at the Codex Cloud view, which is where the conversation opens.
+
+    The CLI reports the task either way; only the cloud form is worth linking to.
+    """
+    return url.replace("/codex/tasks/", "/codex/cloud/tasks/", 1)
+
+
 def task_url_from(output: str) -> str | None:
     match = TASK_URL.search(output)
-    return match.group(0) if match else None
+    return canonical_task_url(match.group(0)) if match else None
 
 
 def submit(clone: Path, environment: str, branch: str, prompt: str) -> str:
