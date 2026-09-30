@@ -72,7 +72,8 @@ publish intent with polling as the demonstration surface — no WebSocket yet.
   `test/e2e/input_test.go`: start a run whose nonterminating transcript reaches
   the stdin reader, send a unique text marker, poll
   `GET /runs/{runId}/events` from a cursor captured before input until the
-  marker appears in a later harness output event with command-ID correlation, and assert the run's `run.input` and `run.events` rows complete
+  marker appears in a later harness output event with command-ID correlation,
+  and assert the run's `run.input` and `run.events` rows complete
   with no poisoned rows. Check a repeated key returns the same command ID and
   creates only one command and outbox intent; reject a new-key input after the
   run becomes terminal. Outbox delivery is at least once, so tests must not
@@ -166,7 +167,8 @@ page reads durable history independently of outbox delivery):
   validation and acceptance.
 - [ ] Accepted `run.input` intent reaches the currently leased harness before
   completion and produces a later correlated output event; stale/absent
-  execution or send failure does not mark it delivered. The worker drains earlier and new
+  execution or send failure does not mark it delivered. The worker drains
+  earlier and new
   `run.events` intents, with no poison on the happy path, and stops within the
   daemon shutdown budget.
 - [ ] `EventStream.Publish` still has no non-test caller on the live path.
