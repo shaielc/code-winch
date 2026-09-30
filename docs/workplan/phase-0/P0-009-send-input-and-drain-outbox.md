@@ -63,7 +63,11 @@ publish intent with polling as the demonstration surface — no WebSocket yet.
   transcript free of the input marker so later output proves stdin delivery. Add
   `winch run input RUN_ID --text ...` with an optional explicit idempotency
   key; read the current ETag as `run start` does and print the accepted command
-  ID so a person can retry an ambiguous request with the same key.
+  ID and kind so a person can retry an ambiguous request with the same key.
+  A retry may read a newer ETag, including after the run has ended; the service
+  must still return the recorded result for that key. State clearly that a
+  generated key applies to one attempt and the caller must supply the original
+  key to retry an ambiguous response.
 - Add the **`create → start → input → poll events`** scenario in
   `test/e2e/input_test.go`: start a run whose nonterminating transcript reaches
   the stdin reader, send a unique text marker, poll
