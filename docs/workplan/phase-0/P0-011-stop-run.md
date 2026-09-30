@@ -6,9 +6,9 @@
 
 ## Objective
 
-A person can force-stop a running fake harness through the operator CLI; the
-run durably follows `running → stopping → completed`, and the harness and
-all of its child processes are reaped.
+A person can force-stop a running harness through the operator CLI; the run
+durably records whether it stopped within the configured grace period or
+failed stop policy, and the harness and all of its child processes are reaped.
 
 ## Scope
 
@@ -18,13 +18,29 @@ all of its child processes are reaped.
   lock, apply `RunCommandStop` before sending the runner command, and use the
   execution's existing fenced lease and ID. This preserves the architecture's
   persist-intent-before-runner-interaction rule and its one-writer guarantee.
-- Send the existing runner `stop` command with a bounded grace period. Mark the
-  execution as intentionally stopping before the command can produce an exit
-  observation, so that the observation pump treats the resulting successful
-  fake-harness exit as the contract's expected `stopping → completed`
-  transition. Keep cleanup and lease release in the existing terminal
-  observation path; a stop-command or cleanup failure must not report a
-  successful terminal outcome.
+- Add `WINCH_STOP_GRACE_PERIOD` as a positive duration setting, defaulting to
+  five seconds to preserve the local sandbox's current default. Pass that value
+  in the existing runner `stop` message instead of relying on a zero-value
+  fallback; reject values that cannot be represented in the protocol's
+  `uint32` millisecond field.
+- Make escalation observable across the generic sandbox port: add a
+  provider-neutral `StopResult` and change `SandboxDriver.Stop` to return it
+  with an error. The local driver reports whether it had to send SIGKILL after
+  the grace deadline; the fake driver and sandbox contract suite implement the
+  same signature. Update `docs/code-structure.md` with the changed port and
+  `docs/contracts.md` with the outcome/reason-code rules in this change.
+- When `StopResult.Escalated` is true, have the local runner return a typed
+  `application.ErrStopEscalated` from `RunnerGateway.Send`; preserve that cause
+  through the supervisor's wrapping so the execution service can distinguish
+  escalation from an ordinary runner error with `errors.Is`. Mark the execution
+  as intentionally stopping before its exit observation can race the stop
+  result. While the run is `stopping`, an exit
+  within the grace period ends `completed` regardless of the harness-mapped
+  exit code; escalation to SIGKILL ends `failed` with `STOP_ESCALATED`, a
+  runner-stop error ends `failed` with `STOP_COMMAND_FAILED`, and a cleanup
+  error ends `failed` with `STOP_CLEANUP_FAILED`. Append the corresponding
+  content-free lifecycle reason before releasing the lease, and never report
+  one of those failed-policy outcomes as completed.
 - Preserve the API contract already mounted by `httpapi`: require the current
   ETag, map missing runs, stale versions or leases, and illegal states to the
   existing stable problem responses, and make a replay in `stopping` or any
@@ -35,10 +51,11 @@ all of its child processes are reaped.
   `POST /api/v1/runs/{runId}/stop`, and prints the accepted run. Add the command
   to CLI usage and the operator command list in `deployments/README.md`.
 - Add application tests for ordering (durable `stopping` intent precedes the
-  runner command), the expected terminal transition, stop/observation
-  serialization, stop-command failure, stale-version refusal, and safe replay
-  from `stopping` and terminal states. Keep the existing local-runner process
-  group stop tests green; they provide the lower-level escalation proof.
+  runner command), stop/observation serialization, in-grace completion despite
+  a nonzero harness exit, escalated/runner-error/cleanup-error failed outcomes
+  and reason codes, stale-version refusal, and safe replay from `stopping` and
+  terminal states. Extend the local-runner and local-sandbox tests to assert the
+  escalation result as well as process-group reaping.
 - Add `TestCreateStartStopThenGet` in `test/e2e/stop_test.go`. Configure a
   transcript action with enough delay to keep the real fake-harness process
   running, create and start the run through the daemon, record the exact
@@ -56,9 +73,9 @@ all of its child processes are reaped.
   WebSocket steps; P0-007 owns the assembled round trip.
 - Wiring `make e2e` into CI, or describing every run route as fully bound in
   deployment documentation; P0-007 owns phase closure.
-- Changing the public stop request, response, ETag, idempotency, runner message,
-  stop-escalation, or run-lifecycle contracts. They already exist at HEAD; this
-  task implements them.
+- Changing the public stop request, response, ETag, or idempotency contract.
+  The internal sandbox stop result and the stop-policy configuration are owned
+  here because the application cannot otherwise distinguish escalation.
 - The memory-store profile; P0-017 revises this PostgreSQL seam for that
   profile.
 - Browser UI or session cookies.
@@ -77,17 +94,34 @@ all of its child processes are reaped.
 
 - `internal/application/start.go`
 - `internal/application/start_test.go`
+- `internal/application/adapters.go`
 - `cmd/winchd/main.go`
+- `cmd/winchd/main_test.go`
 - `cmd/winch/main.go`
 - `cmd/winch/main_test.go`
+- `internal/platform/config/config.go`
+- `internal/platform/config/config_test.go`
+- `internal/runner/local/runner.go`
+- `internal/runner/local/runner_test.go`
+- `internal/adapters/sandbox/local/local.go`
+- `internal/adapters/sandbox/local/local_test.go`
+- `internal/adapters/sandbox/fake/fake.go`
+- `test/contract/sandbox/contract.go`
+- `.env.example`
 - `deployments/README.md`
+- `docs/code-structure.md`
+- `docs/contracts.md`
 - `test/e2e/stop_test.go`
 
 ## Contract surfaces
 
 - API: `POST /api/v1/runs/{runId}/stop` (existing operation implemented here)
-- persisted run lifecycle: `running → stopping → completed`, with failed
-  stop/cleanup following the existing `stopping → failed` rule
+- port: `SandboxDriver.Stop` returns a provider-neutral result that distinguishes
+  in-grace exit from escalation
+- configuration: `WINCH_STOP_GRACE_PERIOD` (positive duration, default `5s`)
+- persisted run lifecycle: in-grace stop is `running → stopping →
+  completed`; escalation, runner-stop failure, or cleanup failure is `running →
+  stopping → failed` with a distinct content-free reason code
 
 ## Demonstration
 
@@ -102,7 +136,8 @@ is delayed long enough for the stop command, then use the shipped CLI:
     $ bin/winch run stop "$RUN_ID"
     $ bin/winch run get "$RUN_ID"
     → expect: start prints `running`, stop prints `stopping` or `completed`,
-      and get reaches `completed`
+      and get reaches `completed` because the harness exits within the configured
+      grace period
 
 Run the focused real-process scenario. It captures this run's harness PID before
 stop and fails unless that exact PID disappears, so it cannot pass by counting
@@ -121,22 +156,29 @@ an unrelated process:
 - `make e2e` passes locally, including `TestCreateStartStopThenGet` against
   PostgreSQL and the real local process substrate.
 - `go test ./internal/application ./internal/runner/local
-  ./internal/adapters/sandbox/local ./cmd/winch ./cmd/winchd` passes, covering
-  stop orchestration, escalation/reaping, CLI dispatch, and daemon binding.
+  ./internal/adapters/sandbox/local ./internal/adapters/sandbox/fake
+  ./internal/platform/config ./cmd/winch ./cmd/winchd` passes, covering both
+  terminal outcomes, escalation/reaping, configuration, CLI dispatch, and
+  daemon binding.
 
 ## Acceptance criteria
 
 - [ ] A stop of a running execution durably records `stopping` before the
-      runner is called, then records `completed` after the expected stopped
-      exit; a runner-stop or cleanup failure cannot be reported as completed.
+      runner is called. An exit within `WINCH_STOP_GRACE_PERIOD` records
+      `completed` regardless of harness exit code; SIGKILL escalation records
+      `failed` with `STOP_ESCALATED`.
+- [ ] A runner-stop error records `failed` with `STOP_COMMAND_FAILED`, and a
+      cleanup error records `failed` with `STOP_CLEANUP_FAILED`; neither can be
+      reported as completed.
 - [ ] Stop is serialized with runner observations under the execution's fenced
       lease, and stale ETags/leases and illegal source states are refused with
       the existing stable HTTP problems.
 - [ ] Replaying stop while the run is `stopping` or terminal is safe and does
       not send another stop command or launch another execution.
-- [ ] The local sandbox's bounded stop escalation reaps the process group, and
-      the e2e scenario proves the exact fake-harness process started for the run
-      is gone after stop.
+- [ ] The local sandbox reports whether its configured grace deadline required
+      SIGKILL and reaps the process group. Application tests prove both the
+      completed and escalated-failed outcomes, and the e2e scenario proves the
+      exact fake-harness process started for the run is gone after stop.
 - [ ] `winch run stop RUN_ID` drives the deployed route using the current ETag
       and an idempotency key, and prints the accepted run state.
 - [ ] `make e2e` runs `create → start → stop → get` through the real
