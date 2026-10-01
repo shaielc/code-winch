@@ -232,8 +232,9 @@ class TaskScheduler:
             state = task_state.load_state(self.state_file)
             task, record = self.task(task_id, state)
             template = prompts.load(stage)
-            fields = {key: task[key] for key in ("id", "title", "brief")}
             branch = repository.task_branch(task_id)
+            fields = {key: task[key] for key in ("id", "title", "brief")}
+            fields.update(branch=branch)
             if stage == "audit":
                 pulls = repository.task_pull_requests(self.clone, task_id)
                 candidates = [p for p in pulls if pr_number is None or p["number"] == pr_number]
@@ -254,7 +255,7 @@ class TaskScheduler:
             if latest:
                 raise TaskError(409, "The previous submission has an uncertain outcome; "
                                 f"check Codex, then expire the {stage} stage to submit again")
-            prompt = template.substitute(fields) + f"\nBase your work and pull request on `{branch}`.\n"
+            prompt = template.substitute(fields)
             attempts.append({"status": "submitting", "head": head,
                              "updated_at": datetime.now(UTC).isoformat()})
             task_state.write_json(self.state_file, state)
