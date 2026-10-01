@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -68,11 +69,7 @@ func TestCreateStartPollEventsThenGet(t *testing.T) {
 		t.Fatalf("lastSequence=%v does not match %d events", final["lastSequence"], len(events))
 	}
 
-	// Publish intent exists for every appended event, and nothing has drained it:
-	// this daemon starts no outbox worker.
-	if pending := outboxBacklog(t, database, events); pending != len(events) {
-		t.Fatalf("outbox backlog=%d for %d events", pending, len(events))
-	}
+	awaitOutboxDrain(t, database, runID)
 }
 
 // TestStartRefusesUnsupportedProfilePair proves the pair is checked before any
@@ -351,24 +348,38 @@ func containsOutput(events []map[string]any, want string) bool {
 	return false
 }
 
-// outboxBacklog counts undelivered publish intent for the given events straight
-// from the table: no worker drains it and no metric exposes it yet. Events are
-// matched by ID because an outbox record carries the event's own identifier.
-func outboxBacklog(t *testing.T, database string, events []map[string]any) int {
+func awaitOutboxDrain(t *testing.T, database, runID string) {
 	t.Helper()
-	ids := make([]string, 0, len(events))
-	for _, event := range events {
-		ids = append(ids, event["eventId"].(string))
-	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, database)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer pool.Close()
-	var count int
-	if err = pool.QueryRow(ctx, `SELECT count(*) FROM outbox WHERE topic='run.events' AND completed_at IS NULL AND poisoned_at IS NULL AND id::text = ANY($1)`, ids).Scan(&count); err != nil {
-		t.Fatal(err)
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		var pending, poisoned int
+		if err = pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE completed_at IS NULL AND poisoned_at IS NULL), count(*) FILTER (WHERE poisoned_at IS NOT NULL) FROM outbox WHERE run_id=$1::uuid`, apiIDToUUID(runID)).Scan(&pending, &poisoned); err != nil {
+			t.Fatal(err)
+		}
+		if poisoned != 0 {
+			t.Fatalf("outbox poisoned rows=%d", poisoned)
+		}
+		if pending == 0 {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
-	return count
+	t.Fatal("outbox did not drain")
+}
+
+func apiIDToUUID(id string) string {
+	const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+	value := new(big.Int)
+	for _, c := range id {
+		value.Mul(value, big.NewInt(32))
+		value.Add(value, big.NewInt(int64(strings.IndexRune(alphabet, c))))
+	}
+	hex := fmt.Sprintf("%032x", value)
+	return hex[:8] + "-" + hex[8:12] + "-" + hex[12:16] + "-" + hex[16:20] + "-" + hex[20:]
 }

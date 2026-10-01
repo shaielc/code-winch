@@ -186,6 +186,23 @@ func (s *Supervisor) Observe(ctx context.Context, lease application.RunLease, or
 func (s *Supervisor) Rehydrate(ctx context.Context, id domain.RunID) (application.RunControl, error) {
 	return s.store.LoadControl(ctx, id)
 }
+
+// SendInput hands input to the execution currently protected by this
+// supervisor's durable lease. Loading the checkpoint while holding the run
+// lock prevents lifecycle commands in this process from changing ownership
+// between the fence check and runner handoff.
+func (s *Supervisor) SendInput(ctx context.Context, id domain.RunID, commandID string, payload []byte) error {
+	unlock := s.lock(id)
+	defer unlock()
+	control, err := s.store.LoadControl(ctx, id)
+	if err != nil {
+		return err
+	}
+	if control.DesiredState != domain.RunStateRunning || control.ExecutionID == "" || control.LeaseOwner != s.owner || control.LeaseToken == "" {
+		return fmt.Errorf("%w: run=%s", ErrStaleLease, id)
+	}
+	return s.runner.Send(ctx, protocol.RunnerMessage{Version: protocol.RunnerVersion{Major: protocol.RunnerProtocolMajor, Minor: protocol.RunnerProtocolMinor}, Kind: "input", CommandID: commandID, ExecutionID: control.ExecutionID, LeaseToken: control.LeaseToken, Payload: payload})
+}
 func fence(err error, id domain.RunID) error {
 	if errors.Is(err, application.ErrConflict) {
 		return fmt.Errorf("%w: run=%s", ErrStaleLease, id)
