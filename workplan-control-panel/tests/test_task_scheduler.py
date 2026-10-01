@@ -77,7 +77,9 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
                 self.assertIn('--branch', submitted[-1])
                 self.assertEqual(submitted[-1][-2], 'task/P0-001')
                 self.assertTrue(submitted[-1][-1].startswith(prefix))
-                self.assertIn('pull request on `task/P0-001`', submitted[-1][-1])
+                unwrapped = ' '.join(submitted[-1][-1].split())
+                self.assertIn('new branch from `task/P0-001`', unwrapped)
+                self.assertIn('base is `task/P0-001`', unwrapped)
         self.assertEqual(len(submitted), 2)
         page = render(**{'tracker': self.panel.tracker(), 'state': self.panel.snapshot()['state'], 'message': '', 'busy': False})
         for label in ('Refine', 'Implement', 'Audit'):
