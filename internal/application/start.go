@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/shaielc/code-winch/internal/domain"
 	"github.com/shaielc/code-winch/pkg/protocol"
@@ -69,7 +70,13 @@ type SupportedProfiles struct{ Harness, Sandbox string }
 // races its own run's observations rather than another operator.
 const saveAttempts = 8
 
+// stopGracePeriod gives a harness one second to exit after SIGTERM before the
+// local sandbox kills its owned process group. It is deliberately bounded so
+// an operator stop cannot leave a run indefinitely in stopping.
+const stopGracePeriod = time.Second
+
 type runExecution struct {
+	id    string
 	runID domain.RunID
 	lease RunLease
 	mu    sync.Mutex
@@ -124,6 +131,63 @@ func (s *StartService) Start(ctx context.Context, id domain.RunID, expectedVersi
 	return s.launch(ctx, id)
 }
 
+// Stop requests termination of the execution already owned by this service.
+// It retains the live lease and serializes with observations on the execution
+// lock; the exit observation remains responsible for cleanup, terminal state,
+// registration removal, and lease release.
+func (s *StartService) Stop(ctx context.Context, id domain.RunID, expectedVersion uint64) (RunView, error) {
+	execution := s.executionForRun(id)
+	if execution != nil {
+		execution.mu.Lock()
+		defer execution.mu.Unlock()
+	}
+
+	record, version, err := s.runs.Get(ctx, id)
+	if err != nil {
+		return RunView{}, err
+	}
+	if len(record.Attempts) == 0 {
+		return RunView{}, ErrInvalidRunRecord
+	}
+	if expectedVersion != 0 && expectedVersion != version {
+		return RunView{}, fmt.Errorf("%w: run=%s", ErrPreconditionFailed, id)
+	}
+	state := record.Attempts[len(record.Attempts)-1].State
+	if state == domain.RunStateStopping || state.IsTerminal() {
+		return RunView{Record: record, Version: version}, nil
+	}
+	if state != domain.RunStateRunning || execution == nil {
+		return RunView{}, fmt.Errorf("%w: run=%s command=%s", ErrStateConflict, id, domain.RunCommandStop)
+	}
+	record, _, err = s.apply(ctx, id, domain.RunCommandStop)
+	if err != nil {
+		return RunView{}, err
+	}
+	err = s.command(ctx, execution.lease, execution.id, domain.RunStateStopping, "stop", protocol.StopPayload{GraceMilliseconds: uint32(stopGracePeriod / time.Millisecond)})
+	if err != nil {
+		return RunView{}, err
+	}
+	// Execute persists desired state through the same run row and therefore may
+	// advance its version. Return the post-command ETag, not the transition's
+	// now-stale version.
+	record, version, err = s.runs.Get(ctx, id)
+	if err != nil {
+		return RunView{}, err
+	}
+	return RunView{Record: record, Version: version}, nil
+}
+
+func (s *StartService) executionForRun(id domain.RunID) *runExecution {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, execution := range s.executions {
+		if execution.runID == id {
+			return execution
+		}
+	}
+	return nil
+}
+
 // launch holds the run's execution lock across the whole prepare/start sequence
 // so a harness that exits immediately cannot apply its terminal transition
 // before the run has reached `running`.
@@ -133,7 +197,7 @@ func (s *StartService) launch(ctx context.Context, id domain.RunID) (RunView, er
 		return RunView{}, err
 	}
 	executionID := s.ids.NewCommandID().String()
-	execution := &runExecution{runID: id, lease: lease}
+	execution := &runExecution{id: executionID, runID: id, lease: lease}
 	execution.mu.Lock()
 	defer execution.mu.Unlock()
 	s.mu.Lock()
@@ -244,14 +308,17 @@ func (s *StartService) finish(ctx context.Context, execution *runExecution, obse
 	if observation.Exit != nil {
 		exit = *observation.Exit
 	}
+	// Cleanup rides the terminal desired-state write so both are fenced by the
+	// same lease; the runner releases the sandbox and reaps the process group.
 	state, transition := domain.RunStateFailed, domain.RunCommandFailedExit
 	if exit.Successful {
 		state, transition = domain.RunStateCompleted, domain.RunCommandSuccessfulExit
 	}
-	appendErr := s.append(ctx, execution, observation.Ordinal, s.lifecycle(state, exit.Code))
-	// Cleanup rides the terminal desired-state write so both are fenced by the
-	// same lease; the runner releases the sandbox and reaps the process group.
 	cleanupErr := s.command(ctx, execution.lease, observation.ExecutionID, state, "cleanup", protocol.CleanupPayload{})
+	if cleanupErr != nil {
+		state, transition = domain.RunStateFailed, domain.RunCommandFailedExit
+	}
+	appendErr := s.append(ctx, execution, observation.Ordinal, s.lifecycle(state, exit.Code))
 	_, _, applyErr := s.apply(ctx, execution.runID, transition)
 	s.mu.Lock()
 	delete(s.executions, observation.ExecutionID)
