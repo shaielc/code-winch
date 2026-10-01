@@ -47,6 +47,9 @@ func main() {
 		case "start":
 			runStart()
 			return
+		case "stop":
+			runStop()
+			return
 		case "events":
 			runEvents()
 			return
@@ -57,7 +60,7 @@ func main() {
 }
 
 func printUsage(out io.Writer) {
-	_, _ = fmt.Fprintln(out, "usage: winch run {create|get|start|events} | winch dev run")
+	_, _ = fmt.Fprintln(out, "usage: winch run {create|get|start|stop|events} | winch dev run")
 }
 
 func devRun() {
@@ -193,6 +196,27 @@ func runStart() {
 	headers := map[string]string{"Idempotency-Key": *idempotencyKey, "If-Match": fmt.Sprintf("%q", strconv.FormatInt(current.Version, 10))}
 	requestAPI(http.MethodPost, "/api/v1/runs/"+fs.Arg(0)+"/start", headers, nil, &started)
 	data, _ := json.MarshalIndent(started, "", "  ")
+	fmt.Println(string(data))
+}
+
+// runStop follows the same conditional-command flow as runStart: fetch the
+// current version, then submit a fresh idempotency key and quoted ETag.
+func runStop() {
+	fs := flag.NewFlagSet("run stop", flag.ExitOnError)
+	idempotencyKey := fs.String("idempotency-key", uuid.NewString(), "request idempotency key")
+	reason := fs.String("reason", "", "optional stop reason")
+	_ = fs.Parse(os.Args[3:])
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: winch run stop RUN_ID")
+		os.Exit(2)
+	}
+	var current apiRun
+	requestAPI(http.MethodGet, "/api/v1/runs/"+fs.Arg(0), nil, nil, &current)
+	body, _ := json.Marshal(map[string]string{"reason": *reason})
+	var stopped apiRun
+	headers := map[string]string{"Idempotency-Key": *idempotencyKey, "If-Match": fmt.Sprintf("%q", strconv.FormatInt(current.Version, 10))}
+	requestAPI(http.MethodPost, "/api/v1/runs/"+fs.Arg(0)+"/stop", headers, body, &stopped)
+	data, _ := json.MarshalIndent(stopped, "", "  ")
 	fmt.Println(string(data))
 }
 

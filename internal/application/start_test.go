@@ -307,6 +307,105 @@ func TestFailedExitIsRecordedAsAFailedRun(t *testing.T) {
 	}
 }
 
+func TestStopUsesTheLiveLeaseAndIsIdempotent(t *testing.T) {
+	h := newStartHarness(t, "fake", "local")
+	if _, err := h.service.Start(context.Background(), h.runID, 1); err != nil {
+		t.Fatal(err)
+	}
+	_, currentVersion, err := h.runs.Get(context.Background(), h.runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stopped, err := h.service.Stop(context.Background(), h.runID, currentVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := stopped.Record.Attempts[0].State; got != domain.RunStateStopping {
+		t.Fatalf("stop reported state %q", got)
+	}
+	calls := h.gateway.Calls()
+	if len(calls) != 3 || calls[2].Kind != "stop" {
+		t.Fatalf("runner commands: %#v", calls)
+	}
+	var payload protocol.StopPayload
+	if err = json.Unmarshal(calls[2].Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.GraceMilliseconds != 1000 {
+		t.Fatalf("stop grace period = %dms", payload.GraceMilliseconds)
+	}
+	controlState, err := h.store.LoadControl(context.Background(), h.runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if controlState.DesiredState != domain.RunStateStopping || controlState.LeaseToken == "" {
+		t.Fatalf("stop did not retain its live lease: %#v", controlState)
+	}
+	if _, err = h.service.Stop(context.Background(), h.runID, stopped.Version); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(h.gateway.Calls()); got != 3 {
+		t.Fatalf("repeated stop sent %d runner commands", got)
+	}
+}
+
+func TestStopRefusesStaleVersionAndInvalidState(t *testing.T) {
+	h := newStartHarness(t, "fake", "local")
+	if _, err := h.service.Stop(context.Background(), h.runID, 99); !errors.Is(err, application.ErrPreconditionFailed) {
+		t.Fatalf("stale stop: %v", err)
+	}
+	if _, err := h.service.Stop(context.Background(), h.runID, 1); !errors.Is(err, application.ErrStateConflict) {
+		t.Fatalf("stop of created run: %v", err)
+	}
+	if len(h.gateway.Calls()) != 0 {
+		t.Fatal("refused stop touched the runner")
+	}
+}
+
+func TestExitRacingStopKeepsTerminalHistory(t *testing.T) {
+	h := newStartHarness(t, "fake", "local")
+	if _, err := h.service.Start(context.Background(), h.runID, 1); err != nil {
+		t.Fatal(err)
+	}
+	executionID := h.executionID(t)
+	if err := h.service.Observe(context.Background(), application.RunnerObservation{ExecutionID: executionID, Ordinal: 1, Type: application.ObservationExited, Exit: &application.HarnessExit{Successful: true, Code: "OK"}}); err != nil {
+		t.Fatal(err)
+	}
+	_, version, err := h.runs.Get(context.Background(), h.runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err := h.service.Stop(context.Background(), h.runID, version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := view.Record.Attempts[0].State; got != domain.RunStateCompleted {
+		t.Fatalf("stop overwrote terminal state with %q", got)
+	}
+	if got := len(h.gateway.Calls()); got != 3 { // prepare, start, cleanup
+		t.Fatalf("terminal stop had a process effect: %d commands", got)
+	}
+}
+
+func TestCleanupFailureMakesStoppedRunFailed(t *testing.T) {
+	h := newStartHarness(t, "fake", "local")
+	if _, err := h.service.Start(context.Background(), h.runID, 1); err != nil {
+		t.Fatal(err)
+	}
+	_, version, _ := h.runs.Get(context.Background(), h.runID)
+	if _, err := h.service.Stop(context.Background(), h.runID, version); err != nil {
+		t.Fatal(err)
+	}
+	h.gateway.Failures.Inject("send", errors.New("cleanup failed"))
+	err := h.service.Observe(context.Background(), application.RunnerObservation{ExecutionID: h.executionID(t), Ordinal: 1, Type: application.ObservationExited, Exit: &application.HarnessExit{Successful: true, Code: "OK"}})
+	if err == nil {
+		t.Fatal("cleanup failure was not reported")
+	}
+	if got := h.state(t); got != domain.RunStateFailed {
+		t.Fatalf("cleanup failure left run %q", got)
+	}
+}
+
 func TestObservationsForAnUnknownExecutionAreIgnored(t *testing.T) {
 	h := newStartHarness(t, "fake", "local")
 	if err := h.service.Observe(context.Background(), application.RunnerObservation{ExecutionID: "not-this-process", Ordinal: 1, Type: application.ObservationStarted}); err != nil {

@@ -342,7 +342,6 @@ func apiRunID(value string) (domain.RunID, error) {
 
 var (
 	errInputDeferred = errors.New("run input is not implemented; owner=P0-009")
-	errStopDeferred  = errors.New("run stop is not implemented; owner=P0-011")
 )
 
 // StartRun launches the run and answers as soon as the harness is running. The
@@ -355,6 +354,18 @@ func (b runBackend) StartRun(ctx context.Context, _ string, id httpapi.RunId, _ 
 		return httpapi.Run{}, httpapi.ErrRunNotFound
 	}
 	view, err := b.starts.Start(ctx, runID, uint64(version))
+	if err != nil {
+		return httpapi.Run{}, startProblem(err)
+	}
+	return apiRun(view), nil
+}
+
+func (b runBackend) StopRun(ctx context.Context, _ string, id httpapi.RunId, _ string, version int64, _ httpapi.StopRunRequest) (httpapi.Run, error) {
+	runID, err := apiRunID(id)
+	if err != nil {
+		return httpapi.Run{}, httpapi.ErrRunNotFound
+	}
+	view, err := b.starts.Stop(ctx, runID, uint64(version))
 	if err != nil {
 		return httpapi.Run{}, startProblem(err)
 	}
@@ -439,9 +450,6 @@ func marshalObject(value any) (map[string]any, error) {
 	return jsonObject(encoded)
 }
 
-func (runBackend) StopRun(context.Context, string, httpapi.RunId, string, int64, httpapi.StopRunRequest) (httpapi.Run, error) {
-	return httpapi.Run{}, errStopDeferred
-}
 func (runBackend) SendRunInput(context.Context, string, httpapi.RunId, string, int64, httpapi.RunInputRequest) (httpapi.InputAccepted, error) {
 	return httpapi.InputAccepted{}, errInputDeferred
 }
