@@ -53,6 +53,7 @@ type InputRequest struct {
 	Kind             InputKind
 	Payload          InputPayload
 	ExpectedState    domain.RunState
+	ExpectedVersion  *uint64
 	ExpectedSequence *uint64
 }
 

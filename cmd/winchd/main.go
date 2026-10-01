@@ -114,6 +114,15 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	inputs := application.NewInputService(store, runInputCapabilities{runs}, nil)
+	workerID := "winchd-outbox-" + uuid.NewString()
+	worker, err := application.NewOutboxWorker(store, runOutboxPublisher{store: store, supervisor: control.Supervisor}, wallClock{}, application.OutboxWorkerConfig{
+		WorkerID: workerID, LeaseToken: uuid.NewString(), BatchSize: 64, LeaseDuration: 5 * time.Second,
+		BaseBackoff: 50 * time.Millisecond, MaxBackoff: 2 * time.Second, MaxAttempts: 8,
+	})
+	if err != nil {
+		return err
+	}
 	// One consumer drains the runner, so observations reach durable storage in
 	// the order the runner produced them.
 	observations := make(chan struct{})
@@ -135,7 +144,7 @@ func run(ctx context.Context) error {
 	}()
 	stream := httpapi.NewEventStream(64)
 	defer stream.Close()
-	api, err := httpapi.NewHandler(httpapi.Config{Token: cfg.Token, CSRFToken: cfg.CSRFToken, AllowedOrigin: cfg.AllowedOrigin, Actor: cfg.Actor, Logger: logger, RequestID: requestID, EventStream: stream}, runBackend{runs: runs, starts: starts, events: events})
+	api, err := httpapi.NewHandler(httpapi.Config{Token: cfg.Token, CSRFToken: cfg.CSRFToken, AllowedOrigin: cfg.AllowedOrigin, Actor: cfg.Actor, Logger: logger, RequestID: requestID, EventStream: stream}, runBackend{runs: runs, starts: starts, events: events, inputs: inputs, ids: ids})
 	if err != nil {
 		return err
 	}
@@ -158,7 +167,39 @@ func run(ctx context.Context) error {
 	}
 	logger.Info("startup complete", "component", "daemon", "operation", "start", "status", "ready", "duration_ms", time.Since(started).Milliseconds())
 	logger.Info("listener started", "component", "http", "operation", "listen", "status", "ready")
-	return serve(ctx, server, stream, cfg.ShutdownTimeout)
+	workerCtx, stopWorker := context.WithCancel(context.Background())
+	workerDone := make(chan struct{})
+	go runOutbox(workerCtx, worker, logger, workerDone)
+	serveErr := serve(ctx, server, stream, cfg.ShutdownTimeout)
+	stopWorker()
+	shutdown := time.NewTimer(cfg.ShutdownTimeout)
+	defer shutdown.Stop()
+	select {
+	case <-workerDone:
+	case <-shutdown.C:
+		return errors.Join(serveErr, errors.New("outbox worker shutdown timed out"))
+	}
+	return serveErr
+}
+
+type wallClock struct{}
+
+func (wallClock) Now() time.Time { return time.Now().UTC() }
+
+func runOutbox(ctx context.Context, worker *application.OutboxWorker, logger *slog.Logger, done chan<- struct{}) {
+	defer close(done)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if _, err := worker.RunOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("outbox delivery failed", "component", "outbox", "operation", "deliver", "error_code", "delivery_failed")
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 // serve runs until ctx is cancelled or the listener fails, then disconnects
@@ -251,13 +292,11 @@ func (randomIDs) NewWorkflowID() domain.WorkflowID {
 	return id
 }
 
-// fakeHarnessConfig resolves the shipped fake profile. EarlyExit is always set:
-// it only takes effect once a transcript has played out without ending the
-// harness, and a run started through the API has no way to answer an
-// interactive prompt, so a harness left reading its terminal would never reach
-// a terminal state.
+// fakeHarnessConfig resolves the shipped fake profile. A transcript ending in
+// exit remains terminal; one without exit stays at its input reader so the
+// maintained input command can drive it.
 func fakeHarnessConfig(cfg config.FakeHarnessConfig) harnessfake.Config {
-	return harnessfake.Config{Executable: cfg.Binary, Transcript: cfg.Transcript, Delay: cfg.Delay, ForceFailure: cfg.ForceFailure, MalformedLine: cfg.MalformedLine, EarlyExit: true}
+	return harnessfake.Config{Executable: cfg.Binary, Transcript: cfg.Transcript, Delay: cfg.Delay, ForceFailure: cfg.ForceFailure, MalformedLine: cfg.MalformedLine}
 }
 
 // supervisorControl adapts the supervisor to the application's executor port.
@@ -273,6 +312,8 @@ type runBackend struct {
 	runs   *application.RunService
 	starts *application.StartService
 	events *application.EventService
+	inputs *application.InputService
+	ids    application.IDSource
 }
 
 func (b runBackend) CreateRun(ctx context.Context, actor string, key string, request httpapi.CreateRunRequest) (httpapi.Run, error) {
@@ -341,8 +382,7 @@ func apiRunID(value string) (domain.RunID, error) {
 }
 
 var (
-	errInputDeferred = errors.New("run input is not implemented; owner=P0-009")
-	errStopDeferred  = errors.New("run stop is not implemented; owner=P0-011")
+	errStopDeferred = errors.New("run stop is not implemented; owner=P0-011")
 )
 
 // StartRun launches the run and answers as soon as the harness is running. The
@@ -442,6 +482,90 @@ func marshalObject(value any) (map[string]any, error) {
 func (runBackend) StopRun(context.Context, string, httpapi.RunId, string, int64, httpapi.StopRunRequest) (httpapi.Run, error) {
 	return httpapi.Run{}, errStopDeferred
 }
-func (runBackend) SendRunInput(context.Context, string, httpapi.RunId, string, int64, httpapi.RunInputRequest) (httpapi.InputAccepted, error) {
-	return httpapi.InputAccepted{}, errInputDeferred
+func (b runBackend) SendRunInput(ctx context.Context, actor string, id httpapi.RunId, key string, version int64, input httpapi.RunInputRequest) (httpapi.InputAccepted, error) {
+	runID, err := apiRunID(id)
+	if err != nil {
+		return httpapi.InputAccepted{}, httpapi.ErrRunNotFound
+	}
+	payload := application.InputPayload{}
+	if input.Text != nil {
+		payload.Text = *input.Text
+	}
+	if input.Bytes != nil {
+		payload.Bytes = *input.Bytes
+	}
+	if input.Rows != nil {
+		payload.Rows = uint16(*input.Rows)
+	}
+	if input.Columns != nil {
+		payload.Columns = uint16(*input.Columns)
+	}
+	expected := uint64(version)
+	result, err := b.inputs.Accept(ctx, application.InputRequest{CommandID: b.ids.NewCommandID(), RunID: runID, IdempotencyKey: key, ActorID: actor, Kind: application.InputKind(input.Kind), Payload: payload, ExpectedState: domain.RunStateRunning, ExpectedVersion: &expected})
+	if err != nil {
+		return httpapi.InputAccepted{}, inputProblem(err)
+	}
+	return httpapi.InputAccepted{Accepted: result.Accepted, CommandId: result.CommandID.String(), RunId: id, Kind: httpapi.InputAcceptedKind(result.Kind)}, nil
+}
+
+func inputProblem(err error) error {
+	var rejected *application.InputError
+	if !errors.As(err, &rejected) {
+		return err
+	}
+	switch rejected.Code {
+	case application.InputErrorNotFound:
+		return httpapi.ErrRunNotFound
+	case application.InputErrorStaleState:
+		return httpapi.ErrPreconditionFailed
+	case application.InputErrorInvalid:
+		return httpapi.ErrValidation
+	case application.InputErrorUnsupported, application.InputErrorUnauthorized:
+		return httpapi.ErrStateConflict
+	default:
+		return err
+	}
+}
+
+type runInputCapabilities struct{ runs *application.RunService }
+
+func (p runInputCapabilities) InputCapabilities(ctx context.Context, id domain.RunID) (application.InputCapabilities, error) {
+	view, err := p.runs.Get(ctx, id)
+	if err != nil {
+		return application.InputCapabilities{}, err
+	}
+	state := view.Record.Attempts[len(view.Record.Attempts)-1].State
+	// Text is a capability of the selected driver pair. State admissibility is
+	// checked atomically by AcceptInput after its replay lookup, so an accepted
+	// key remains replayable even after the run becomes terminal.
+	return application.InputCapabilities{State: state, Modes: map[application.InputKind]bool{application.InputText: true}}, nil
+}
+
+type runOutboxPublisher struct {
+	store      *postgres.Store
+	supervisor *supervisor.Supervisor
+}
+
+func (p runOutboxPublisher) Publish(ctx context.Context, message application.OutboxMessage) error {
+	switch message.Topic {
+	case "run.events":
+		return nil // the event was durably appended in the transaction that made this intent
+	case "run.input":
+		command, err := p.store.GetCommand(ctx, message.ID)
+		if err != nil {
+			return err
+		}
+		var envelope struct {
+			CommandID string                   `json:"commandId"`
+			Kind      application.InputKind    `json:"kind"`
+			Payload   application.InputPayload `json:"payload"`
+		}
+		if json.Unmarshal(command.Payload, &envelope) != nil || envelope.Kind != application.InputText || envelope.CommandID != message.ID.String() {
+			return errors.New("invalid stored input command")
+		}
+		payload, _ := json.Marshal(protocol.InputPayload{InputID: envelope.CommandID, Text: envelope.Payload.Text})
+		return p.supervisor.SendInput(ctx, command.RunID, envelope.CommandID, payload)
+	default:
+		return fmt.Errorf("unknown outbox topic")
+	}
 }

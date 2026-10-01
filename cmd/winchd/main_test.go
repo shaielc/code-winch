@@ -132,14 +132,12 @@ func TestServeReturnsWithinTheShutdownDeadline(t *testing.T) {
 	}
 }
 
-func TestFakeHarnessProfileAlwaysTerminatesOnItsOwn(t *testing.T) {
-	// A daemon-started run cannot answer an interactive prompt, so the profile
-	// must never leave the harness reading its terminal.
-	if !fakeHarnessConfig(config.FakeHarnessConfig{}).EarlyExit {
-		t.Fatal("the unconfigured fake profile can block on input")
+func TestFakeHarnessProfileRemainsAvailableForInput(t *testing.T) {
+	if fakeHarnessConfig(config.FakeHarnessConfig{}).EarlyExit {
+		t.Fatal("the unconfigured fake profile exits before accepting input")
 	}
 	scripted := fakeHarnessConfig(config.FakeHarnessConfig{Binary: "/opt/fake-harness", Transcript: "/etc/t.txt", Delay: 5 * time.Millisecond, ForceFailure: true, MalformedLine: true})
-	if !scripted.EarlyExit || scripted.Executable != "/opt/fake-harness" || scripted.Transcript != "/etc/t.txt" {
+	if scripted.EarlyExit || scripted.Executable != "/opt/fake-harness" || scripted.Transcript != "/etc/t.txt" {
 		t.Fatalf("scripted profile: %#v", scripted)
 	}
 	if scripted.Delay != 5*time.Millisecond || !scripted.ForceFailure || !scripted.MalformedLine {

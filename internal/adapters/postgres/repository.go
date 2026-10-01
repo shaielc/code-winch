@@ -332,8 +332,8 @@ func (s *Store) AcceptInput(ctx context.Context, acceptance application.InputAcc
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var state string
-	var lastSequence, commandSequence uint64
-	err = tx.QueryRow(ctx, `SELECT a.state,r.last_sequence,r.input_command_sequence FROM runs r JOIN run_attempts a ON a.run_id=r.id WHERE r.id=$1 ORDER BY a.ordinal DESC LIMIT 1 FOR UPDATE OF r`, r.RunID.String()).Scan(&state, &lastSequence, &commandSequence)
+	var lastSequence, commandSequence, version uint64
+	err = tx.QueryRow(ctx, `SELECT a.state,r.last_sequence,r.input_command_sequence,r.version FROM runs r JOIN run_attempts a ON a.run_id=r.id WHERE r.id=$1 ORDER BY a.ordinal DESC LIMIT 1 FOR UPDATE OF r`, r.RunID.String()).Scan(&state, &lastSequence, &commandSequence, &version)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return application.InputResult{}, &application.InputError{Code: application.InputErrorNotFound, RunID: r.RunID, Kind: r.Kind}
 	}
@@ -350,7 +350,7 @@ func (s *Store) AcceptInput(ctx context.Context, acceptance application.InputAcc
 		return application.InputResult{}, err
 	}
 	current := domain.RunState(state)
-	if current != acceptance.Capabilities.State || (r.ExpectedState != "" && current != r.ExpectedState) || (r.ExpectedSequence != nil && lastSequence != *r.ExpectedSequence) {
+	if current != acceptance.Capabilities.State || (r.ExpectedState != "" && current != r.ExpectedState) || (r.ExpectedVersion != nil && version != *r.ExpectedVersion) || (r.ExpectedSequence != nil && lastSequence != *r.ExpectedSequence) {
 		return application.InputResult{}, &application.InputError{Code: application.InputErrorStaleState, RunID: r.RunID, Kind: r.Kind}
 	}
 	if !acceptance.Capabilities.Modes[r.Kind] {
