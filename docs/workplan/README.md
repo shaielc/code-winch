@@ -10,20 +10,6 @@ request; include `Task: <ID>` in the body. Automation stamps `completed` in
 `tasks.json` when the pull request is approved — do not edit status fields by
 hand.
 
-## Phases
-
-Every phase has a brief, including phases with no tasks yet. The phase brief
-carries that phase's objective, scope, task table, dependency graph, width, and
-its register of deferrals from other phases.
-
-| Phase | Name | Status | Brief |
-|---|---|---|---|
-| 0 | Foundation repair | derived — 21 tasks | [`phase-0/README.md`](phase-0/README.md) |
-| 1 | Browser-reachable single-user product | not derived | [`phase-1/README.md`](phase-1/README.md) |
-
-Phases 2 to 5 have no briefs yet. Nothing defers to them, and `docs/roadmap.md`
-is the design-set statement of what they cover.
-
 ## How the plan is put together
 
 [`skills/shared/workplan-model.md`](../../skills/shared/workplan-model.md) is
@@ -44,18 +30,3 @@ tracker schema. What follows is only what a reader needs to use this plan.
 - **Plan failures get post-mortems.** When a defect's root cause is a seam
   between briefs rather than an implementation, it goes in
   [`post-mortems/`](post-mortems/). Ordinary bugs do not.
-
-## Inherited state
-
-At plan creation (`workplan/2026_08_21`), HEAD matched the close report at
-`ccad757`:
-
-- The daemon starts, migrates, and serves; `make check` passes.
-- Run routes return 500/404 because `unavailableBackend` is still bound
-  (`cmd/winchd/main.go:159-183`).
-- `winch dev run` drives a fake harness locally; the operator CLI is not built by
-  `make build` or installed in the deployment image.
-- The fake harness is not controllable and is exercised only by hand.
-- CI runs `make check` only; storage integration tests and a complete fake run
-  are not gated.
-- No `test/e2e` directory or `make e2e` target exists.
