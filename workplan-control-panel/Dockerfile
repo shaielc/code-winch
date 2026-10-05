@@ -7,15 +7,19 @@ FROM ${RUNNER_IMAGE}
 USER root
 
 ARG CODEX_VERSION=latest
+ARG CLAUDE_VERSION=latest
+
+# Keep all Claude Code state, including the login, inside the mounted volume.
+ENV CLAUDE_CONFIG_DIR=/home/runner/.claude
 
 COPY --from=node-runtime /usr/local/ /usr/local/
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends python3 git gh ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /home/runner/.codex /home/runner/_work /var/lib/code-winch/checkout /var/lib/code-winch/state \
-    && chown -R runner:runner /home/runner/.codex /home/runner/_work /var/lib/code-winch
-RUN npm install --global "@openai/codex@${CODEX_VERSION}"
+    && mkdir -p /home/runner/.codex "${CLAUDE_CONFIG_DIR}" /home/runner/_work /var/lib/code-winch/checkout /var/lib/code-winch/state \
+    && chown -R runner:runner /home/runner/.codex "${CLAUDE_CONFIG_DIR}" /home/runner/_work /var/lib/code-winch
+RUN npm install --global "@openai/codex@${CODEX_VERSION}" "@anthropic-ai/claude-code@${CLAUDE_VERSION}"
 
 COPY --chown=runner:runner entrypoint.sh /usr/local/bin/code-winch-runner
 COPY --chown=runner:runner panel_entrypoint.sh /usr/local/bin/code-winch-panel

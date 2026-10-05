@@ -10,6 +10,8 @@ class PromptTests(unittest.TestCase):
             fields = dict(task)
             if stage == "audit":
                 fields.update(pr_url="https://example/pr/1", head="0123abcd")
+            else:
+                fields.update(branch="task/P0-001")
             with self.subTest(stage=stage):
                 prompt = prompts.load(stage).substitute(fields)
                 for value in fields.values():

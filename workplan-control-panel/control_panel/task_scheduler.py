@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from . import prompts, state as task_state
-from .integrations import codex, repository
+from .integrations import claude, codex, repository
 from .integrations.process import failure_message
 
 
@@ -25,12 +25,14 @@ class TaskError(Exception):
 
 class TaskScheduler:
     def __init__(self, clone: Path, state_file: Path,
-                 tracker_path: Path, environment: str, capacity: int = 3):
+                 tracker_path: Path, environment: str, capacity: int = 3,
+                 audit_routine_url: str = "", audit_routine_token: str = ""):
         if capacity < 1:
             raise ValueError("capacity must be positive")
         self.clone = clone
         self.state_file, self.tracker_path = state_file, tracker_path
         self.environment, self.capacity = environment, capacity
+        self.audit_routine_url, self.audit_routine_token = audit_routine_url, audit_routine_token
         self._jobs_lock = threading.Lock()
         self._jobs = {}
         self._resync_requested = False
@@ -204,10 +206,13 @@ class TaskScheduler:
 
         A moved branch tip releases a stage on its own; this releases one whose tip has not
         moved. The attempt is marked rather than deleted, because it carries the only link to
-        the Codex conversation it opened. It needs no lease: a record can outlive the
+        the conversation it opened. It needs no lease: a record can outlive the
         reservation that created it, and clearing one is bookkeeping rather than scheduling.
+
+        An audit is scoped to a pull request's head rather than the task branch's, and the
+        request names no pull request, so expiring audit retires its newest submission.
         """
-        if stage not in ("refine", "implement"):
+        if stage not in ("refine", "implement", "audit"):
             raise TaskError(404, "Unknown stage")
         with self.locked():
             state = task_state.load_state(self.state_file)
@@ -216,7 +221,7 @@ class TaskScheduler:
             attempts = state["tasks"].get(task_id, {}).get("stages", {}).get(stage, [])
             if not attempts:
                 raise TaskError(409, f"{task_id} has no recorded {stage} submission to expire")
-            head = repository.task_head(self.clone, task_id)
+            head = attempts[-1]["head"] if stage == "audit" else repository.task_head(self.clone, task_id)
             latest = task_state.live_attempt(attempts, head)
             if latest is None:
                 raise TaskError(409, f"The {stage} stage of {task_id} has no live submission at "
@@ -232,38 +237,53 @@ class TaskScheduler:
             state = task_state.load_state(self.state_file)
             task, record = self.task(task_id, state)
             template = prompts.load(stage)
-            fields = {key: task[key] for key in ("id", "title", "brief")}
             branch = repository.task_branch(task_id)
+            fields = {key: task[key] for key in ("id", "title", "brief")}
+            fields.update(branch=branch)
+            # The audited revision is the pull request's head, not the task branch's.
+            pull = None
             if stage == "audit":
+                if not (self.audit_routine_url and self.audit_routine_token):
+                    raise TaskError(503, "Set CLAUDE_AUDIT_ROUTINE_URL and CLAUDE_AUDIT_ROUTINE_TOKEN on the control panel")
                 pulls = repository.task_pull_requests(self.clone, task_id)
                 candidates = [p for p in pulls if pr_number is None or p["number"] == pr_number]
                 if len(candidates) != 1:
                     raise TaskError(409, "Select one open implementation pull request into the task branch", pull_requests=pulls)
                 pull = candidates[0]
                 fields.update(pr_url=pull["url"], head=pull["headRefOid"])
-                return {"prompt": template.substitute(fields), "pull_request": pull["url"], "head": pull["headRefOid"]}
-            if not self.environment:
-                raise TaskError(503, "Set CODEX_ENV_ID on the control panel")
-            head = repository.task_head(self.clone, task_id)
+                head, service = pull["headRefOid"], "the Claude routine"
+            else:
+                if not self.environment:
+                    raise TaskError(503, "Set CODEX_ENV_ID on the control panel")
+                head, service = repository.task_head(self.clone, task_id), "Codex"
             attempts = record.setdefault("stages", {}).setdefault(stage, [])
-            # Idempotence is scoped to the branch revision: the newest attempt against this
-            # one decides, and a tip that has moved on leaves nothing in the way.
+            # Idempotence is scoped to the revision: the newest attempt against this one
+            # decides, and a head that has moved on leaves nothing in the way.
             latest = task_state.live_attempt(attempts, head)
             if latest and latest["status"] == "submitted":
                 return {**latest, "stage": stage, "reused": True}
             if latest:
                 raise TaskError(409, "The previous submission has an uncertain outcome; "
-                                f"check Codex, then expire the {stage} stage to submit again")
-            prompt = template.substitute(fields) + f"\nBase your work and pull request on `{branch}`.\n"
+                                f"check {service}, then expire the {stage} stage to submit again")
+            prompt = template.substitute(fields)
             attempts.append({"status": "submitting", "head": head,
                              "updated_at": datetime.now(UTC).isoformat()})
+            if pull:
+                attempts[-1]["pull_request"] = pull["url"]
             task_state.write_json(self.state_file, state)
             try:
-                url = codex.submit(self.clone, self.environment, branch, prompt)
+                if pull:
+                    url = claude.fire(self.audit_routine_url, self.audit_routine_token, prompt)
+                else:
+                    url = codex.submit(self.clone, self.environment, branch, prompt)
+            except claude.RoutineError as error:
+                # The routine answered with a refusal, so nothing started.
+                attempts.pop()
+                task_state.write_json(self.state_file, state)
+                raise TaskError(502, str(error)) from error
             except (OSError, ValueError, subprocess.SubprocessError) as error:
-                print(error)
                 # Preserve the attempt: a transport failure may happen after acceptance.
-                raise TaskError(502, "Codex submission failed; check Codex, then expire the "
+                raise TaskError(502, f"Submission to {service} failed; check {service}, then expire the "
                                 f"{stage} stage to submit again") from error
             attempts[-1].update(status="submitted", task_url=url)
             record.update(task_url=url, updated_at=datetime.now(UTC).isoformat())

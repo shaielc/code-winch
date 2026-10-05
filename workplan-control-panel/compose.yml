@@ -7,6 +7,7 @@ services:
         RUNNER_IMAGE: ${RUNNER_IMAGE:-ghcr.io/actions/actions-runner:latest}
         NODE_IMAGE: ${NODE_IMAGE:-node:22-bookworm-slim}
         CODEX_VERSION: ${CODEX_VERSION:-latest}
+        CLAUDE_VERSION: ${CLAUDE_VERSION:-latest}
     image: code-winch-control-panel:local
     init: true
     restart: unless-stopped
@@ -29,6 +30,8 @@ services:
       GH_TOKEN: ${GH_TOKEN:?Set GH_TOKEN for branch writes and PR reads}
       PANEL_TOKEN: ${PANEL_TOKEN:?Set PANEL_TOKEN}
       CODEX_ENV_ID: ${CODEX_ENV_ID:-}
+      CLAUDE_AUDIT_ROUTINE_URL: ${CLAUDE_AUDIT_ROUTINE_URL:-}
+      CLAUDE_AUDIT_ROUTINE_TOKEN: ${CLAUDE_AUDIT_ROUTINE_TOKEN:-}
       GIT_AUTHOR_NAME: ${GIT_AUTHOR_NAME:-Code Winch}
       GIT_AUTHOR_EMAIL: ${GIT_AUTHOR_EMAIL:-code-winch@users.noreply.github.com}
       GIT_COMMITTER_NAME: ${GIT_AUTHOR_NAME:-Code Winch}
@@ -38,11 +41,13 @@ services:
       - "${PANEL_BIND:-127.0.0.1}:${PANEL_PORT:-8765}:8765"
     volumes:
       - codex-auth:/home/runner/.codex
+      - claude-auth:/home/runner/.claude
       - panel-checkout:/var/lib/code-winch/checkout
       - scheduler-state:/var/lib/code-winch/state
 
 volumes:
   codex-auth:
+  claude-auth:
   runner-work:
   runner-config:
   panel-checkout:

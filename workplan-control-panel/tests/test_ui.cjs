@@ -14,7 +14,7 @@ function browser(pathname, respond, secure = true) {
   const elements = new Map(), requests = [];
   const buttons = ['sync', 'refine', 'implement', 'audit', 'expire', 'prepare',
     'refine/expire'].map(action => Object.assign(element(), {dataset: {action, task: 'P0-001'}}));
-  const conversations = ['refine', 'implement', 'refine', 'implement'].map(stage => {
+  const conversations = ['refine', 'implement', 'audit', 'refine', 'implement', 'audit'].map(stage => {
     const container = element(), link = element(), placeholder = element();
     container.dataset = {conversations: 'P0-001', conversationStage: stage};
     link.dataset.stage = stage;
@@ -29,7 +29,7 @@ function browser(pathname, respond, secure = true) {
     document: {getElementById: get, createElement: element,
       querySelectorAll: selector => selector === '[data-action]' ? buttons : conversations},
     localStorage: {getItem() {return 'table';}, setItem(key) {assert.equal(key, 'code-winch-view');}},
-    navigator: {clipboard: {async writeText() {}}}, setTimeout: fn => queueMicrotask(fn),
+    setTimeout: fn => queueMicrotask(fn),
     fetch: async (url, options) => {
       requests.push({url, options});
       const reply = respond(url, options);
@@ -67,7 +67,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
       if (route === 'api/tasks/P0-001/refine/expire') {
         return {status: 200, data: {expired: 'P0-001', stage: 'refine'}};
       }
-      return {status: 200, data: {task_url: 'https://chatgpt.com/codex/cloud/tasks/' + route.split('/').pop(), prompt: 'Audit'}};
+      return {status: 200, data: {task_url: 'https://chatgpt.com/codex/cloud/tasks/' + route.split('/').pop()}};
     });
     await flush();
     client.get('token').value = 'valid-token';
