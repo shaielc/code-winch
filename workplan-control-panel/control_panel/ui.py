@@ -169,7 +169,7 @@ PAGE = r"""<!doctype html>
 {message}
 <div class="wrap" id="table-view">
 <table>
-  <thead><tr><th>Task</th><th>Title</th><th>Stages</th><th class="conversation">Refine conversation</th><th class="conversation">Implement conversation</th><th>Depends on</th><th>Status</th><th>Source</th><th>Pull request</th><th>Updated</th><th>Info</th></tr></thead>
+  <thead><tr><th>Task</th><th>Title</th><th>Stages</th><th class="conversation">Refine conversation</th><th class="conversation">Implement conversation</th><th class="conversation">Audit conversation</th><th>Depends on</th><th>Status</th><th>Source</th><th>Pull request</th><th>Updated</th><th>Info</th></tr></thead>
   <tbody>
   {rows}
   </tbody>
@@ -180,13 +180,11 @@ PAGE = r"""<!doctype html>
 </ul>
 <p class="note">Sync main prepares every available task branch; Prepare claims one named task
 against a free scheduler slot. Refine and Implement launch Codex on the task branch; merge
-refinement changes there before starting implementation. Audit copies a prompt for an open
-implementation pull request into that branch. Repeating a stage at the same branch revision
-returns the conversation it already opened; the row menu expires that record so the stage can
-be sent again. Expire releases a local reservation. Neither expiry cancels a cloud task or
-removes a conversation link.</p>
-<textarea id="audit-prompt" hidden readonly aria-label="Audit prompt" rows="12" style="width:100%"></textarea>
-<button type="button" id="copy-prompt" hidden>Copy audit prompt</button>
+refinement changes there before starting implementation. Audit starts a Claude cloud session
+for an open implementation pull request into that branch. Repeating a stage at the same
+revision — the branch's, or the pull request's for Audit — returns the conversation it already
+opened; the row menu expires that record so the stage can be sent again. Expire releases a
+local reservation. Neither expiry cancels a cloud task or removes a conversation link.</p>
 <script>
   const result = document.getElementById("result");
   const feedback = document.getElementById("feedback");
@@ -195,8 +193,6 @@ removes a conversation link.</p>
   const authStatus = document.getElementById("auth-status");
   const signInButton = document.getElementById("sign-in");
   const signOutButton = document.getElementById("sign-out");
-  const audit = document.getElementById("audit-prompt");
-  const copy = document.getElementById("copy-prompt");
   // The page is the mount point, so resolve calls against it however it is proxied.
   const base = location.pathname.endsWith("/") ? location.pathname : location.pathname + "/";
   refresh.href = location.pathname;
@@ -250,15 +246,6 @@ removes a conversation link.</p>
     catch (error) {{ showMessage(error.message, true); }}
   }};
   request("api/session").then(data => signedIn(data.authenticated)).catch(error => showMessage(error.message, true));
-  async function copyAudit() {{
-    try {{ await navigator.clipboard.writeText(audit.value); showMessage("Audit prompt copied."); }}
-    catch (error) {{
-      audit.hidden = false;
-      audit.select();
-      showMessage("Clipboard unavailable. Copy the selected prompt, or use Copy audit prompt.");
-    }}
-  }}
-  copy.onclick = copyAudit;
   document.querySelectorAll("[data-action]").forEach(button => {{
     button.onclick = async () => {{
       const action = button.dataset.action;
@@ -287,9 +274,6 @@ removes a conversation link.</p>
           }}
           if (data.status === "failed") throw new Error(data.error);
           window.location.reload();
-        }} else if (action === "audit") {{
-          audit.value = data.prompt; audit.hidden = false; copy.hidden = false;
-          await copyAudit();
         }} else if (action.endsWith("expire")) {{
           window.location.reload();
         }} else {{
@@ -332,7 +316,7 @@ NODE = """<li>
   <div class="node" id="tree-{id}">
     <code>{id}</code><span class="name">{title}</span>
     <span class="tag {status}">{status}</span>{waits}{actions}
-    <span>Refine: {refine}</span><span>Implement: {implement}</span>
+    <span>Refine: {refine}</span><span>Implement: {implement}</span><span>Audit: {audit}</span>
     <span class="stage-reason">{info}</span>
   </div>
   {children}
@@ -349,6 +333,7 @@ ROW = """<tr id="{id}">
   <td class="actions">{actions}</td>
   <td class="conversation">{refine}</td>
   <td class="conversation">{implement}</td>
+  <td class="conversation">{audit}</td>
   <td class="deps">{deps}</td>
   <td><span class="tag {status}">{status}</span></td>
   <td>{source}</td>
@@ -392,6 +377,17 @@ GITHUB_ICON = (
     " 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0"
     '-6.627-5.373-12-12-12"/></svg>'
 )
+
+# A plain speech bubble for Claude sessions, so the panel ships no third-party mark.
+CLAUDE_ICON = (
+    '<svg class="icon" viewBox="0 0 24 24" role="img" aria-label="Claude session">'
+    '<path d="M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z'
+    'm2 5v2h12V8zm0 4v2h8v-2z"/></svg>'
+)
+
+STAGES = ("refine", "implement", "audit")
+# Who runs each stage, named where an uncertain submission must be checked by hand.
+SERVICES = {"refine": "Codex", "implement": "Codex", "audit": "Claude"}
 
 
 def button(action: str, task_id: str, label: str, reason: str = "", hint: str = "") -> str:
@@ -440,10 +436,10 @@ def stage_menu(entry: dict[str, Any]) -> str:
     whenever the stage's newest submission is still standing and the panel decides whether
     it applies to the revision the branch is on now.
     """
-    if not any(attempts_for(entry, name) for name in ("refine", "implement")):
+    if not any(attempts_for(entry, name) for name in STAGES):
         return ""
     items = []
-    for stage in ("refine", "implement"):
+    for stage in STAGES:
         attempts = attempts_for(entry, stage)
         latest = attempts[-1] if attempts else None
         if latest is None or latest["status"] == "expired":
@@ -452,18 +448,19 @@ def stage_menu(entry: dict[str, Any]) -> str:
         elif latest["status"] == "submitting":
             # Not an override but a verdict on an unknown, and the risk runs the other way.
             items.append(button(f"{stage}/expire", entry["id"], f"Expire {stage} (outcome unknown)",
-                                hint="Codex may have accepted this before the panel lost the "
-                                     "reply. Check Codex first: expiring can submit it twice."))
+                                hint=f"{SERVICES[stage]} may have accepted this before the panel "
+                                     f"lost the reply. Check {SERVICES[stage]} first: expiring "
+                                     "can submit it twice."))
         else:
+            revision = "pull request head" if stage == "audit" else "branch revision"
             items.append(button(f"{stage}/expire", entry["id"], f"Expire {stage}",
-                                hint=f"Submit {stage} again at the same branch revision."))
+                                hint=f"Submit {stage} again at the same {revision}."))
     return STAGE_MENU.format(items="".join(items))
 
 
 def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
     reason = stage_reason(entry, runnable)
-    actions = "".join(button(stage, entry["id"], label, reason) for stage, label in
-                       (("refine", "Refine"), ("implement", "Implement"), ("audit", "Audit")))
+    actions = "".join(button(stage, entry["id"], stage.capitalize(), reason) for stage in STAGES)
     if preparable(entry, runnable):
         actions += button("prepare", entry["id"], "Prepare",
                           hint="Refresh main, claim a scheduler slot, and prepare this branch.")
@@ -484,7 +481,7 @@ def conversation_cell(entry: dict[str, Any], stage: str) -> str:
     return (
         f'<span data-conversations="{html.escape(entry["id"])}" data-conversation-stage="{stage}">'
         f'<a {target} data-stage="{stage}" target="_blank" rel="noopener" '
-        f'title="{label}" aria-label="{label}">{CODEX_ICON}</a>'
+        f'title="{label}" aria-label="{label}">{CLAUDE_ICON if stage == "audit" else CODEX_ICON}</a>'
         f'<span class="no-conversation"{" hidden" if url else ""}>—</span></span>'
     )
 
@@ -541,6 +538,7 @@ def branches(nodes: list[dict[str, Any]], runnable: set[str], done: set[str]) ->
                 actions=actions_for(entry, runnable),
                 refine=conversation_cell(entry, "refine"),
                 implement=conversation_cell(entry, "implement"),
+                audit=conversation_cell(entry, "audit"),
                 info=html.escape(stage_reason(entry, runnable)),
                 children=(
                     f'<ul>{branches(node["children"], runnable, done)}</ul>'
@@ -576,6 +574,7 @@ def render(tracker: dict[str, Any], state: dict[str, Any], message: str, busy: b
                 source=source_of(entry),
                 refine=conversation_cell(entry, "refine"),
                 implement=conversation_cell(entry, "implement"),
+                audit=conversation_cell(entry, "audit"),
                 info=html.escape(stage_reason(entry, runnable)) or "—",
                 pull_request=pull_request_cell(entry),
                 updated=html.escape((entry["updated_at"] or "—")[:16].replace("T", " ")),

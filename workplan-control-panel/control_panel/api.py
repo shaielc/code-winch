@@ -108,7 +108,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Expected a JSON object")
             path = urlparse(self.path).path
             match = re.fullmatch(r"/api/tasks/(P\d+-\d{3})/(refine|implement|audit|expire|prepare)", path)
-            stage_match = re.fullmatch(r"/api/tasks/(P\d+-\d{3})/(refine|implement)/expire", path)
+            stage_match = re.fullmatch(r"/api/tasks/(P\d+-\d{3})/(refine|implement|audit)/expire", path)
             if path == "/api/session":
                 if not self.bearer_valid():
                     self.respond(401, {"error": "Enter a valid API token to sign in."})
@@ -171,6 +171,8 @@ def main() -> int:
         args.clone, args.state_file,
         args.tracker or args.state_file.parent / "tracker.json",
         os.environ.get("CODEX_ENV_ID", ""), args.max_concurrent,
+        os.environ.get("CLAUDE_AUDIT_ROUTINE_URL", ""),
+        os.environ.get("CLAUDE_AUDIT_ROUTINE_TOKEN", ""),
     )
     with ThreadingHTTPServer((args.host, args.port), Handler) as server:
         print(f"control panel on http://{args.host}:{args.port}")

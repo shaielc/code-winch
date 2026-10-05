@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from control_panel import state as task_state
 from control_panel.task_scheduler import TaskScheduler, TaskError
-from control_panel.integrations import codex, repository
+from control_panel.integrations import claude, codex, repository
 from control_panel.api import Handler, ThreadingHTTPServer
 from control_panel.ui import render
 from helpers import GitRepositoryFixture, git, TRACKER
@@ -24,7 +24,8 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
         git(seed, 'commit', '-am', 'task graph')
         git(seed, 'push', 'origin', 'main')
         self.panel = TaskScheduler( self.clone('panel'), self.root / 'state.json',
-                                  self.root / 'tracker.json', 'test-env', 1)
+                                  self.root / 'tracker.json', 'test-env', 1,
+                                  'https://api.example/fire', 'routine-token')
 
     def test_merge_pulls_main_prepares_once_and_does_not_launch_codex(self):
         event = {'action': 'closed', 'pull_request': {'merged_at': 'today', 'base': {'ref': 'main'}}}
@@ -84,7 +85,7 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
         page = render(**{'tracker': self.panel.tracker(), 'state': self.panel.snapshot()['state'], 'message': '', 'busy': False})
         for label in ('Refine', 'Implement', 'Audit'):
             self.assertIn('>' + label + '</button>', page)
-        self.assertIn('navigator.clipboard.writeText', page)
+        self.assertNotIn('clipboard', page)
 
     def test_expire_releases_reservation_and_retains_stage_conversations(self):
         self.panel.sync()
@@ -194,7 +195,7 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.panel.expire_stage('P0-001', 'refine')
         self.assertEqual(error.exception.status, 409)
         self.assertIn('no live submission', str(error.exception))
-        for task_id, stage in (('P0-404', 'refine'), ('P0-001', 'audit')):
+        for task_id, stage in (('P0-404', 'refine'), ('P0-001', 'review')):
             with self.assertRaises(TaskError) as error:
                 self.panel.expire_stage(task_id, stage)
             self.assertEqual(error.exception.status, 404)
@@ -234,18 +235,82 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
         with self.assertRaises(TaskError):
             self.panel.expire('P0-002')
 
-    def test_audit_formats_selected_pr_head_without_launching(self):
+    def pulls(self, *heads):
+        return [{'number': n, 'url': f'https://github.com/owner/repo/pull/{n}', 'headRefOid': head}
+                for n, head in zip((7, 8), heads)]
+
+    def test_audit_fires_the_routine_for_the_selected_pr_head_and_reuses_it(self):
         self.panel.sync()
-        pulls = [{'number': n, 'url': f'https://github.com/owner/repo/pull/{n}', 'headRefOid': f'head{n}'} for n in (7, 8)]
-        with patch.object(repository, 'task_pull_requests', return_value=pulls), patch.object(codex, 'run') as run:
+        sessions = ['https://claude.ai/code/session_1', 'https://claude.ai/code/session_2']
+        pulls = self.pulls('head7', 'head8')
+        with patch.object(repository, 'task_pull_requests', return_value=pulls), \
+                patch.object(claude, 'fire', side_effect=sessions) as fire, \
+                patch.object(codex, 'run') as run:
             with self.assertRaises(TaskError) as error:
                 self.panel.stage('P0-001', 'audit')
             self.assertEqual(error.exception.status, 409)
+            self.assertEqual(error.exception.details['pull_requests'], pulls)
             result = self.panel.stage('P0-001', 'audit', 8)
-            self.assertIn(pulls[1]['url'], result['prompt'])
-            self.assertIn('head8', result['prompt'])
-            self.assertNotIn('$', result['prompt'])
+            self.assertEqual((result['status'], result['task_url']), ('submitted', sessions[0]))
+            self.assertEqual((result['head'], result['pull_request']), ('head8', pulls[1]['url']))
+            url, token, prompt = fire.call_args.args
+            self.assertEqual((url, token), ('https://api.example/fire', 'routine-token'))
+            self.assertIn(pulls[1]['url'], prompt)
+            self.assertIn('head8', prompt)
+            self.assertNotIn('$', prompt)
+            # The same pull request head returns its session rather than firing again.
+            self.assertTrue(self.panel.stage('P0-001', 'audit', 8)['reused'])
+            # A new push to the pull request is a new revision to audit.
+            pulls[1]['headRefOid'] = 'head8b'
+            self.assertEqual(self.panel.stage('P0-001', 'audit', 8)['task_url'], sessions[1])
+            self.assertEqual(fire.call_count, 2)
             run.assert_not_called()
+        page = render(self.panel.tracker(), self.panel.snapshot()['state'], '', False)
+        self.assertEqual(page.count(f'href="{sessions[1]}" data-stage="audit"'), 2)
+
+    def test_audit_expiry_resubmits_the_newest_session(self):
+        self.panel.sync()
+        sessions = ['https://claude.ai/code/session_1', 'https://claude.ai/code/session_2']
+        with patch.object(repository, 'task_pull_requests', return_value=self.pulls('head7')), \
+                patch.object(claude, 'fire', side_effect=sessions):
+            self.panel.stage('P0-001', 'audit')
+            self.assertEqual(self.panel.expire_stage('P0-001', 'audit')['head'], 'head7')
+            self.assertEqual(self.panel.stage('P0-001', 'audit')['task_url'], sessions[1])
+        with self.assertRaises(TaskError) as error:
+            self.panel.expire_stage('P0-002', 'audit')
+        self.assertEqual(error.exception.status, 409)
+
+    def test_audit_refusal_leaves_no_attempt_but_lost_reply_does(self):
+        self.panel.sync()
+        with patch.object(repository, 'task_pull_requests', return_value=self.pulls('head7')):
+            with patch.object(claude, 'fire', side_effect=claude.RoutineError('The Claude routine is rate limited')):
+                with self.assertRaises(TaskError) as error:
+                    self.panel.stage('P0-001', 'audit')
+            self.assertEqual(error.exception.status, 502)
+            self.assertIn('rate limited', str(error.exception))
+            self.assertEqual(self.panel.snapshot()['state']['tasks']['P0-001']['stages']['audit'], [])
+            # A timeout may land after the routine accepted, so the attempt stands as unknown.
+            with patch.object(claude, 'fire', side_effect=TimeoutError()):
+                with self.assertRaises(TaskError):
+                    self.panel.stage('P0-001', 'audit')
+            with patch.object(claude, 'fire') as fire:
+                with self.assertRaises(TaskError) as error:
+                    self.panel.stage('P0-001', 'audit')
+                fire.assert_not_called()
+            self.assertIn('check the Claude routine', str(error.exception))
+        attempts = self.panel.snapshot()['state']['tasks']['P0-001']['stages']['audit']
+        self.assertEqual([a['status'] for a in attempts], ['submitting'])
+
+    def test_audit_needs_the_routine_configured(self):
+        self.panel.sync()
+        self.panel.audit_routine_token = ''
+        with patch.object(repository, 'task_pull_requests') as listing, patch.object(claude, 'fire') as fire:
+            with self.assertRaises(TaskError) as error:
+                self.panel.stage('P0-001', 'audit')
+            listing.assert_not_called()
+            fire.assert_not_called()
+        self.assertEqual(error.exception.status, 503)
+        self.assertIn('CLAUDE_AUDIT_ROUTINE_TOKEN', str(error.exception))
 
     def test_lock_and_tracked_edits_refuse_sync_while_untracked_files_are_tolerated(self):
         lock = task_state.acquire_lock(self.panel.state_file)
@@ -364,7 +429,8 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
                 self.assertEqual(request('/api/tasks/P0-001/refine')[0], 200)
             status, data = request('/api/tasks/P0-001/refine/expire')
             self.assertEqual((status, data['expired'], data['stage']), (200, 'P0-001', 'refine'))
-            self.assertEqual(request('/api/tasks/P0-001/audit/expire')[0], 404)
+            self.assertEqual(request('/api/tasks/P0-001/audit/expire')[0], 409)
+            self.assertEqual(request('/api/tasks/P0-001/review/expire')[0], 404)
         finally:
             server.shutdown()
             server.server_close()

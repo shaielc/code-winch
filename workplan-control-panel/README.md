@@ -14,7 +14,7 @@ There are no imports from the repository's `scripts/` or tests directories.
 | `control_panel/ui.py` | Browser page and its API calls |
 | `control_panel/task_scheduler.py` | Task selection, branch preparation, stage orchestration |
 | `control_panel/state.py` | Reservations, locking, tracker reconciliation |
-| `control_panel/integrations/` | Git/GitHub and Codex CLI operations |
+| `control_panel/integrations/` | Git/GitHub and Codex CLI operations; Claude routine trigger |
 | `control_panel/prompts/` | Bundled Refine, Implement, and Audit templates |
 | `tests/` | Panel tests, including local Git and HTTP scenarios |
 
@@ -38,10 +38,13 @@ selection. This is how a released reservation is taken back.
 The UI at `/` retains table and dependency-tree views. Stage buttons are always
 visible, with reasons when disabled; errors appear above the task list. **Refine** and **Implement**
 submit the corresponding prompt to Codex Cloud on the task branch. Merge the
-refinement PR into that branch before implementing. **Audit** copies a prompt
-naming an open implementation PR and its current head; when several PRs exist,
-the UI asks which to use. A text field is available if clipboard access fails.
-Both views include separate Refine and Implement conversation links. **Prepare**
+refinement PR into that branch before implementing. **Audit** fires the Claude
+routine at `CLAUDE_AUDIT_ROUTINE_URL` with a prompt naming an open implementation
+PR and its current head, starting a Claude cloud session; when several PRs exist,
+the UI asks which to use. The routine is configured on claude.ai/code/routines
+(see `claude-cloud-cli.md`): the panel supplies only the per-call text, because
+`claude --cloud` cannot start a session without a terminal. Both views include
+separate Refine, Implement, and Audit conversation links. **Prepare**
 appears on a task the panel could admit now — available, mid-retry, or previously
 released — and claims that one task. **Expire** releases the local reservation while
 keeping those links, and the row's **⋯** menu expires a single stage record instead.
@@ -72,8 +75,8 @@ protect the entire site behind a reverse proxy.
 | POST | `/api/tasks/<ID>/implement` | `{}`; submit implementation |
 | POST | `/api/tasks/<ID>/expire` | `{}`; release the local reservation, retaining conversation links |
 | POST | `/api/tasks/<ID>/prepare` | `{}`; admit one named task; returns 202 and a sync job ID |
-| POST | `/api/tasks/<ID>/refine\|implement/expire` | `{}`; retire that stage's current submission so it can be sent again |
-| POST | `/api/tasks/<ID>/audit` | Optional `{"pr_number": 123}`; return formatted prompt |
+| POST | `/api/tasks/<ID>/refine\|implement\|audit/expire` | `{}`; retire that stage's current submission so it can be sent again |
+| POST | `/api/tasks/<ID>/audit` | Optional `{"pr_number": 123}`; start a Claude session for that PR's head and return its `task_url` |
 
 Concurrent sync requests share a job and request a fresh pass over main. Job
 status is retained until restart; task reservations remain on disk. Other
@@ -82,7 +85,10 @@ concurrent operations return 409.
 Repeating a submitted stage at the same branch revision returns its existing URL
 rather than launching a second cloud task. The branch revision is what scopes that:
 once a stage's pull request merges into the task branch, the tip moves and the stage
-is open again. Expiring a stage overrides it while the tip has not moved. Expiring
+is open again. Audit is scoped the same way to the pull request's head, so a new
+push to the PR can be audited again. Expiring a stage overrides it while the tip
+has not moved; expiring Audit retires its newest session. A routine that refuses
+the call (bad token, rate limit) records nothing, since no session started. Expiring
 retires the submission rather than deleting it, so its conversation stays linked, and
 a submission whose outcome is uncertain says so — Codex may have accepted it before
 the reply was lost, so check there first, because expiring can run it twice.
@@ -104,13 +110,15 @@ PANEL_TOKEN=... CODEX_ENV_ID=... python3 -m control_panel \
   --clone=/path/to/dedicated-main-checkout --state-file=/path/to/state/task-state.json
 ```
 
-Tests use a local Git remote and mocked cloud submissions/PR listing.
+Tests use a local Git remote, mocked cloud submissions/PR listing, and a local
+HTTP stub for the Claude routine.
 
 ## Deploy
 
 From this directory, copy `.env.example` to `.env` and set `GITHUB_URL`, a current
 runner registration `RUNNER_TOKEN`, `GH_TOKEN` (contents write and pull-request
-read), `CODEX_ENV_ID`, and `PANEL_TOKEN`. Set the repository Actions secret
+read), `CODEX_ENV_ID`, `PANEL_TOKEN`, and the audit routine's API trigger as
+`CLAUDE_AUDIT_ROUTINE_URL` and `CLAUDE_AUDIT_ROUTINE_TOKEN`. Set the repository Actions secret
 `CONTROL_PANEL_TOKEN` to that same panel token.
 
 ```sh
