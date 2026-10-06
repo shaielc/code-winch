@@ -20,7 +20,9 @@ subtree.
   becomes true in each, what is deliberately absent, and the deferred decisions
   with their triggers.
 - **Implementation plan** — [`docs/workplan/README.md`](docs/workplan/README.md).
-  Currently an empty tracker; it says how the next plan is derived.
+  Phase 0 is open: seven tasks decomposing roadmap Stage 0. It carries the
+  dependency graph, the width report, and the rule for what a brief may defer.
+  `./scripts/list-available-tasks.sh` says which tasks you can pick up now.
 - **Design baseline** — `docs/architecture.md`, `docs/code-structure.md`,
   `docs/contracts.md`, `docs/security.md`, and the ADRs in `docs/decisions/`.
   It describes the destination, not the build order — the roadmap is the order,
@@ -75,12 +77,14 @@ Contract suites are necessary and not sufficient. Beyond them:
 ### Defer nothing without an owner
 
 No TODO, stub, unimplemented branch, or "handled later" without a named owner.
-With a plan in flight that owner is a task ID that exists in
-`docs/workplan/tasks.json` at the time you write it, or a deferred decision with
-a trigger in `docs/roadmap.md` §6. With no plan in flight — the current state —
-either finish the work or record the gap in `docs/state.md` under *what is not
-implemented* and say so in the pull request. Acceptance criteria are not
-satisfied by code that defers them.
+That owner is a task ID that exists in `docs/workplan/tasks.json` at the time you
+write it, or a deferred decision with a trigger in `docs/roadmap.md` §6.
+
+The plan in flight covers one roadmap stage, so it has no IDs in later phases to
+own work the roadmap schedules for one. That work is a **non-goal** of your task,
+with the stage cited — not a deferral. `docs/workplan/README.md` §*Scope of this
+plan* states the convention. Acceptance criteria are not satisfied by code that
+defers them.
 
 ### Test adversarially where it matters
 
@@ -124,9 +128,10 @@ evidence expected in the pull request, not a ceiling.
 
 ## Pull requests
 
-- When a plan is in flight, include `Task: <ID>` in the body and no other task
-  ID, and do **not** edit status fields in `docs/workplan/tasks.json` —
-  automation stamps `completed` when the pull request is approved.
+- Include `Task: <ID>` in the body and no other task ID, and do **not** edit
+  status fields in `docs/workplan/tasks.json` — automation stamps `completed`
+  when the pull request is approved. A pull request that implements no task needs
+  the `no-task` label; without one of the two it cannot pass the status gate.
 - Report what you ran, what the demonstration showed, and anything you deferred
   together with its owner.
 

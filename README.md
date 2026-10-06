@@ -35,16 +35,21 @@ serving a page you can type at — deliberately smaller than anything the design
 documents describe, because the previous attempt built downward from the control
 plane and never produced a configuration anybody could start.
 
-No implementation plan is in flight; `docs/workplan/` holds an empty tracker.
+[`docs/workplan/`](docs/workplan/README.md) decomposes that first stage into seven
+tasks. `./scripts/list-available-tasks.sh` says which are available; `P0-001`,
+which makes the sandbox start and repairs the gates below, is the only one until
+it lands.
 
 ## Building and testing
 
-The root `Makefile` and both CI workflows are **currently broken**. Every target
-names at least one path that was removed along with the previous implementation —
-`api/openapi/`, `internal/`, `cmd/winchd`, `web/src/`, `test/e2e/` — so
-`make check`, `make build`, and `make test-cycle` all fail before reaching any
-code. `docs/state.md` lists each gate with the line that names the missing path.
-Repairing them is the first stage's work.
+The root `Makefile` and both CI workflows are **currently broken**. Most targets
+name a path that was removed along with the previous implementation —
+`api/openapi/`, `internal/`, `cmd/winchd`, `web/src/`, `test/e2e/`,
+`test/contract/`, and `deployments/compose.yml`, which the whole `[docker]` group
+depends on — so `make check`, `make build`, and `make test-cycle` all fail before
+reaching any code. `format`, `format-check`, `vet`, and `lint` are the exception
+and would pass on a host with Go installed. `docs/state.md` lists each gate with
+the line that names the missing path. Repairing them is task `P0-001`.
 
 What runs today:
 

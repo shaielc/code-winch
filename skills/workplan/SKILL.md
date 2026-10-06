@@ -218,10 +218,20 @@ decision to end the plan runs this.
    - `docs/workplan/tasks.schema.json`, unchanged. It is the definition of the ID
      scheme and the tracker's shape, and it is what the next plan is written
      against. A close that deletes it deletes the format its own report cites.
-   - `docs/workplan/tasks.json`, emptied to `{"schema_version": 1, "tasks": []}`.
+   - `docs/workplan/tasks.json`, emptied to the smallest body its own schema
+     accepts — `schema_version`, `status_values`, and an empty `tasks` array, all
+     three of which `tasks.schema.json` requires:
+
+         {
+           "schema_version": 1,
+           "status_values": ["pending", "in_progress", "blocked", "completed"],
+           "tasks": []
+         }
+
      The dispatch automation opens this file unconditionally and validates it, so
      an absent or shapeless tracker fails every pull request rather than
-     reporting no available tasks.
+     reporting no available tasks. Validate it before committing the close; an
+     example that omits a required key is how this went wrong once already.
 
    The empty tracker is the closed state, not a stub to fill in. Create mode
    writes the next plan's tasks into it.
