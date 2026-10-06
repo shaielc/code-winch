@@ -1,13 +1,18 @@
 {
   "schema_version": 1,
-  "status_values": ["pending", "in_progress", "blocked", "completed"],
+  "status_values": [
+    "pending",
+    "in_progress",
+    "blocked",
+    "completed"
+  ],
   "tasks": [
     {
       "id": "P0-001",
       "title": "The sandbox image starts, serves its attach page, and states its posture",
       "phase": 0,
       "phase_name": "A sandbox you can talk to",
-      "status": "pending",
+      "status": "in_progress",
       "depends_on": [],
       "owner": null,
       "blocked_reason": null,
@@ -19,7 +24,9 @@
       "phase": 0,
       "phase_name": "A sandbox you can talk to",
       "status": "pending",
-      "depends_on": ["P0-001"],
+      "depends_on": [
+        "P0-001"
+      ],
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-002-runner-owns-fake-harness.md"
@@ -30,7 +37,9 @@
       "phase": 0,
       "phase_name": "A sandbox you can talk to",
       "status": "pending",
-      "depends_on": ["P0-002"],
+      "depends_on": [
+        "P0-002"
+      ],
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-003-records-persist-and-survive-reload.md"
@@ -41,7 +50,9 @@
       "phase": 0,
       "phase_name": "A sandbox you can talk to",
       "status": "pending",
-      "depends_on": ["P0-001"],
+      "depends_on": [
+        "P0-001"
+      ],
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-004-page-input-control-echoes.md"
@@ -52,7 +63,10 @@
       "phase": 0,
       "phase_name": "A sandbox you can talk to",
       "status": "pending",
-      "depends_on": ["P0-003", "P0-004"],
+      "depends_on": [
+        "P0-003",
+        "P0-004"
+      ],
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-005-submission-accepted-and-recorded.md"
@@ -63,7 +77,10 @@
       "phase": 0,
       "phase_name": "A sandbox you can talk to",
       "status": "pending",
-      "depends_on": ["P0-002", "P0-005"],
+      "depends_on": [
+        "P0-002",
+        "P0-005"
+      ],
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-006-submission-reaches-the-harness.md"
@@ -74,7 +91,9 @@
       "phase": 0,
       "phase_name": "A sandbox you can talk to",
       "status": "pending",
-      "depends_on": ["P0-003"],
+      "depends_on": [
+        "P0-003"
+      ],
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-007-malformed-output-and-stalled-readers.md"
