@@ -31,9 +31,9 @@
         "brief"
       ],
       "properties": {
-        "id": { "type": "string", "pattern": "^P[0-5]-[0-9]{3}$" },
+        "id": { "type": "string", "pattern": "^P[0-9]+-[0-9]{3}$" },
         "title": { "type": "string", "minLength": 1 },
-        "phase": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "phase": { "type": "integer", "minimum": 0 },
         "phase_name": { "type": "string", "minLength": 1 },
         "status": {
           "enum": ["pending", "in_progress", "blocked", "completed"]
@@ -41,11 +41,11 @@
         "depends_on": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "type": "string", "pattern": "^P[0-5]-[0-9]{3}$" }
+          "items": { "type": "string", "pattern": "^P[0-9]+-[0-9]{3}$" }
         },
         "owner": { "type": ["string", "null"] },
         "blocked_reason": { "type": ["string", "null"] },
-        "brief": { "type": "string", "pattern": "^phase-[0-5]/.+\\.md$" }
+        "brief": { "type": "string", "pattern": "^phase-[0-9]+/.+\\.md$" }
       },
       "allOf": [
         {

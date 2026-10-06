@@ -1,10 +1,13 @@
 # Code Winch
 
-Code Winch is a proposed control plane and web interface for running coding-agent
-harnesses. The repository currently contains the design baseline for an
-implementation that can start with local processes and evolve toward isolated
-containers, multiple agent vendors, rich output rendering, and durable
+Code Winch runs coding-agent harnesses in sandboxes you can watch and type at
+from a browser. The smallest useful form is one container holding one agent,
+serving its own page; from there it grows a control plane over many runs,
+multiple agent vendors, rich output rendering, real isolation, and durable
 multi-agent workflows.
+
+The repository currently holds the design baseline and the delivery order for
+that, and very little of the implementation — see **Project status** below.
 
 ## Design documents
 
@@ -19,56 +22,42 @@ multi-agent workflows.
 
 ## Project status
 
-[`docs/state.md`](docs/state.md) is the authoritative account of what runs, what
-went wrong, and what has no working code behind it. In short: the daemon starts,
-migrates, and serves an authenticated HTTP API and the browser app, and
-`winch dev run` drives a harness under a local PTY by hand — but the run use
-cases that would join them are unbound, so no run can be created through the
-product. No implementation plan is in flight.
+**Nothing of the product runs yet.** There is no daemon, no sandbox, no browser
+application, and no way to start a harness. What exists is the design set,
+`cmd/fake-harness` (a controllable stand-in for a vendor CLI), the workplan
+control panel, and the planning skills.
+[`docs/state.md`](docs/state.md) is the authoritative account, with a command or
+a `file:line` behind every claim.
 
-See [`web/README.md`](web/README.md) for the web workspace's deterministic
-development and generated-client checks, and
-[`deployments/README.md`](deployments/README.md) for the local stack.
+[`docs/roadmap.md`](docs/roadmap.md) is the order that gets fixed in. Its first
+stage is one container holding a runner and the fake harness, started by hand,
+serving a page you can type at — deliberately smaller than anything the design
+documents describe, because the previous attempt built downward from the control
+plane and never produced a configuration anybody could start.
 
-## Go development
+No implementation plan is in flight; `docs/workplan/` holds an empty tracker.
 
-Every target in the root `Makefile` is marked `[host]` or `[docker]`. `[host]`
-targets run directly on this machine; `[docker]` targets need Docker only and
-run inside the `runner` container.
+## Building and testing
 
-### On the host
+The root `Makefile` and both CI workflows are **currently broken**. Every target
+names at least one path that was removed along with the previous implementation —
+`api/openapi/`, `internal/`, `cmd/winchd`, `web/src/`, `test/e2e/` — so
+`make check`, `make build`, and `make test-cycle` all fail before reaching any
+code. `docs/state.md` lists each gate with the line that names the missing path.
+Repairing them is the first stage's work.
 
-Go 1.24 or newer and golangci-lint 2.1.6 are required. Install the linter with
-`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6`.
-These are the same quality gates CI runs:
-
-```sh
-make format        # format Go source files
-make format-check  # verify formatting without changing files
-make vet           # run go vet
-make lint          # run the pinned golangci-lint release
-make test          # run Go unit tests
-make build         # build cmd/winchd
-make check         # run all non-mutating CI checks
-```
-
-CI installs the pinned linter before invoking these commands. Run `make format`
-when `make format-check` reports file names, then rerun `make check` before
-submitting a change. Set `GOLANGCI_LINT` to an alternate binary path when your
-linter is not on `PATH`.
-
-### In Docker
-
-With no Go toolchain installed, the containerised toolchain runs the Go gates
-and the integration suite instead:
+What runs today:
 
 ```sh
-make test-cycle      # build, start, verify, integration-test, tear down
-make runner-verify   # gofmt, vet, unit tests, and compile in the runner
-make runner-shell    # a shell in the runner
+python3 -m unittest discover -s test                        # completion scripts
+cd workplan-control-panel && python3 -m unittest discover -s tests
+./scripts/list-available-tasks.sh                           # expect []
 ```
 
-`runner-verify` is `check` minus `lint` and `api-check`, which need golangci-lint
-and npm that the image does not carry — so a host run is still required before
-submitting. See [deployments/README.md](deployments/README.md) for the step-by-step
-form and the database it uses.
+Once the gates are repaired, every `Makefile` target is marked `[host]` or
+`[docker]`: `[host]` targets run on this machine and need Go 1.24+, npm, and
+golangci-lint 2.1.6 (`go install
+github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6`); `[docker]`
+targets need only Docker and run in the `runner` container. `make check` is the
+host gate CI runs, and `make test-cycle` is the Docker path — it covers neither
+`lint` nor `api-check`, so a host run is still required before submitting.

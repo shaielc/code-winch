@@ -11,8 +11,8 @@ The design must support:
 
 1. starting, stopping, observing, and communicating with harnesses;
 2. browser-based interaction, including login and streaming output;
-3. local-process isolation initially and container or other sandbox backends
-   without changing the domain model;
+3. a container sandbox as the first backend, with local-process and other
+   backends added without changing the domain model;
 4. multiple harness providers with different protocols and capabilities;
 5. alternative representations of one canonical output stream; and
 6. top-level workflows coordinating one or more runs.
@@ -40,28 +40,44 @@ The design must support:
   policies, and similar features.
 - **Secure defaults.** Credentials are references to secrets, sandbox egress is
   explicit, and browser clients never receive harness credentials.
-- **Modular monolith first.** Clear in-process ports precede network services.
-  Components become services only when isolation or scaling justifies it.
+- **A sandbox is self-sufficient.** It holds its harness, the runner that owns
+  that harness, and an attach surface a browser connects to, and it is useful
+  with no control plane deployed. Components outside it arrive when a second
+  case forces them rather than in advance — see
+  [ADR-0005](decisions/0005-sandbox-resident-runner.md), which supersedes the
+  in-process-first sequencing of ADR-0001.
 
 ## 3. System context
 
 ```mermaid
 flowchart LR
     U[Browser user] <-->|HTTPS / WebSocket| CP[Code Winch control plane]
+    U <-->|attach surface| R
     CP --> DB[(Metadata + event store)]
     CP --> SEC[Secret provider]
-    CP <-->|runner protocol| R[Runner]
-    R --> SB[Sandbox backend]
-    SB --> H[Agent harness]
+    CP <-->|runner protocol| R
+    subgraph SB[Sandbox]
+      R[Runner + attach surface] --> LOG[(Runner-local records)]
+      R --> H[Agent harness]
+    end
     H --> REPO[Working repository]
     H --> NET[Allowed network services]
 ```
 
 The **control plane** owns identity, authorization, run metadata, workflows,
 subscriptions, and API semantics. The **runner** owns machine-local resources:
-processes, PTYs, containers, workspace mounts, and signal delivery. Initially
-they are modules in one daemon; the runner boundary must nevertheless use
-serializable commands and events so it can later move to another host.
+the harness process, PTYs, workspace mounts, signal delivery, and a private
+ordered record of what the harness produced. The runner lives inside the
+sandbox, in its own process, so the runner boundary is a network protocol rather
+than an in-process call.
+
+The browser reaches a harness two ways, and they are not alternatives — see
+[ADR-0006](decisions/0006-two-interaction-surfaces.md). The **control-plane
+application** is the product surface, over many runs. The **attach surface** a
+sandbox serves itself is the operator and debug path for the one session inside
+it, and remains available when no control plane is deployed or when the control
+plane is the thing that is broken. Neither surface connects to the harness
+process directly; both go through the runner.
 
 ## 4. Logical components
 
@@ -75,6 +91,26 @@ serializable commands and events so it can later move to another host.
 
 The browser consumes snapshots over HTTP and ordered event deltas over a
 WebSocket. It does not connect directly to a harness.
+
+### Sandbox attach surface
+
+The same sandbox that runs a harness serves a small HTTP and WebSocket surface
+over that one session: the records the runner has collected, a live stream of new
+ones, and input submission. It is the operator and debug path, and it is the
+maintained hands-on path that does not depend on the state of the product UI.
+
+Its job is deliberately narrower than the web application's: one session, one
+harness, no run list, no search, no workflow views, no multi-user access. What
+the two surfaces do share is record projections — terminal, conversation,
+activity, changes are one implementation over one record shape, not two.
+[ADR-0006](decisions/0006-two-interaction-surfaces.md) states the split and the
+non-goal; `docs/roadmap.md` D2 settles whether the shared projections live in one
+web workspace or two.
+
+Because this surface sits inside the sandbox, a browser talking to it is talking
+to a process that shares a container with an untrusted agent. That boundary and
+its controls are in [the security model](security.md#2-trust-boundaries), and
+§11 there blocks exposing it in a shared deployment.
 
 ### API and application services
 
@@ -143,6 +179,15 @@ Future drivers might target rootless Podman, microVMs, Kubernetes jobs, or a
 remote execution service. They conform to the same prepare/start/stop/inspect/
 cleanup lifecycle and publish their capabilities.
 
+Among those capabilities is whether the sandbox **hosts the runner and serves an
+attach surface** of its own, or only accepts a command and returns output. A
+driver that hosts the runner is reachable by a browser directly and is useful
+with no control plane; one that does not must be driven entirely through the
+control plane, and the attach surface is unavailable for it. The `docker` driver
+hosts the runner — that is the configuration the first delivery stage ships. A
+hypothetical remote execution service is the case that would not, and is the
+trigger for revisiting ADR-0005.
+
 ### Event pipeline and renderers
 
 The ingestion path is:
@@ -153,11 +198,24 @@ harness bytes/messages -> adapter parser -> normalized event -> redaction
   -> renderer projection -> browser
 ```
 
+Sequence assignment is split across the two processes. The runner assigns
+**runner-local ordinals** and persists records to the sandbox's own store, which
+is what makes a standalone sandbox able to replay a session. The control plane
+assigns **canonical sequence numbers** when it persists, so a record has a local
+ordinal from the moment the runner sees it and a canonical sequence only once a
+control plane is in the path. Roadmap decision D7 settles whether that promotion
+wraps the runner's record shape or replaces it.
+
 Canonical events are durable facts. A renderer is a pure projection from events
 to view models (terminal frames, Markdown conversation turns, tool-call cards,
 diff summaries). Renderer failures cannot affect execution. Experimental or
 untrusted server-side renderers run out of process with bounded input, time,
 memory, and no credentials; the core built-in renderers may run in process.
+
+Projections are shared between the attach surface and the web application, so a
+projection's input is a record shape both can produce. A projection that
+requires a control-plane-only type is not usable from a standalone sandbox, and
+that constraint binds the record model rather than the renderer.
 
 ### Workflow coordinator
 
@@ -173,40 +231,65 @@ definitions or run semantics.
 
 ## 5. Deployment evolution
 
-### Phase A: single-node modular monolith
+Each topology below is a configuration that runs and can be driven by hand, not
+a step toward one. The letters are topologies, not delivery stages — the
+numbered stages belong to [`docs/roadmap.md`](roadmap.md), and each heading says
+which of them produces this topology.
+
+### Topology A: a standalone sandbox — roadmap stages 0–2
 
 ```mermaid
 flowchart TB
-  subgraph Daemon
-    API[API + WebSocket]
-    APP[Application + supervisors]
-    RUN[Local runner]
-    WORK[Workflow worker]
+  WEB[Browser] --> ATT[Attach surface]
+  subgraph Sandbox
+    ATT --> RUN[Runner]
+    RUN --> STORE[(Runner-local records)]
+    RUN --> H[Harness process]
   end
-  WEB[Static web app] --> API
-  API --> APP
-  APP --> RUN
-  APP --> DB[(PostgreSQL)]
-  WORK --> DB
-  RUN --> PROC[Local process or Docker]
 ```
 
-PostgreSQL is preferred even for the first shared deployment because leases,
-transactions, event ordering, and an outbox are central requirements. SQLite
-may be offered as an explicitly single-process developer profile.
+One container, started by hand, bound to loopback. No control plane, no
+accounts, no network policy, and no concept of a run. The record store is
+private to the sandbox and holds runner-local ordinals; the substrate is
+whatever satisfies a single session's ordered record, which is roadmap decision
+D3. This is the whole system at the first delivery stage, and it stays a
+supported configuration afterwards.
 
-### Phase B: isolated/remote runners
+### Topology B: a control plane that observes — roadmap stage 3
 
-Move the runner to one or more hosts. The control plane dispatches commands over
-an authenticated, versioned runner protocol. Runners maintain heartbeats and
-lease tokens; stale runners cannot append events after ownership changes.
+```mermaid
+flowchart TB
+  WEB[Browser] --> API[API + WebSocket]
+  WEB -.direct attach.-> ATT
+  subgraph Daemon
+    API --> APP[Application]
+    APP --> DB[(PostgreSQL)]
+  end
+  APP <-->|runner protocol| ATT
+  subgraph Sandbox
+    ATT[Attach surface] --> RUN[Runner] --> H[Harness]
+  end
+```
 
-### Phase C: scale by responsibility
+Sandboxes are still started by hand, and register themselves with the daemon.
+The daemon lists them, records runs for executions that already exist, and
+routes a user to a sandbox's surface. PostgreSQL enters here, with the daemon,
+because leases, transactions, canonical event ordering, and an outbox are what it
+is for — none of which a single standalone sandbox needs. SQLite may be offered
+as an explicitly single-process developer profile of the daemon.
 
-API replicas remain stateless, supervisors/workflow workers claim leases, event
-delivery may use a broker while PostgreSQL remains authoritative, and renderer
-workers can have a separate security profile. This is an evolution, not the
-required initial topology.
+### Topology C: a control plane that starts runs — roadmap stages 4–5
+
+The daemon gains supervisors, the run state machine, lease fencing, and a
+workflow worker, and prepares and starts sandboxes itself. The manual start goes
+away; the attach surface does not.
+
+### Topology D: scale by responsibility — beyond the roadmap
+
+API replicas remain stateless, supervisors and workflow workers claim leases,
+event delivery may use a broker while PostgreSQL remains authoritative, and
+renderer workers can have a separate security profile. This is an evolution, not
+a required topology.
 
 ## 6. Key data model
 
@@ -225,6 +308,14 @@ Large binary output and artifacts belong in object storage; metadata and event
 envelopes belong in the database. Every mutation that publishes an event uses a
 transactional outbox to prevent database/pub-sub divergence.
 
+Every aggregate above belongs to the control plane. A sandbox holds one
+**session** — the harness execution it was started for, and the ordinal-ordered
+records the runner collected from it — and nothing else. A session is not a run:
+it has no workspace policy, no lease epoch, no attempt history, and no identity
+beyond the sandbox it lives in. A run is what the control plane records *about* a
+session, which is why the run aggregate can arrive several stages after the
+sandbox that produces the records.
+
 ## 7. Reliability and observability
 
 - Commands carry idempotency keys; events carry monotonically increasing
@@ -241,9 +332,19 @@ transactional outbox to prevent database/pub-sub divergence.
 
 ## 8. Technology baseline
 
-The recommended starting stack is a **Go daemon** (strong process, PTY,
-concurrency, and static deployment support), a **TypeScript/React web app**,
-PostgreSQL, and an OpenAPI-described HTTP API with WebSockets for live events.
-This is an implementation choice behind the architectural ports, not a protocol
+The recommended starting stack is **Go** for both composition roots — the
+sandbox-resident runner and the control-plane daemon — for its process, PTY,
+concurrency, and static-binary support, a **TypeScript/React** browser stack, and
+an OpenAPI-described HTTP API with WebSockets for live records. This is an
+implementation choice behind the architectural ports, not a protocol
 requirement. Generated API clients and schema compatibility tests prevent the
 Go/TypeScript boundary from drifting.
+
+The two processes do not share a store. PostgreSQL belongs to the **control
+plane**, where leases, transactions, canonical ordering, and an outbox are
+central requirements; SQLite may be offered as an explicitly single-process
+developer profile of it. A **sandbox** persists one session's ordered records
+and needs none of those properties, so its substrate is chosen for being small
+and dependency-free rather than for transactional guarantees — roadmap decision
+D3. A sandbox that required PostgreSQL to start would not be a sandbox you can
+start by hand.

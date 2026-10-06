@@ -1,5 +1,12 @@
 # Harness, runner, and event contracts
 
+Sections 1 through 7 are the **control plane's** contracts. They bind a
+deployment that has one; they do not bind a standalone sandbox, which has a
+session rather than a run and serves the narrower contract in §8. Where a
+capability exists at both levels — input submission, ordered records, resume —
+§8 is the earlier and smaller of the two, and the control plane wraps it rather
+than replacing it.
+
 ## 1. Run lifecycle
 
 ```mermaid
@@ -50,6 +57,15 @@ run it created and is not otherwise expired. A run no client request created —
 one a workflow spawns, say — carries no key and deduplicates against nothing.
 
 ## 2. Canonical event envelope
+
+This envelope is the control plane's. A runner produces records with a
+runner-local ordinal and no canonical `sequence`, as
+[the package structure](code-structure.md#3-principal-ports) requires of it; the
+control plane assigns `sequence`, `eventId`, and the authoritative `occurredAt`
+ordering when it persists. A standalone sandbox therefore serves records that
+carry an ordinal and not a sequence, and consumers of §8 order by ordinal.
+Whether promotion wraps the runner's record shape or replaces it is roadmap
+decision D7.
 
 All persisted and streamed events use a common envelope:
 
@@ -182,3 +198,45 @@ registered, policy-controlled activity. Instances pin a definition version and
 harness/sandbox profiles. Step commands use deterministic idempotency keys based
 on workflow instance, step, and attempt so coordinator replay does not duplicate
 external effects.
+
+## 8. Sandbox attach contract
+
+What a sandbox serves over its own surface, for the one session inside it. This
+is the only contract a standalone sandbox has, and it holds whether or not a
+control plane is deployed. [ADR-0006](decisions/0006-two-interaction-surfaces.md)
+states why it stays narrow.
+
+**Session, not run.** There is one session per sandbox, implied by the sandbox
+itself rather than addressed by an identifier the caller chooses. The surface
+exposes no collection: no listing, no creation, no selection. The run lifecycle
+in §1 does not apply, and the states it names are not reported here.
+
+**Records are ordinal-ordered.** Every record the runner collects carries a
+runner-local ordinal, monotonically increasing and gap-free within the session.
+Consumers order by ordinal, never by timestamp. Records carry no canonical
+`sequence` and no `eventId`; §2 says what the control plane adds.
+
+**Reading is snapshot plus stream.** A caller fetches records from an ordinal and
+opens a stream from an ordinal, the same shape as §5 and without the
+authorization reattachment a long-lived control-plane stream needs. The stream
+emits a heartbeat and an explicit caught-up marker. On a gap or a reconnect, the
+caller refetches from its last ordinal. A slow reader is disconnected with its
+last ordinal and never backpressures the harness.
+
+**Input is accepted or refused, never queued silently.** A submission carries an
+idempotency key scoped to the session and one typed payload, from the same set
+§3 defines. The runner checks the harness adapter's declared input modes and
+whether the harness is currently input-capable. A repeated key returns the first
+submission's identifier and kind. Refusal uses the §3 codes that have meaning
+without a run — `INPUT_INVALID`, `INPUT_UNSUPPORTED`, `INPUT_UNAUTHORIZED` — and
+diagnostics name the ordinal and the input kind but never payload content.
+
+**Harness exit is a record, not a state machine.** When the harness exits, the
+runner emits a terminal record carrying the native exit and its mapped outcome,
+and the session accepts no further input. There is no retry and no new attempt:
+restarting means starting another sandbox, which is what makes the run aggregate
+the control plane's job rather than the runner's.
+
+**The surface states its posture.** It reports the sandbox profile in force and
+what that profile does not isolate, so a caller cannot be misled about effective
+isolation — threat T02 in [the security model](security.md#3-threat-and-mitigation-register).

@@ -27,14 +27,15 @@ deployment.
 
 ## 2. Trust boundaries
 
-Trust boundaries are: browser to control plane, control plane to runner, runner
-to sandbox, sandbox to host/workspace/network, renderer to browser, and all
-components to the secret provider. Isolation reduces risk but does not make an
-agent trustworthy.
+Trust boundaries are: browser to control plane, browser to a sandbox's attach
+surface, control plane to runner, runner to sandbox, sandbox to
+host/workspace/network, renderer to browser, and all components to the secret
+provider. Isolation reduces risk but does not make an agent trustworthy.
 
 | Boundary | Data crossing it | Required control |
 |---|---|---|
 | Browser -> control plane | sessions, commands, input, rendered events | TLS, authentication/authorization, CSRF/origin and size/rate checks |
+| Browser -> sandbox attach surface | session input, ordinal-ordered records, declared posture | loopback or host-local binding, single bearer token, origin validation, bounded payloads; not exposed in a shared deployment (LB11) |
 | Control plane -> runner | versioned commands, lease tokens, observations | separate machine identity, authenticated transport, replay and lease fencing |
 | Runner -> sandbox | launch specification, scoped mounts and credentials | named policy, capability validation, resource limits, cleanup |
 | Sandbox -> repository/host | file and process operations | approved root, traversal checks, disposable workspace; no implied isolation for `local-trusted` |
@@ -45,6 +46,18 @@ agent trustworthy.
 The metadata/event store and telemetry exporter are also trust crossings:
 authorization, encryption, sensitivity policy, redaction, and bounded labels
 apply before data is persisted or exported.
+
+The attach-surface boundary deserves its own paragraph, because it is the one
+case where a browser speaks to a process that shares a container with an
+untrusted agent. The runner serving that surface is inside the blast radius of
+the harness it supervises: a harness that escapes its process constraints is in a
+position to answer the browser itself. The surface is therefore scoped to what a
+single operator on the same host already has — one session, one token, no
+cross-session reads, no credential material, and no authority over any other
+sandbox. It is not a substitute for the control plane's authorization model, and
+a deployment that reaches more than one person puts the control plane in front
+of it rather than widening it. [ADR-0006](decisions/0006-two-interaction-surfaces.md)
+keeps that scope a stated non-goal so it does not erode.
 
 ## 3. Threat and mitigation register
 
@@ -68,6 +81,7 @@ exists; `docs/state.md` records which of these hold at HEAD.
 | T12 | Renderer: ANSI/Markdown/HTML/URL content executes script, spoofs UI, fetches data, or consumes excessive resources. | Interpret rather than inject output; sanitize; restrictive CSP; safe links; bounded projections; isolate untrusted server renderers. | web/renderer owner |
 | T13 | Supply chain: compromised dependencies or images execute in control plane/runner. | Pin image digest and provenance; scan dependencies/images; produce SBOM; restrict adapter and renderer loading. | shared-deployment launch blocker LB08 — release/security owner |
 | T14 | Lifecycle: retention worker, export, deletion, backup, or renderer cache leaves unauthorized copies. | One sensitivity policy across stores; authorized integrity-manifested exports; retryable deletion ledger; cache invalidation; backup expiry verification. | data owner |
+| T15 | Attach surface: a sandbox's own surface is reachable off-host, accepts input without its token, or is answered by a harness that escaped its process constraints. | Host-local binding verified by off-host scan (LB11); single session-scoped token; origin validation; bounded payloads; no credential material and no authority over another sandbox, so an escaped harness gains nothing it did not already hold. | runner/security owner; **accepted residual:** the runner shares a container with the harness it supervises and is not a boundary against it |
 
 ## 4. Security profiles
 
@@ -82,6 +96,15 @@ low-level flags.
 
 The UI must show that `local-trusted` is not a sandbox. Policies may prohibit it
 in shared deployments.
+
+A sandbox that hosts its own runner and attach surface runs under one of these
+profiles like any other; hosting the surface is a capability, not a profile. The
+first delivery stage runs `container-standard` with its network policy not yet
+enforced — the container is real, the egress allowlist is not — and both the
+attach surface and `docs/roadmap.md` say so. Stating the gap is the control:
+threat T02 makes misleading a user about effective isolation a tracked threat, so
+a profile whose network column is aspirational must report itself that way rather
+than claim the row above.
 
 ## 5. Data handling and retention defaults
 
@@ -247,6 +270,7 @@ expiry, affected deployment, compensating control, and rollback trigger.
 | LB08 | Images/dependencies are scanned, critical findings resolved or explicitly excepted, pinned image provenance recorded, and an SBOM produced. | Release/security owner |
 | LB09 | Incident response names on-call contacts and exercises credential revocation, runner revocation, audit preservation, containment, and user notification. | Operations/security owner |
 | LB10 | Runner identity rotation, lease fencing, stale-event rejection, daemon recovery, restore, and emergency revocation are exercised. | Runner/operations owner |
+| LB11 | No sandbox attach surface is reachable from outside its host. Evidence: every sandbox binds loopback or a host-local interface, the control plane is the only path a user reaches, and a reachability scan from off-host finds no attach port open. | Runner/security owner |
 
 Hostile public or mutually untrusted tenants are out of scope for the container
 deployment. Enabling them is itself a launch blocker until a stronger isolation
@@ -260,6 +284,7 @@ Before a shared deployment:
 - test path/symlink traversal and archive extraction;
 - test resource exhaustion, stop escalation, daemon crash, and orphan cleanup;
 - verify egress restrictions including DNS and metadata endpoints;
+- scan from off-host for reachable sandbox attach ports;
 - fuzz harness parsers, ANSI handling, schemas, and API payloads;
 - scan images/dependencies and produce an SBOM;
 - exercise secret canaries to confirm logs/events/artifacts are redacted; and

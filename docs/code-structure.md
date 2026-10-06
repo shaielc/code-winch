@@ -5,13 +5,18 @@
 ```text
 code-winch/
 ├── cmd/
-│   ├── winchd/                  # daemon composition root
-│   └── winch-runner/            # future standalone runner composition root
+│   ├── winch-sandbox/           # sandbox-resident runner + attach surface;
+│   │                            # the first composition root (ADR-0005)
+│   ├── winchd/                  # control-plane composition root; arrives with
+│   │                            # the stage that observes sandboxes
+│   └── fake-harness/            # controllable stand-in for a vendor CLI
 ├── internal/
 │   ├── domain/                  # dependency-free entities, value types, state machines
 │   ├── application/             # use cases and ports
 │   ├── supervisor/              # per-run serialization, leases, reconciliation
 │   ├── workflow/                # definitions, coordinator, runtime port
+│   ├── runner/                  # harness process ownership, codec pumping,
+│   │                            # local ordinals, session record store
 │   ├── adapters/
 │   │   ├── harness/             # one package per coding-agent integration
 │   │   ├── sandbox/             # local, docker, future backends
@@ -21,9 +26,11 @@ code-winch/
 │   └── platform/                # config, telemetry, clock, IDs
 ├── pkg/protocol/                # versioned runner/event wire schemas only
 ├── web/
+│   ├── src/attach/              # the sandbox's one-session surface
 │   ├── src/app/                 # routes and application shell
 │   ├── src/features/            # run/workflow/auth vertical UI slices
 │   ├── src/renderers/            # terminal, conversation, tool, diff projections
+│   │                            # shared by both surfaces
 │   └── src/api/                  # generated client and stream reconnection
 ├── api/openapi/                 # public API source of truth
 ├── schemas/                     # event and runner protocol schemas
@@ -37,7 +44,15 @@ code-winch/
 ```
 
 Directories should be created when their first implementation is added; this
-document is not a request for empty scaffolding.
+document is not a request for empty scaffolding. The order they appear in is
+not the order they are built: `cmd/winch-sandbox`, `internal/runner`,
+`internal/adapters/harness`, `web/src/attach`, and `deployments/` come first,
+and `internal/domain`, `internal/supervisor`, and `internal/workflow` arrive with
+the control plane. [`docs/roadmap.md`](roadmap.md) is the order.
+
+Whether `web/src/attach` and `web/src/app` stay one workspace with two entry
+points or become two workspaces sharing a renderer package is roadmap decision
+D2, open until the control plane's surface needs its first shared component.
 
 ## 2. Dependency rule
 
@@ -55,6 +70,14 @@ Dependencies point inward. Domain code imports no adapters, database packages,
 web frameworks, Docker clients, or provider SDKs. Application packages define
 ports; outer adapters implement them; a `cmd` composition root wires concrete
 implementations. Cross-adapter imports are prohibited.
+
+There are two composition roots and they wire different subsets. The sandbox
+root wires a harness adapter, the runner, its session store, and the attach
+transport — and nothing from `internal/domain`, `internal/supervisor`, or
+`internal/workflow`, because a sandbox has a session and not a run. The
+control-plane root wires everything else. A package the sandbox root needs
+therefore may not depend on the run aggregate, and that constraint is what keeps
+a standalone sandbox startable.
 
 ## 3. Principal ports
 
@@ -95,10 +118,15 @@ type WorkflowRuntime interface {
 }
 ```
 
-Sandbox capabilities explicitly report whether attached I/O is available and
-whether attachment is single-use. The local runner is the sole owner of opaque
-execution handles and harness codecs; it pumps attached bytes into codecs and
-emits runner-local ordinals, never canonical event sequence numbers.
+Sandbox capabilities explicitly report whether attached I/O is available,
+whether attachment is single-use, and whether the sandbox hosts the runner and
+serves an attach surface. The runner is the sole owner of opaque execution
+handles and harness codecs; it pumps attached bytes into codecs, emits
+runner-local ordinals, never canonical event sequence numbers, and persists
+those records to the session store it owns. On a hosting sandbox the runner lives
+inside the sandbox, so "attached I/O" is a process-local pipe or PTY rather than
+a protocol hop, and the protocol hop is between the control plane and the runner
+instead.
 
 `ResolvedCredentials` is short-lived and can be used only during sandbox
 preparation/launch. It must never appear in `RunSpec`, persisted events, or
@@ -131,8 +159,10 @@ stop escalation, and cleanup. It must pass the shared sandbox contract suite:
 - stdout/stderr ordering guarantees as declared by capability;
 - terminal resizing if advertised;
 - stop escalation and orphan cleanup;
-- resource limits and network policy enforcement; and
-- idempotent inspect/stop/cleanup operations.
+- resource limits and network policy enforcement;
+- idempotent inspect/stop/cleanup operations; and
+- the attach surface's contract in `docs/contracts.md` §8, if the driver
+  advertises hosting the runner.
 
 The `local` adapter must label unsupported controls honestly; it must not claim
 filesystem or network isolation.
@@ -152,7 +182,9 @@ references and are resolved only at launch.
 - **Protocol compatibility tests:** old fixtures decode; new optional fields are
   ignored; supported version negotiation is verified.
 - **Integration tests:** real PTY, PostgreSQL, and opt-in Docker execution.
-- **End-to-end tests:** browser + daemon + deterministic fake harness.
+- **End-to-end tests:** browser + sandbox + deterministic fake harness, and —
+  once the control plane exists — browser + daemon + sandbox. The first form is
+  the standing suite the later stages re-run against more real substrates.
 - **Security tests:** traversal, secret redaction, authorization, escape-prone
   sandbox configurations, and malicious renderer payloads.
 

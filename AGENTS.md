@@ -3,10 +3,10 @@
 Instructions for any agent working in this repository. One unit of work, one
 pull request.
 
-An implementation plan is in flight. [`docs/workplan/README.md`](docs/workplan/README.md)
-is its index and [`docs/workplan/tasks.json`](docs/workplan/tasks.json) is its
-tracker. [`docs/state.md`](docs/state.md) remains the authoritative account of
-what runs and what does not; read it before assuming a capability exists.
+No implementation plan is in flight, and the product does not run.
+[`docs/state.md`](docs/state.md) is the authoritative account of what exists and
+what does not; read it before assuming a capability exists, because the design
+set describes a destination and almost none of it is built.
 
 An `AGENTS.md` deeper in the tree adds to or narrows these rules for its own
 subtree.
@@ -16,12 +16,15 @@ subtree.
 - **System state** — [`docs/state.md`](docs/state.md). What is reachable, what
   is built but unwired, and what has no code. Every claim in it carries the
   command or `file:line` that shows it.
-- **Active implementation plan** — [`docs/workplan/README.md`](docs/workplan/README.md).
-  Phase objectives, task briefs, dependencies, and instructions for selecting
-  available work from the tracker.
+- **Delivery order** — [`docs/roadmap.md`](docs/roadmap.md). The stages, what
+  becomes true in each, what is deliberately absent, and the deferred decisions
+  with their triggers.
+- **Implementation plan** — [`docs/workplan/README.md`](docs/workplan/README.md).
+  Currently an empty tracker; it says how the next plan is derived.
 - **Design baseline** — `docs/architecture.md`, `docs/code-structure.md`,
-  `docs/contracts.md`, `docs/security.md`, `docs/roadmap.md`, and the ADRs in
-  `docs/decisions/`.
+  `docs/contracts.md`, `docs/security.md`, and the ADRs in `docs/decisions/`.
+  It describes the destination, not the build order — the roadmap is the order,
+  and it deliberately inverts the layering these documents are written in.
 - **How to run a task** — `skills/task/SKILL.md`. How to orient in an active
   brief, what its shape must demonstrate, and how to judge whether it is
   complete. It expands on the rules below.
@@ -73,7 +76,8 @@ Contract suites are necessary and not sufficient. Beyond them:
 
 No TODO, stub, unimplemented branch, or "handled later" without a named owner.
 With a plan in flight that owner is a task ID that exists in
-`docs/workplan/tasks.json` at the time you write it; with no plan in flight,
+`docs/workplan/tasks.json` at the time you write it, or a deferred decision with
+a trigger in `docs/roadmap.md` §6. With no plan in flight — the current state —
 either finish the work or record the gap in `docs/state.md` under *what is not
 implemented* and say so in the pull request. Acceptance criteria are not
 satisfied by code that defers them.
@@ -93,36 +97,30 @@ in the pull request.
 
 ## Verification
 
-At minimum, and always:
+**The Makefile and both CI workflows are currently broken**, every one of them
+against a path that was removed with the last plan — `docs/state.md` lists each
+with the line that names it. `make check`, `make build`, `make test`,
+`make test-integration`, `make e2e`, and `make test-cycle` all fail before
+reaching anything you wrote. Repairing them is the first stage's work, so until
+that lands, do not report `make check` as passing and do not treat its failure as
+caused by your change.
+
+What does run today:
 
 ```sh
-make check
+python3 -m unittest discover -s test                        # completion scripts
+cd workplan-control-panel && python3 -m unittest discover -s tests
+./scripts/list-available-tasks.sh                           # expect []
 ```
 
-That runs OpenAPI validation, compatibility, and generated-output determinism,
-plus Go formatting, vet, lint, tests, and the daemon build. It is a `[host]`
-target and needs go, npm, and golangci-lint installed.
+Once the gates are repaired, `make check` is the minimum and always: OpenAPI
+validation, compatibility, and generated-output determinism, plus Go formatting,
+vet, lint, tests, and the build. It is a `[host]` target needing go, npm, and
+golangci-lint. `make test-cycle` is the Docker path and covers neither `lint` nor
+`api-check`, so say which gates you ran rather than claiming `make check`.
 
-Without a host toolchain, `make test-cycle` runs the Go gates and the integration
-suite in Docker. It does not cover `lint` or `api-check`, so say so in the pull
-request rather than claiming `make check` passed.
-
-If your change touches storage, migrations, or process lifecycle:
-
-```sh
-make test-integration
-```
-
-If you touched `web/`:
-
-```sh
-cd web && npm run format:check && npm run lint && npm run typecheck \
-  && npm run test && npm run build
-```
-
-Then run everything your brief lists under **Verification** or **Required
-verification**. Those are the minimum evidence expected in the pull request, not
-a ceiling.
+Then run everything your brief lists under **Verification**. That is the minimum
+evidence expected in the pull request, not a ceiling.
 
 ## Pull requests
 
@@ -134,13 +132,19 @@ a ceiling.
 
 ## Current state
 
-Phase 0 is repairing the foundation gaps recorded in `docs/state.md`: broken CI
-coverage, an operator CLI absent from build and deployment, an uncontrollable
-fake profile, missing end-to-end coverage, stale post-close references, and the
-unbound run round trip. The active scope and current progress are in
-`docs/workplan/README.md` and `docs/workplan/tasks.json`.
+Nothing of the product runs. What exists is the design set, `cmd/fake-harness`,
+the workplan control panel, the planning skills, and the completion scripts —
+`docs/state.md` has the detail, with a command or a `file:line` behind every
+claim. No plan is in flight, so there are no task IDs to cite.
 
-Capabilities outside that repair phase remain as documented under *What is not
-implemented* in `docs/state.md`; their presence in the design set is not
-evidence that they run. The rules above bind throughout the active plan, so do
-not add code that makes those foundations harder to establish.
+The next thing built is roadmap Stage 0: one container holding a runner and the
+fake harness, started by hand, serving a page you can type at. That stage also
+repairs the quality gates, because a stage whose first invariant is that the
+system starts and deploys cannot stand on a build that fails. Read
+`docs/roadmap.md` §1 before proposing work — the delivery order deliberately
+inverts the layering the design documents are written in, so "the architecture
+says this layer comes first" is not a reason to build it first.
+
+Capabilities listed under *What is not implemented* in `docs/state.md` are gaps,
+not features. Their presence in the design set is not evidence that they run, and
+their absence is not an invitation to add them ahead of the stage that owns them.

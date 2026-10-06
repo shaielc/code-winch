@@ -1,7 +1,12 @@
 # ADR-0001: Modular monolith with a serializable runner boundary
 
-- **Status:** Proposed
+- **Status:** Superseded by [ADR-0005](0005-sandbox-resident-runner.md)
 - **Date:** 2026-08-07
+
+The modular-monolith decision below was never implemented. ADR-0005 keeps its
+goal — a runner boundary that can move to another host — and reverses its
+sequencing: the runner starts in its own process inside the sandbox, so there is
+no in-process transport stage, and the control plane is what arrives later.
 
 ## Context
 
