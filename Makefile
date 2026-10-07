@@ -8,8 +8,11 @@ GO_PACKAGES := ./cmd/... ./internal/... ./test/contract/...
 # `make e2e` and `make test-cycle`. It runs in the toolchain, never on the host.
 CHECKED_PACKAGES := $(GO_PACKAGES) ./test/e2e/...
 E2E_TEST := go test -count=1 -timeout=10m ./test/e2e/...
+# The web gate runs in a node container because the Go toolchain image has no
+# node. Order mirrors .github/workflows/web.yml.
+WEB_TEST := npm ci --no-audit --no-fund && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build
 
-.PHONY: all build check e2e format format-check lint run test test-cycle test-env test-env-down toolchain-image vet web-build
+.PHONY: all build check e2e format format-check lint run test test-cycle test-env test-env-down toolchain-image vet web-build web-test
 all: check
 
 format:
@@ -35,6 +38,8 @@ check: format-check vet lint test build
 
 e2e:
 	$(COMPOSE_TEST) --profile test run --rm toolchain $(E2E_TEST)
+web-test:
+	$(COMPOSE_TEST) --profile test run --rm web sh -c '$(WEB_TEST)'
 toolchain-image:
 	$(COMPOSE_TEST) --profile test build toolchain
 test-env:
