@@ -12,27 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: winch
-          POSTGRES_PASSWORD: winch
-          POSTGRES_DB: winch_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U winch -d winch_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Test task completion scripts
-        run: python3 -m unittest discover -s tests -v
+        run: python3 -m unittest discover -s test -v
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -41,15 +26,10 @@ jobs:
           cache: true
 
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v7
-        with:
-          version: v2.1.6
-          install-only: true
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
 
       - name: Run repository checks
         run: make check
 
-      - name: Run PostgreSQL integration tests
-        env:
-          PG_TEST_DATABASE_URL: postgres://winch:winch@127.0.0.1:5432/winch_test?sslmode=disable
-        run: make test-integration
+      - name: Run composed sandbox scenario
+        run: make e2e

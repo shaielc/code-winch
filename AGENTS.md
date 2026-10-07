@@ -101,27 +101,19 @@ in the pull request.
 
 ## Verification
 
-**The Makefile and both CI workflows are currently broken**, every one of them
-against a path that was removed with the last plan — `docs/state.md` lists each
-with the line that names it. `make check`, `make build`, `make test`,
-`make test-integration`, `make e2e`, and `make test-cycle` all fail before
-reaching anything you wrote. Repairing them is the first stage's work, so until
-that lands, do not report `make check` as passing and do not treat its failure as
-caused by your change.
-
-What does run today:
+The standard gates are:
 
 ```sh
 python3 -m unittest discover -s test                        # completion scripts
 cd workplan-control-panel && python3 -m unittest discover -s tests
-./scripts/list-available-tasks.sh                           # expect []
+make check                                                  # Go host gate
+make e2e                                                    # composed image scenario
+make test-cycle                                             # Docker-only Go path
 ```
 
-Once the gates are repaired, `make check` is the minimum and always: OpenAPI
-validation, compatibility, and generated-output determinism, plus Go formatting,
-vet, lint, tests, and the build. It is a `[host]` target needing go, npm, and
-golangci-lint. `make test-cycle` is the Docker path and covers neither `lint` nor
-`api-check`, so say which gates you ran rather than claiming `make check`.
+`make check` is the minimum and always: Go formatting, vet, lint, tests, and the
+build. It is a host target needing Go and golangci-lint. `make test-cycle` is the
+Docker path and does not cover lint, so say which gates you ran.
 
 Then run everything your brief lists under **Verification**. That is the minimum
 evidence expected in the pull request, not a ceiling.
@@ -137,10 +129,9 @@ evidence expected in the pull request, not a ceiling.
 
 ## Current state
 
-Nothing of the product runs. What exists is the design set, `cmd/fake-harness`,
-the workplan control panel, the planning skills, and the completion scripts —
-`docs/state.md` has the detail, with a command or a `file:line` behind every
-claim. No plan is in flight, so there are no task IDs to cite.
+The first runnable slice is the sandbox image and its loopback-only attach page.
+It states the `container-standard` posture and names network egress as
+unenforced. The fake harness ships in the image but is not started yet.
 
 The next thing built is roadmap Stage 0: one container holding a runner and the
 fake harness, started by hand, serving a page you can type at. That stage also

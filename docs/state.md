@@ -10,9 +10,11 @@ not updated by it — the gaps below are gaps until code closes them, whatever a
 brief claims it will do. Where this file and a brief disagree about what exists,
 check the repository.
 
-The product does not run. There is no daemon, no sandbox, no browser
-application, and no way to start a harness through anything. What survives is
-the design set, one test fixture, and the tooling that dispatches work.
+The first runnable slice now exists. `docker compose -f deployments/compose.yml
+up --build` builds a non-root sandbox image, publishes its attach page on host
+loopback, and exposes health and effective-posture reads. The image carries the
+fake harness but does not start it; session records, input, and the harness
+process lifecycle remain unimplemented.
 
 ## What was done
 
@@ -34,6 +36,21 @@ What it does not prove: it is not a coding agent. It has no tool calls, no
 approvals, no usage reporting, no login, and no terminal semantics — it reads
 JSON lines from a pipe. Its dialect is invented, so an event model built only
 against it would be modelling the fixture.
+
+**The standalone sandbox slice.** `cmd/winch-sandbox` serves `GET /healthz`,
+`GET /api/session`, and the built React attach page. `deployments/Dockerfile`
+builds the page and all three binaries into a non-root image, while
+`deployments/compose.yml` publishes it only on `127.0.0.1:8080`.
+`cmd/winch status` is the maintained scriptable path to the same health and
+posture contract. Contract tests live in `test/contract/attach/`, and
+`test/e2e/scenario_sandbox_starts_test.go` drives the composed image through its
+real entrypoint.
+
+**The repaired quality floor.** `make check` covers formatting, vet, repository-
+wide lint, Go tests (including compilation of the e2e package), and all three
+binaries. The web workflow runs formatting, lint, type checking, its component
+test, and the production build. `make test-cycle` supplies a Docker Go toolchain,
+and `make e2e` runs the standing composed-image scenario.
 
 **The workplan control panel.** `workplan-control-panel/` is a working HTTP API
 and UI that reads `docs/workplan/tasks.json`, prepares task branches, and
@@ -72,58 +89,12 @@ exist. Three documents went on citing it — `AGENTS.md`, `README.md`, and
 `docs/workplan/README.md` — and all three described an active Phase 0 with tasks
 that no longer existed.
 
-**The implementation was removed with the plan.** `internal/`, `cmd/winchd`,
-`cmd/winch`, `pkg/`, `api/openapi/`, `schemas/`, `migrations/`, `deployments/`,
-`test/contract/`, `test/e2e/`, and `web/src/` are all absent. `web/` retains only
-`node_modules/`, `dist/`, and two `tsbuildinfo` files, and has no
-`package.json`.
-
-**Every quality gate names a path that is gone.** This is an I1 and I2 failure
-and the first stage of the next plan has to repair it.
-
-- `make check` runs `api-check`, which reads `api/openapi/code-winch.yaml`
-  (`Makefile:30,39`) and copies
-  `internal/adapters/transport/httpapi/types.gen.go` and `web/src/api/schema.ts`
-  (`Makefile:44-48`). None exists.
-- `make build` builds `./cmd/winchd` and `./cmd/winch` (`Makefile:89-90`).
-  Neither exists.
-- `make test` runs `GO_PACKAGES`, which includes `./internal/...`, `./pkg/...`,
-  and `./test/...` (`Makefile:8`). Only `./cmd/...` and `./test/...` resolve, and
-  `./test/` holds Python.
-- `make test-integration` runs `./internal/adapters/postgres/...`
-  (`Makefile:79`), and `make e2e` runs `./test/e2e/...` (`Makefile:84`).
-- **The whole `[docker]` group is broken too**, which the list above originally
-  missed. `COMPOSE ?= docker compose -f deployments/compose.yml` (`Makefile:5`)
-  names a directory that does not exist, so `runner-image`, `test-env`,
-  `runner-verify`, `runner-integration`, `test-env-down`, `test-cycle`, and
-  `runner-shell` all fail before running anything. That matters more than the
-  rest of the list: `Makefile:17-18` and `AGENTS.md:116-120` both present
-  `make test-cycle` as the way in for a host with no Go toolchain, which is this
-  host. Docker itself is present — 27.4.1 with compose v2.32.1 — so the compose
-  file is the only thing missing.
-- Also unlisted and also absent: `deployments/README.md` (`Makefile:18`),
-  `api/openapi/oapi-codegen.yaml` (`Makefile:30`), `cd web && npm …`
-  (`Makefile:31,101-102`), `./test/contract/openapi` and its `v1.yaml` baseline
-  (`Makefile:35,39`), and `./cmd/winchd` in the `run` target (`Makefile:97-98`).
-  `.dockerignore:4,6` ignore `runner/` and `tests/`, neither of which exists,
-  while the real `test/` is not ignored.
-- `.github/workflows/go.yml` runs `python3 -m unittest discover -s tests -v`
-  against a directory named `tests`; the directory is `test`. Verified:
-
-      $ python3 -m unittest discover -s tests
-      → ImportError: Start directory is not importable: 'tests'
-
-- `.github/workflows/web.yml` runs `npm install` and six scripts in `web/`,
-  which has no `package.json`.
-
-The Go gates were not verified by running them — there is no Go toolchain on this
-host (`go: command not found`, exit 127) — but each is checkable by reading the
-cited line against the tree. `make check` and `make build` both fail at the
-missing toolchain before they can reach a missing path.
-
-Not every target is broken, against what `README.md:42-47` claims: `format`,
-`format-check`, `vet`, and `lint` (`Makefile:51-70`) name only `./...` and would
-pass on a host with Go installed.
+**The removed implementation and broken gates were repaired by the first Phase 0
+slice.** The earlier tree lacked `internal/`, the sandbox and CLI composition
+roots, `deployments/`, `test/contract/`, `test/e2e/`, and buildable web sources.
+Those paths now exist for the standalone sandbox. Paths belonging to later
+roadmap stages — the daemon, public OpenAPI, PostgreSQL, and their integration
+tests — remain deliberately absent, and the Makefile no longer names them.
 
 **The tracker did not validate and the dispatch query failed on it — since
 repaired.** `docs/workplan/tasks.json` was left as `{}`, while
@@ -168,16 +139,17 @@ comment.
 
 ## What is not implemented
 
-Effectively the whole design set. Stated as gaps rather than as tasks — naming
-the work belongs to the plan derived from `docs/roadmap.md`.
+Most of the destination design remains absent. Stated as gaps rather than as
+tasks — naming the work belongs to the plan derived from `docs/roadmap.md`.
 
-**There is no sandbox.** No container image, no compose file, no process that
-owns a harness, no runner, no session record store, and no attach surface. The
-contract in `docs/contracts.md` §8 has no implementation, and ADR-0005 describes
-a component that does not exist. This is the whole content of roadmap Stage 0.
+**The sandbox does not yet own a harness process or records.** Its image,
+composition root, posture endpoints, attach page, and status CLI exist. It does
+not start the included fake harness, decode output, accept input, or keep an
+ordered session record. Those are the remaining Stage 0 increments.
 
-**There is no browser surface of any kind.** Neither the attach surface nor the
-product application. `web/` cannot be built.
+**There is no product browser application.** The sandbox-local attach page is
+buildable and served, but the multi-run product surface belongs to the control
+plane stages.
 
 **No harness adapter exists.** The ports in `docs/code-structure.md` §3 —
 `HarnessDriver`, `HarnessCodec` — have no implementations, and no vendor CLI is
@@ -199,16 +171,17 @@ described in `docs/contracts.md` §6 and none exists.
 **No workflow machinery exists.** No definitions, coordinator, `WorkflowRuntime`
 implementation, or step types.
 
-**No security control is enforced.** No authentication, authorization, egress
-policy, credential references, secret redaction, traversal defenses, sensitivity
-classification, or retention. Every threat in `docs/security.md` §3 is
-unmitigated, and every launch blocker in §11 is open. The register states what
-is intended, not what holds.
+**Only the Stage 0 host-local controls are enforced.** Compose pins publication
+to loopback, the image runs as a non-root user, the static handler refuses path
+and symlink escape, and the surface states that network egress is unenforced.
+Authentication, authorization, egress policy, credential references, secret
+redaction, sensitivity classification, retention, and the later launch blockers
+remain absent.
 
-**There is no standing scenario suite.** I4 asks for one end-to-end scenario
-driving the system through its real entrypoint, re-run against each substrate as
-it becomes real. There is no entrypoint to drive.
+**The standing scenario covers only sandbox startup.** It builds the composed
+image, checks both endpoints and the status CLI, verifies the non-root UID, and
+proves loopback-only publication. Later Stage 0 capabilities add scenarios to
+this suite.
 
-**There is no operator CLI.** I5 asks for a maintained hands-on path.
-`cmd/winch` was removed; the roadmap assigns its job to the sandbox's attach
-surface, which is also unbuilt.
+**The operator CLI currently has only `winch status`.** Commands for streaming,
+records, and input do not exist until the capabilities behind them land.
