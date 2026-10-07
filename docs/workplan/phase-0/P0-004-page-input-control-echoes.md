@@ -147,6 +147,7 @@ None.
 | Deferred | Owning task |
 |---|---|
 | The submission reaching the runner, being accepted or refused, and surviving a reload | P0-005 |
+| Replace the local append-only list's positional React keys with stable runner-backed identity when submissions become persistent records. Positional keys are acceptable only for P0-004's transient append-only local echo. | P0-005 |
 | The submission reaching the harness | P0-006 |
 
 ## Traces to
