@@ -116,8 +116,31 @@ PAGE = r"""<!doctype html>
   tbody tr:target td {{ background: #3b82f61f; }}
   td.title {{ white-space: normal; min-width: 15rem; line-height: 1.45; }}
   td.deps {{ white-space: normal; min-width: 15rem; max-width: 19rem; line-height: 1.9; }}
-  td.conversation a, .node a[data-stage], td.pr a {{ color: inherit; text-decoration: none; }}
-  th.conversation {{ white-space: normal; }}
+  td.pr a {{ color: inherit; text-decoration: none; }}
+  th.stage, td.stage {{ text-align: center; }}
+  .stage-icon {{ display: inline-flex; padding: .25rem; border-radius: 6px; cursor: pointer;
+    color: inherit; text-decoration: none; }}
+  .stage-icon:hover {{ background: #8882; }}
+  /* The icon carries the stage's whole state: dim is unlaunched, solid has a conversation
+     to open, amber was accepted-or-not, and nearly invisible cannot be launched yet. */
+  .stage-icon[data-state="launch"] .icon {{ opacity: .3; }}
+  .stage-icon[data-state="open"] .icon {{ opacity: .9; }}
+  .stage-icon[data-state="unknown"] .icon {{ opacity: .9; fill: #d97706; }}
+  .stage-cell:not([data-reason=""]) .stage-icon[data-state="launch"] {{ cursor: not-allowed; }}
+  .stage-cell:not([data-reason=""]) .stage-icon[data-state="launch"] .icon {{ opacity: .15; }}
+  #stage-menu {{ position: absolute; z-index: 5; min-width: 13rem; padding: .35rem;
+    background: Canvas; border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 2px 10px #0003; display: flex; flex-direction: column; }}
+  /* The id selector outranks the hidden attribute's display: none, so restate it. */
+  #stage-menu[hidden] {{ display: none; }}
+  #stage-menu button, #stage-menu a {{ font: inherit; font-size: .8rem; text-align: left;
+    margin: .1rem 0; padding: .3rem .6rem; border: 0; border-radius: 6px; background: none;
+    color: inherit; text-decoration: none; cursor: pointer; }}
+  #stage-menu button:hover, #stage-menu a:hover {{ background: #8882; }}
+  #stage-menu .head {{ font-size: .7rem; opacity: .6; padding: .2rem .6rem;
+    text-transform: uppercase; letter-spacing: .06em; }}
+  .node-stages {{ display: inline-flex; align-items: center; gap: .15rem; }}
+  .node-stages .label {{ font-size: .78rem; opacity: .7; margin-left: .5rem; }}
   td.info {{ white-space: normal; min-width: 15rem; max-width: 24rem; font-size: .8rem; }}
   .icon {{ width: 1.35rem; height: 1.35rem; vertical-align: -.4em; fill: currentColor; opacity: .6; }}
   a:hover .icon {{ opacity: 1; }}
@@ -169,7 +192,7 @@ PAGE = r"""<!doctype html>
 {message}
 <div class="wrap" id="table-view">
 <table>
-  <thead><tr><th>Task</th><th>Title</th><th>Stages</th><th class="conversation">Refine conversation</th><th class="conversation">Implement conversation</th><th class="conversation">Audit conversation</th><th>Depends on</th><th>Status</th><th>Source</th><th>Pull request</th><th>Updated</th><th>Info</th></tr></thead>
+  <thead><tr><th>Task</th><th>Title</th><th class="stage">Refine</th><th class="stage">Implement</th><th class="stage">Audit</th><th>Actions</th><th>Depends on</th><th>Status</th><th>Source</th><th>Pull request</th><th>Updated</th><th>Info</th></tr></thead>
   <tbody>
   {rows}
   </tbody>
@@ -178,13 +201,17 @@ PAGE = r"""<!doctype html>
 <ul class="tree wrap" id="tree-view" hidden>
   {tree}
 </ul>
-<p class="note">Sync main prepares every available task branch; Prepare claims one named task
-against a free scheduler slot. Refine and Implement launch Codex on the task branch; merge
-refinement changes there before starting implementation. Audit starts a Claude cloud session
-for an open implementation pull request into that branch. Repeating a stage at the same
-revision — the branch's, or the pull request's for Audit — returns the conversation it already
-opened; the row menu expires that record so the stage can be sent again. Expire releases a
-local reservation. Neither expiry cancels a cloud task or removes a conversation link.</p>
+<div id="stage-menu" role="menu" hidden></div>
+<p class="note">Each stage column is one control, marked with the agent that runs it: click a dim
+icon to launch that stage, and the same icon again to open the conversation it started.
+Right-click it for the rest — submit the stage again, expire the submission so the next click
+launches afresh, or open a conversation an earlier attempt left behind. Sync main prepares every
+available task branch; Prepare claims one named task against a free scheduler slot. Refine and
+Implement run Codex on the task branch; merge refinement changes there before starting
+implementation. Audit starts a Claude cloud session for an open implementation pull request into
+that branch. Repeating a stage at the same revision — the branch's, or the pull request's for
+Audit — returns the conversation it already opened, so submit again after the revision moves on.
+Expire releases a local reservation. No expiry cancels a cloud task or removes a link.</p>
 <script>
   const result = document.getElementById("result");
   const feedback = document.getElementById("feedback");
@@ -246,6 +273,11 @@ local reservation. Neither expiry cancels a cloud task or removes a conversation
     catch (error) {{ showMessage(error.message, true); }}
   }};
   request("api/session").then(data => signedIn(data.authenticated)).catch(error => showMessage(error.message, true));
+  async function act(endpoint, body) {{
+    if (token.value && window.isSecureContext) await signIn();
+    return await request(endpoint, body === undefined ? {{}} : body);
+  }}
+  // Sync, Prepare and Expire all change what the whole page says, so each ends in a reload.
   document.querySelectorAll("[data-action]").forEach(button => {{
     button.onclick = async () => {{
       const action = button.dataset.action;
@@ -255,16 +287,7 @@ local reservation. Neither expiry cancels a cloud task or removes a conversation
       refresh.hidden = true;
       showMessage("Working…");
       try {{
-        if (token.value && window.isSecureContext) await signIn();
-        let data;
-        try {{ data = await request(endpoint, {{}}); }}
-        catch (error) {{
-          if (action !== "audit" || !error.data?.pull_requests?.length) throw error;
-          const selected = window.prompt("Choose implementation PR number: " +
-            error.data.pull_requests.map(p => p.number + ": " + p.url).join("\n"));
-          if (!selected) throw error;
-          data = await request(endpoint, {{pr_number: Number(selected)}});
-        }}
+        let data = await act(endpoint);
         // Sync and Prepare both answer with a job envelope, not a result, and are polled.
         if (action === "sync" || action === "prepare") {{
           while (data.status === "running") {{
@@ -273,29 +296,135 @@ local reservation. Neither expiry cancels a cloud task or removes a conversation
             data = await request("api/sync/" + encodeURIComponent(data.id));
           }}
           if (data.status === "failed") throw new Error(data.error);
-          window.location.reload();
-        }} else if (action.endsWith("expire")) {{
-          window.location.reload();
-        }} else {{
-          showMessage(data.reused ? "Already submitted: " : "Submitted: ");
-          const link = document.createElement("a");
-          link.href = data.task_url; link.textContent = data.task_url;
-          link.target = "_blank"; link.rel = "noopener";
-          result.appendChild(link);
-          document.querySelectorAll("[data-conversations]").forEach(container => {{
-            if (container.dataset.conversations !== button.dataset.task ||
-                container.dataset.conversationStage !== action) return;
-            const conversation = container.querySelector('[data-stage="' + action + '"]');
-            conversation.href = data.task_url;
-            conversation.hidden = false;
-            container.querySelector(".no-conversation").hidden = true;
-          }});
         }}
+        window.location.reload();
       }} catch (error) {{
         showMessage(error.message, true);
         if (action === "sync") refresh.hidden = false;
       }} finally {{ button.disabled = false; }}
     }};
+  }});
+  const stageMenu = document.getElementById("stage-menu");
+  const stageIcon = (cell) => cell.querySelector(".stage-icon");
+  function closeMenu() {{
+    stageMenu.hidden = true;
+    stageMenu.textContent = "";
+  }}
+  function linkItem(href, text) {{
+    const link = document.createElement("a");
+    link.href = href; link.textContent = text;
+    link.target = "_blank"; link.rel = "noopener";
+    link.onclick = () => closeMenu();
+    return link;
+  }}
+  function actionItem(text, hint, refusal, run) {{
+    const entry = document.createElement("button");
+    entry.type = "button";
+    entry.textContent = text;
+    entry.title = refusal || hint || "";
+    if (refusal) entry.disabled = true;
+    else entry.onclick = () => {{ closeMenu(); run(); }};
+    return entry;
+  }}
+  // A launched stage becomes a plain link, so the next click opens it without the script.
+  function becomeOpen(cell, url) {{
+    const icon = stageIcon(cell);
+    icon.href = url;
+    icon.target = "_blank"; icon.rel = "noopener";
+    icon.removeAttribute("role");
+    icon.dataset.state = "open";
+    icon.title = "Open the " + cell.dataset.stage + " conversation. Right-click for " +
+      cell.dataset.stage + " actions.";
+    cell.dataset.expireReason = "";
+    cell.dataset.expireHint = "Submit " + cell.dataset.stage + " again at the same revision.";
+  }}
+  // Expiring keeps the conversation, which moves to the menu; the icon returns to launching.
+  function becomeLaunch(cell) {{
+    const icon = stageIcon(cell);
+    const earlier = cell.querySelector(".earlier");
+    if (icon.href && earlier) earlier.append(linkItem(icon.href, String(earlier.children.length + 1)));
+    // Clearing the property is not enough in a browser: href="" resolves to this page.
+    icon.href = "";
+    icon.removeAttribute("href");
+    icon.setAttribute("role", "button");
+    icon.tabIndex = 0;
+    icon.dataset.state = "launch";
+    icon.title = cell.dataset.reason || cell.dataset.launch;
+    cell.dataset.expireReason = "No " + cell.dataset.stage + " submission is waiting to be expired.";
+  }}
+  async function launchStage(cell) {{
+    const stage = cell.dataset.stage;
+    if (cell.dataset.reason) {{ showMessage(cell.dataset.reason, true); return; }}
+    const endpoint = "api/tasks/" + encodeURIComponent(cell.dataset.task) + "/" + stage;
+    showMessage("Working…");
+    try {{
+      let data;
+      try {{ data = await act(endpoint); }}
+      catch (error) {{
+        if (stage !== "audit" || !error.data?.pull_requests?.length) throw error;
+        const selected = window.prompt("Choose implementation PR number: " +
+          error.data.pull_requests.map(p => p.number + ": " + p.url).join("\n"));
+        if (!selected) throw error;
+        data = await act(endpoint, {{pr_number: Number(selected)}});
+      }}
+      becomeOpen(cell, data.task_url);
+      showMessage((data.reused ? "Already submitted: " : "Submitted: ") + stage + " — ");
+      result.appendChild(linkItem(data.task_url, data.task_url));
+    }} catch (error) {{ showMessage(error.message, true); }}
+  }}
+  async function expireStage(cell) {{
+    const stage = cell.dataset.stage;
+    showMessage("Working…");
+    try {{
+      await act("api/tasks/" + encodeURIComponent(cell.dataset.task) + "/" + stage + "/expire");
+      becomeLaunch(cell);
+      showMessage("Expired " + stage + " for " + cell.dataset.task +
+        ". The next click submits it again; the conversation stays on the right-click menu.");
+    }} catch (error) {{ showMessage(error.message, true); }}
+  }}
+  function openMenu(cell, x, y) {{
+    const icon = stageIcon(cell);
+    const stage = cell.dataset.stage;
+    stageMenu.textContent = "";
+    const heading = document.createElement("div");
+    heading.className = "head";
+    heading.textContent = stage + " · " + cell.dataset.task;
+    stageMenu.append(heading);
+    if (icon.href) stageMenu.append(linkItem(icon.href, "Open conversation"));
+    stageMenu.append(actionItem("Submit " + stage, cell.dataset.launch, cell.dataset.reason,
+      () => launchStage(cell)));
+    stageMenu.append(actionItem(
+      "Expire " + stage + (icon.dataset.state === "unknown" ? " (outcome unknown)" : ""),
+      cell.dataset.expireHint, cell.dataset.expireReason, () => expireStage(cell)));
+    const earlier = cell.querySelector(".earlier");
+    Array.from(earlier ? earlier.children : []).forEach(link => {{
+      stageMenu.append(linkItem(link.href, "Earlier conversation " + link.textContent));
+    }});
+    stageMenu.hidden = false;
+    stageMenu.style.left = (x + window.scrollX) + "px";
+    stageMenu.style.top = (y + window.scrollY) + "px";
+  }}
+  document.querySelectorAll("[data-stage-cell]").forEach(cell => {{
+    const icon = stageIcon(cell);
+    const launch = (event) => {{
+      if (icon.href) return;
+      event.preventDefault();
+      launchStage(cell);
+    }};
+    icon.onclick = launch;
+    icon.onkeydown = (event) => {{
+      if (event.key === "Enter" || event.key === " ") launch(event);
+    }};
+    icon.oncontextmenu = (event) => {{
+      event.preventDefault();
+      openMenu(cell, event.clientX, event.clientY);
+    }};
+  }});
+  document.addEventListener("click", (event) => {{
+    if (!stageMenu.hidden && !stageMenu.contains(event.target)) closeMenu();
+  }});
+  document.addEventListener("keydown", (event) => {{
+    if (event.key === "Escape") closeMenu();
   }});
   const swap = document.getElementById("swap");
   const table = document.getElementById("table-view");
@@ -315,25 +444,21 @@ local reservation. Neither expiry cancels a cloud task or removes a conversation
 NODE = """<li>
   <div class="node" id="tree-{id}">
     <code>{id}</code><span class="name">{title}</span>
-    <span class="tag {status}">{status}</span>{waits}{actions}
-    <span>Refine: {refine}</span><span>Implement: {implement}</span><span>Audit: {audit}</span>
+    <span class="tag {status}">{status}</span>{waits}
+    <span class="node-stages"><span class="label">Refine</span>{refine}<span
+      class="label">Implement</span>{implement}<span class="label">Audit</span>{audit}</span>{actions}
     <span class="stage-reason">{info}</span>
   </div>
   {children}
 </li>"""
 
-STAGE_MENU = """<details class="menu">
-  <summary title="Per-stage actions" aria-label="Per-stage actions">&#8943;</summary>
-  <div>{items}</div>
-</details>"""
-
 ROW = """<tr id="{id}">
   <td><code>{id}</code></td>
   <td class="title">{title}</td>
+  <td class="stage">{refine}</td>
+  <td class="stage">{implement}</td>
+  <td class="stage">{audit}</td>
   <td class="actions">{actions}</td>
-  <td class="conversation">{refine}</td>
-  <td class="conversation">{implement}</td>
-  <td class="conversation">{audit}</td>
   <td class="deps">{deps}</td>
   <td><span class="tag {status}">{status}</span></td>
   <td>{source}</td>
@@ -390,11 +515,8 @@ STAGES = ("refine", "implement", "audit")
 SERVICES = {"refine": "Codex", "implement": "Codex", "audit": "Claude"}
 
 
-def button(action: str, task_id: str, label: str, reason: str = "", hint: str = "") -> str:
-    if reason:
-        attributes = f' disabled title="{html.escape(reason)}"'
-    else:
-        attributes = f' title="{html.escape(hint)}"' if hint else ""
+def button(action: str, task_id: str, label: str, hint: str = "") -> str:
+    attributes = f' title="{html.escape(hint)}"' if hint else ""
     return (f'<button type="button" data-action="{html.escape(action)}" '
             f'data-task="{html.escape(task_id)}"{attributes}>{label}</button>')
 
@@ -429,60 +551,86 @@ def attempts_for(entry: dict[str, Any], stage: str) -> list[dict[str, Any]]:
     return entry["stages"].get(stage, [])
 
 
-def stage_menu(entry: dict[str, Any]) -> str:
-    """Per-stage actions, which the row's own stage buttons have no room to express.
-
-    The page cannot know the branch revision without fetching it, so an item is offered
-    whenever the stage's newest submission is still standing and the panel decides whether
-    it applies to the revision the branch is on now.
-    """
-    if not any(attempts_for(entry, name) for name in STAGES):
-        return ""
-    items = []
-    for stage in STAGES:
-        attempts = attempts_for(entry, stage)
-        latest = attempts[-1] if attempts else None
-        if latest is None or latest["status"] == "expired":
-            items.append(button(f"{stage}/expire", entry["id"], f"Expire {stage}",
-                                reason=f"No {stage} submission is waiting to be expired."))
-        elif latest["status"] == "submitting":
-            # Not an override but a verdict on an unknown, and the risk runs the other way.
-            items.append(button(f"{stage}/expire", entry["id"], f"Expire {stage} (outcome unknown)",
-                                hint=f"{SERVICES[stage]} may have accepted this before the panel "
-                                     f"lost the reply. Check {SERVICES[stage]} first: expiring "
-                                     "can submit it twice."))
-        else:
-            revision = "pull request head" if stage == "audit" else "branch revision"
-            items.append(button(f"{stage}/expire", entry["id"], f"Expire {stage}",
-                                hint=f"Submit {stage} again at the same {revision}."))
-    return STAGE_MENU.format(items="".join(items))
-
-
 def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
-    reason = stage_reason(entry, runnable)
-    actions = "".join(button(stage, entry["id"], stage.capitalize(), reason) for stage in STAGES)
+    """Whole-task actions. Launching a stage belongs to that stage's own cell."""
+    actions = ""
     if preparable(entry, runnable):
         actions += button("prepare", entry["id"], "Prepare",
                           hint="Refresh main, claim a scheduler slot, and prepare this branch.")
     if entry["local"] and entry["status"] != "completed":
-        actions += button("expire", entry["id"], "Expire")
-    return actions + stage_menu(entry)
+        actions += button("expire", entry["id"], "Expire",
+                          hint="Release this task's scheduler slot. Stage records and the "
+                               "conversations they opened are kept.")
+    return actions or "—"
 
 
-def conversation_cell(entry: dict[str, Any], stage: str) -> str:
-    # An expired attempt keeps its link: retiring a stage record must not lose the
-    # conversation it opened, which is the only trace of what was already asked for.
-    linked = [attempt for attempt in attempts_for(entry, stage)
-              if link_target(attempt.get("task_url"))]
+def standing(entry: dict[str, Any], stage: str) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    """This stage's live attempt, and the earlier ones that still carry a link, newest first.
+
+    The page cannot fetch the branch revision, so the newest unexpired attempt is taken as
+    the live one; whether it actually covers the revision the branch is on now is decided by
+    the panel on submission. An expired attempt keeps its link, because retiring a stage must
+    not lose the conversation it opened — the right-click menu is where those stay reachable.
+    """
+    attempts = attempts_for(entry, stage)
+    live = attempts[-1] if attempts and attempts[-1]["status"] != "expired" else None
+    earlier = [attempt for attempt in attempts
+               if attempt is not live and link_target(attempt.get("task_url"))]
+    return live, earlier[::-1]
+
+
+def expiry_of(stage: str, live: dict[str, Any] | None) -> tuple[str, str]:
+    """Why this stage's submission cannot be expired, or what expiring it will do."""
+    if live is None:
+        return f"No {stage} submission is waiting to be expired.", ""
+    if live["status"] == "submitting":
+        # Not an override but a verdict on an unknown, and the risk runs the other way.
+        return "", (f"{SERVICES[stage]} may have accepted this before the panel lost the reply. "
+                    f"Check {SERVICES[stage]} first: expiring can submit it twice.")
+    revision = "pull request head" if stage == "audit" else "branch revision"
+    return "", f"Submit {stage} again at the same {revision}."
+
+
+def stage_cell(entry: dict[str, Any], stage: str, runnable: set[str]) -> str:
+    """One control for the stage: launch it, then open what it started.
+
+    The icon is the mark of the agent that runs the stage, so a column is read by the shape in
+    it rather than by a label. It launches while there is nothing to open and is a plain link
+    once there is, which keeps the second click — and middle-click, and copy-link — native.
+    Everything else about the stage lives behind the right-click menu the script builds from
+    the data here.
+    """
+    live, earlier = standing(entry, stage)
     # Records written before /remote/ was the task view still hold a retired path.
-    url = canonical_task_url(link_target(linked[-1]["task_url"])) if linked else ""
-    target = f'href="{html.escape(url)}"' if url else "hidden"
-    label = f"Open {stage} conversation"
+    url = canonical_task_url(link_target(live.get("task_url"))) if live else ""
+    reason = stage_reason(entry, runnable)
+    expire_reason, expire_hint = expiry_of(stage, live)
+    launch = f"Launch {stage} on {SERVICES[stage]}. Right-click for {stage} actions."
+    if url:
+        state, label = "open", f"open the {stage} conversation"
+        title = f"Open the {stage} conversation. Right-click for {stage} actions."
+        anchor = f'href="{html.escape(url)}" target="_blank" rel="noopener"'
+    elif live is not None:
+        state, label = "unknown", f"{stage} outcome unknown"
+        title = (f"{SERVICES[stage]} may have accepted this {stage} before the panel lost the "
+                 f"reply. Check {SERVICES[stage]}, then expire it from the right-click menu.")
+        anchor = 'role="button" tabindex="0"'
+    else:
+        state, label = "launch", f"launch {stage}"
+        title, anchor = reason or launch, 'role="button" tabindex="0"'
+    history = "".join(
+        f'<a href="{html.escape(canonical_task_url(link_target(attempt["task_url"])))}" '
+        f'target="_blank" rel="noopener">{index}</a>'
+        for index, attempt in enumerate(earlier, 1))
     return (
-        f'<span data-conversations="{html.escape(entry["id"])}" data-conversation-stage="{stage}">'
-        f'<a {target} data-stage="{stage}" target="_blank" rel="noopener" '
-        f'title="{label}" aria-label="{label}">{CLAUDE_ICON if stage == "audit" else CODEX_ICON}</a>'
-        f'<span class="no-conversation"{" hidden" if url else ""}>—</span></span>'
+        f'<span class="stage-cell" data-stage-cell data-task="{html.escape(entry["id"])}" '
+        f'data-stage="{stage}" data-service="{SERVICES[stage]}" '
+        f'data-reason="{html.escape(reason)}" data-launch="{html.escape(launch)}" '
+        f'data-expire-reason="{html.escape(expire_reason)}" '
+        f'data-expire-hint="{html.escape(expire_hint)}">'
+        f'<a class="stage-icon" data-state="{state}" {anchor} title="{html.escape(title)}" '
+        f'aria-label="{html.escape(label)}">{CLAUDE_ICON if stage == "audit" else CODEX_ICON}</a>'
+        f'<span class="earlier" hidden>{history}</span></span>'
     )
 
 
@@ -536,9 +684,7 @@ def branches(nodes: list[dict[str, Any]], runnable: set[str], done: set[str]) ->
                 status=html.escape(entry["status"]),
                 waits=f'<span class="waits">also waits on {waits}</span>' if waits else "",
                 actions=actions_for(entry, runnable),
-                refine=conversation_cell(entry, "refine"),
-                implement=conversation_cell(entry, "implement"),
-                audit=conversation_cell(entry, "audit"),
+                **{stage: stage_cell(entry, stage, runnable) for stage in STAGES},
                 info=html.escape(stage_reason(entry, runnable)),
                 children=(
                     f'<ul>{branches(node["children"], runnable, done)}</ul>'
@@ -572,9 +718,7 @@ def render(tracker: dict[str, Any], state: dict[str, Any], message: str, busy: b
                 deps=deps or "—",
                 status=html.escape(entry["status"]),
                 source=source_of(entry),
-                refine=conversation_cell(entry, "refine"),
-                implement=conversation_cell(entry, "implement"),
-                audit=conversation_cell(entry, "audit"),
+                **{stage: stage_cell(entry, stage, runnable) for stage in STAGES},
                 info=html.escape(stage_reason(entry, runnable)) or "—",
                 pull_request=pull_request_cell(entry),
                 updated=html.escape((entry["updated_at"] or "—")[:16].replace("T", " ")),

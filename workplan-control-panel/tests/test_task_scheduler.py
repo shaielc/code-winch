@@ -82,9 +82,12 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
                 self.assertIn('new branch from `task/P0-001`', unwrapped)
                 self.assertIn('base is `task/P0-001`', unwrapped)
         self.assertEqual(len(submitted), 2)
-        page = render(**{'tracker': self.panel.tracker(), 'state': self.panel.snapshot()['state'], 'message': '', 'busy': False})
-        for label in ('Refine', 'Implement', 'Audit'):
-            self.assertIn('>' + label + '</button>', page)
+        page = render(self.panel.tracker(), self.panel.snapshot()['state'], '', False)
+        # Each stage is one control per view — the table's and the tree's — and opens the
+        # conversation its dispatch returned, pointed at the view that serves it.
+        for number in (1, 2):
+            self.assertEqual(
+                page.count(f'data-state="open" href="https://chatgpt.com/remote/task_e_{number}"'), 2)
         self.assertNotIn('clipboard', page)
 
     def test_expire_releases_reservation_and_retains_stage_conversations(self):
@@ -106,8 +109,8 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.panel.stage('P0-001', 'implement')
         page = render(snapshot['tracker'], snapshot['state'], '', False)
         self.assertNotIn('data-action="expire"', page)
-        for stage, url in zip(('refine', 'implement'), urls):
-            self.assertEqual(page.count(f'href="{url}" data-stage="{stage}"'), 2)
+        for url in urls:
+            self.assertEqual(page.count(f'data-state="open" href="{url}"'), 2)
         # A later sync reclaims the existing branch exactly once, retaining history.
         self.assertEqual(self.panel.sync()['prepared'], ['P0-001'])
         self.assertEqual(self.commits_ahead(), '1')
@@ -177,10 +180,11 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
         self.assertEqual([a['status'] for a in attempts], ['expired', 'submitted'])
         self.assertEqual([a['task_url'] for a in attempts], urls)
         self.assertEqual({a['head'] for a in attempts}, {attempts[0]['head']})
-        # Both conversations survive the retirement; the page links the newest.
+        # Both conversations survive the retirement: the icon opens the newest, and the
+        # retired one stays reachable from that stage's right-click menu.
         page = render(self.panel.tracker(), self.panel.snapshot()['state'], '', False)
-        self.assertEqual(page.count(f'href="{urls[1]}" data-stage="refine"'), 2)
-        self.assertNotIn(urls[0], page)
+        self.assertEqual(page.count(f'data-state="open" href="{urls[1]}"'), 2)
+        self.assertEqual(page.count(f'<span class="earlier" hidden><a href="{urls[0]}"'), 2)
 
     def test_expiring_a_stage_refuses_when_nothing_is_standing(self):
         self.panel.sync()
@@ -266,7 +270,7 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.assertEqual(fire.call_count, 2)
             run.assert_not_called()
         page = render(self.panel.tracker(), self.panel.snapshot()['state'], '', False)
-        self.assertEqual(page.count(f'href="{sessions[1]}" data-stage="audit"'), 2)
+        self.assertEqual(page.count(f'data-state="open" href="{sessions[1]}"'), 2)
 
     def test_audit_expiry_resubmits_the_newest_session(self):
         self.panel.sync()
