@@ -1,4 +1,5 @@
 import json
+import subprocess
 import threading
 import time
 import unittest
@@ -26,6 +27,83 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
         self.panel = TaskScheduler( self.clone('panel'), self.root / 'state.json',
                                   self.root / 'tracker.json', 'test-env', 1,
                                   'https://api.example/fire', 'routine-token')
+        # No test may reach the real gh; the tests about the lookup replace its answer.
+        patcher = patch.object(repository, 'task_pull_request', return_value=None)
+        self.pull_request = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_sync_records_the_pull_request_into_main_until_it_merges(self):
+        record = lambda: self.panel.snapshot()['state']['tasks']['P0-001']
+        self.panel.sync()
+        # The pass that prepares a task does not look for its pull request yet.
+        self.pull_request.assert_not_called()
+        self.panel.sync()
+        self.assertNotIn('pull_request', record())
+        self.pull_request.return_value = {'url': 'https://example/pr/5', 'state': 'OPEN'}
+        self.panel.sync()
+        self.assertEqual((record()['pull_request'], record()['pull_request_state']),
+                         ('https://example/pr/5', 'OPEN'))
+        self.pull_request.return_value = {'url': 'https://example/pr/5', 'state': 'MERGED'}
+        self.panel.sync()
+        # A merged pull request is final, so later passes stop asking.
+        asked = self.pull_request.call_count
+        self.pull_request.return_value = None
+        self.panel.sync()
+        self.assertEqual(self.pull_request.call_count, asked)
+        self.assertEqual(record()['pull_request_state'], 'MERGED')
+
+    def test_creating_the_pull_request_opens_one_unless_one_is_already_open(self):
+        url = 'https://example/pr/12'
+        with patch.object(repository, 'create_task_pull_request', return_value=url) as create:
+            self.panel.sync()
+            for task, status in (('P9-999', 404), ('P0-002', 409)):
+                with self.assertRaises(TaskError) as refused:
+                    self.panel.create_pull_request(task)
+                self.assertEqual(refused.exception.status, status)
+            result = self.panel.create_pull_request('P0-001')
+            self.assertEqual((result['created'], result['pull_request'], result['pull_request_state']),
+                             (True, url, 'OPEN'))
+            self.assertEqual(create.call_args.args[1:], ('P0-001', 'Upstream'))
+            # Once one is open, a second click reports it instead of opening another.
+            self.pull_request.return_value = {'url': url, 'state': 'OPEN'}
+            self.assertFalse(self.panel.create_pull_request('P0-001')['created'])
+            create.assert_called_once()
+            self.pull_request.return_value = None
+            create.side_effect = subprocess.CalledProcessError(1, ['gh'])
+            with self.assertRaises(TaskError) as failed:
+                self.panel.create_pull_request('P0-001')
+            self.assertEqual(failed.exception.status, 502)
+            self.assertIn('GH_TOKEN', str(failed.exception))
+
+    def test_refreshing_one_task_looks_up_only_its_pull_request(self):
+        self.panel.sync()
+        self.pull_request.return_value = {'url': 'https://example/pr/9', 'state': 'MERGED'}
+        result = self.panel.refresh_pull_request('P0-001')
+        self.assertEqual((result['pull_request'], result['pull_request_state']),
+                         ('https://example/pr/9', 'MERGED'))
+        self.assertEqual(self.pull_request.call_args.args[1], 'P0-001')
+        # An explicit refresh looks again even though a merge is already recorded.
+        self.pull_request.return_value = {'url': 'https://example/pr/10', 'state': 'OPEN'}
+        self.assertEqual(self.panel.refresh_pull_request('P0-001')['pull_request_state'], 'OPEN')
+        for task, status in (('P9-999', 404), ('P0-002', 409)):
+            with self.assertRaises(TaskError) as refused:
+                self.panel.refresh_pull_request(task)
+            self.assertEqual(refused.exception.status, status)
+        self.pull_request.side_effect = subprocess.CalledProcessError(1, ['gh'])
+        with self.assertRaises(TaskError) as failed:
+            self.panel.refresh_pull_request('P0-001')
+        self.assertEqual(failed.exception.status, 502)
+        self.assertEqual(self.panel.snapshot()['state']['tasks']['P0-001']['pull_request_state'], 'OPEN')
+
+    def test_a_pull_request_that_disappears_is_forgotten_and_a_failed_lookup_is_not_fatal(self):
+        self.panel.sync()
+        self.pull_request.return_value = {'url': 'https://example/pr/5', 'state': 'OPEN'}
+        self.panel.sync()
+        self.pull_request.return_value = None
+        self.panel.sync()
+        self.assertNotIn('pull_request', self.panel.snapshot()['state']['tasks']['P0-001'])
+        self.pull_request.side_effect = subprocess.CalledProcessError(1, ['gh'])
+        self.assertEqual(self.panel.sync()['prepared'], [])
 
     def test_merge_pulls_main_prepares_once_and_does_not_launch_codex(self):
         event = {'action': 'closed', 'pull_request': {'merged_at': 'today', 'base': {'ref': 'main'}}}
@@ -82,9 +160,12 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
                 self.assertIn('new branch from `task/P0-001`', unwrapped)
                 self.assertIn('base is `task/P0-001`', unwrapped)
         self.assertEqual(len(submitted), 2)
-        page = render(**{'tracker': self.panel.tracker(), 'state': self.panel.snapshot()['state'], 'message': '', 'busy': False})
-        for label in ('Refine', 'Implement', 'Audit'):
-            self.assertIn('>' + label + '</button>', page)
+        page = render(self.panel.tracker(), self.panel.snapshot()['state'], '', False)
+        # Each stage is one control per view — the table's and the tree's — and opens the
+        # conversation its dispatch returned, pointed at the view that serves it.
+        for number in (1, 2):
+            self.assertEqual(
+                page.count(f'data-state="open" href="https://chatgpt.com/remote/task_e_{number}"'), 2)
         self.assertNotIn('clipboard', page)
 
     def test_expire_releases_reservation_and_retains_stage_conversations(self):
@@ -106,8 +187,8 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.panel.stage('P0-001', 'implement')
         page = render(snapshot['tracker'], snapshot['state'], '', False)
         self.assertNotIn('data-action="expire"', page)
-        for stage, url in zip(('refine', 'implement'), urls):
-            self.assertEqual(page.count(f'href="{url}" data-stage="{stage}"'), 2)
+        for url in urls:
+            self.assertEqual(page.count(f'data-state="open" href="{url}"'), 2)
         # A later sync reclaims the existing branch exactly once, retaining history.
         self.assertEqual(self.panel.sync()['prepared'], ['P0-001'])
         self.assertEqual(self.commits_ahead(), '1')
@@ -177,10 +258,11 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
         self.assertEqual([a['status'] for a in attempts], ['expired', 'submitted'])
         self.assertEqual([a['task_url'] for a in attempts], urls)
         self.assertEqual({a['head'] for a in attempts}, {attempts[0]['head']})
-        # Both conversations survive the retirement; the page links the newest.
+        # Both conversations survive the retirement: the icon opens the newest, and the
+        # retired one stays reachable from that stage's right-click menu.
         page = render(self.panel.tracker(), self.panel.snapshot()['state'], '', False)
-        self.assertEqual(page.count(f'href="{urls[1]}" data-stage="refine"'), 2)
-        self.assertNotIn(urls[0], page)
+        self.assertEqual(page.count(f'data-state="open" href="{urls[1]}"'), 2)
+        self.assertEqual(page.count(f'<span class="earlier" hidden><a href="{urls[0]}"'), 2)
 
     def test_expiring_a_stage_refuses_when_nothing_is_standing(self):
         self.panel.sync()
@@ -266,7 +348,7 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.assertEqual(fire.call_count, 2)
             run.assert_not_called()
         page = render(self.panel.tracker(), self.panel.snapshot()['state'], '', False)
-        self.assertEqual(page.count(f'href="{sessions[1]}" data-stage="audit"'), 2)
+        self.assertEqual(page.count(f'data-state="open" href="{sessions[1]}"'), 2)
 
     def test_audit_expiry_resubmits_the_newest_session(self):
         self.panel.sync()
@@ -431,6 +513,12 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.assertEqual((status, data['expired'], data['stage']), (200, 'P0-001', 'refine'))
             self.assertEqual(request('/api/tasks/P0-001/audit/expire')[0], 409)
             self.assertEqual(request('/api/tasks/P0-001/review/expire')[0], 404)
+            # Refreshing the pull request is a route of its own, answered directly.
+            self.pull_request.return_value = {'url': 'https://example/pr/9', 'state': 'OPEN'}
+            status, data = request('/api/tasks/P0-001/pull-request')
+            self.assertEqual((status, data['pull_request']), (200, 'https://example/pr/9'))
+            self.assertEqual(request('/api/tasks/P0-002/pull-request')[0], 409)
+            self.assertEqual(request('/api/tasks/P0-999/pull-request')[0], 404)
         finally:
             server.shutdown()
             server.server_close()

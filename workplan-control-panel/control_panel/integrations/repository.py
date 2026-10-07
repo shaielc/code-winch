@@ -93,6 +93,33 @@ def push_opening_commit(clone: Path, remote: str, task_id: str) -> bool:
     return True
 
 
+def task_pull_request(clone: Path, task_id: str) -> dict[str, Any] | None:
+    """The pull request carrying the task branch into main: an open one, else the merged one."""
+    listed = json.loads(run(
+        "gh", "pr", "list", "--head", task_branch(task_id), "--base", "main",
+        "--state", "all", "--json", "url,state", "--limit", "20", cwd=clone,
+    ))
+    for state in ("OPEN", "MERGED"):
+        found = next((pull for pull in listed if pull["state"] == state), None)
+        if found:
+            return found
+    return None
+
+
+def create_task_pull_request(clone: Path, task_id: str, title: str) -> str:
+    """Open the pull request carrying the task branch into main, and return its URL.
+
+    The body carries `Task: <ID>` like the pull requests the agents open, which is how the
+    completion workflow ties a merge back to its task.
+    """
+    created = run("gh", "pr", "create", "--base", "main", "--head", task_branch(task_id),
+                  "--title", f"{task_id}: {title}", "--body", f"Task: {task_id}", cwd=clone)
+    url = created.splitlines()[-1].strip() if created else ""
+    if not url.startswith("http"):
+        raise ValueError("gh returned no pull request URL")
+    return url
+
+
 def task_pull_requests(clone: Path, task_id: str) -> list[dict[str, Any]]:
     """List the open pull requests into the task branch with the commit each points at."""
     listed = run(

@@ -3,17 +3,35 @@
 import subprocess
 from pathlib import Path
 
+from .. import logs
+
+TIMEOUT = 300
+
 
 def run(*command: str, cwd: Path, capture: bool = True) -> str:
-    result = subprocess.run(
-        command,
-        cwd=cwd,
-        check=True,
-        text=True,
-        stdout=subprocess.PIPE if capture else None,
-        stderr=subprocess.PIPE if capture else None,
-        timeout=300,
-    )
+    """Run the command, logging why it failed before the caller decides what to say.
+
+    The caller turns the failure into a message for the operator, which deliberately
+    names no command or argument; the log is where the detail behind that message goes.
+    """
+    try:
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE if capture else None,
+            stderr=subprocess.PIPE if capture else None,
+            timeout=TIMEOUT,
+        )
+    except subprocess.CalledProcessError as error:
+        logs.failure(f"{logs.command(command)} exited {error.returncode}",
+                     error.stderr or error.stdout)
+        raise
+    except subprocess.TimeoutExpired as error:
+        logs.failure(f"{logs.command(command)} timed out after {TIMEOUT}s",
+                     error.stderr or error.stdout)
+        raise
     return result.stdout.strip() if capture else ""
 
 
