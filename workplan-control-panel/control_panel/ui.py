@@ -2,9 +2,10 @@
 
 import html
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from .integrations.codex import canonical_task_url
+from .integrations.repository import task_branch
 
 STATUS_ORDER = ["in_progress", "blocked", "pending", "completed"]
 def rows(tracker: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]:
@@ -25,6 +26,7 @@ def rows(tracker: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]
                 "task_url": record.get("task_url"),
                 "stages": record.get("stages", {}),
                 "pull_request": record.get("pull_request"),
+                "pull_request_state": record.get("pull_request_state"),
                 "local": bool(lease),
                 "prepared": record.get("prepared", False),
                 "prepare_error": record.get("prepare_error"),
@@ -121,11 +123,22 @@ PAGE = r"""<!doctype html>
   .stage-icon {{ display: inline-flex; padding: .25rem; border-radius: 6px; cursor: pointer;
     color: inherit; text-decoration: none; }}
   .stage-icon:hover {{ background: #8882; }}
-  /* The icon carries the stage's whole state: dim is unlaunched, solid has a conversation
-     to open, amber was accepted-or-not, and nearly invisible cannot be launched yet. */
-  .stage-icon[data-state="launch"] .icon {{ opacity: .3; }}
-  .stage-icon[data-state="open"] .icon {{ opacity: .9; }}
+  /* The icon carries the stage's whole state: the default colour means the next click launches,
+     green means a conversation is live to open, amber means a submission may or may not have
+     been accepted, and nearly invisible means it cannot be launched yet. */
+  .stage-icon[data-state="open"] .icon {{ opacity: 1; fill: #16a34a; }}
   .stage-icon[data-state="unknown"] .icon {{ opacity: .9; fill: #d97706; }}
+  button.icon-button {{ padding: .25rem; border: 0; background: none; color: #dc2626; }}
+  button.icon-button .icon {{ opacity: .85; }}
+  button.icon-button:hover {{ background: #dc262622; }}
+  button.icon-button:hover .icon {{ opacity: 1; }}
+  .pr-icon {{ display: inline-flex; padding: .25rem; border-radius: 6px; color: inherit;
+    text-decoration: none; }}
+  .pr-icon:not([data-state="blocked"]) {{ cursor: pointer; }}
+  .pr-icon:not([data-state="blocked"]):hover {{ background: #8882; }}
+  .pr-icon[data-state="found"] .icon {{ opacity: 1; fill: #16a34a; }}
+  .pr-icon[data-state="blocked"] {{ cursor: not-allowed; }}
+  .pr-icon[data-state="blocked"] .icon {{ opacity: .25; }}
   .stage-cell:not([data-reason=""]) .stage-icon[data-state="launch"] {{ cursor: not-allowed; }}
   .stage-cell:not([data-reason=""]) .stage-icon[data-state="launch"] .icon {{ opacity: .15; }}
   #stage-menu {{ position: absolute; z-index: 5; min-width: 13rem; padding: .35rem;
@@ -192,7 +205,7 @@ PAGE = r"""<!doctype html>
 {message}
 <div class="wrap" id="table-view">
 <table>
-  <thead><tr><th>Task</th><th>Title</th><th class="stage">Refine</th><th class="stage">Implement</th><th class="stage">Audit</th><th>Actions</th><th>Depends on</th><th>Status</th><th>Source</th><th>Pull request</th><th>Updated</th><th>Info</th></tr></thead>
+  <thead><tr><th>Task</th><th>Title</th><th>Pull request</th><th class="stage">Refine</th><th class="stage">Implement</th><th class="stage">Audit</th><th>Actions</th><th>Depends on</th><th>Status</th><th>Source</th><th>Updated</th><th>Info</th></tr></thead>
   <tbody>
   {rows}
   </tbody>
@@ -202,10 +215,14 @@ PAGE = r"""<!doctype html>
   {tree}
 </ul>
 <div id="stage-menu" role="menu" hidden></div>
-<p class="note">Each stage column is one control, marked with the agent that runs it: click a dim
-icon to launch that stage, and the same icon again to open the conversation it started.
+<p class="note">Each stage column is one control, marked with the agent that runs it: click its icon
+to launch that stage, which turns it green, and click it again to open the conversation it started.
 Right-click it for the rest — submit the stage again, expire the submission so the next click
-launches afresh, or open a conversation an earlier attempt left behind. Sync main prepares every
+launches afresh, or open a conversation an earlier attempt left behind. The GitHub icon is grey
+until Sync main finds a pull request from the task branch into main, then green and linked;
+click the grey one to create that pull request, or right-click to create one, open GitHub's
+new-pull-request page, or refresh just this task. Creating needs a GH_TOKEN that can write pull requests.
+Sync main prepares every
 available task branch; Prepare claims one named task against a free scheduler slot. Refine and
 Implement run Codex on the task branch; merge refinement changes there before starting
 implementation. Audit starts a Claude cloud session for an open implementation pull request into
@@ -400,10 +417,90 @@ Expire releases a local reservation. No expiry cancels a cloud task or removes a
     Array.from(earlier ? earlier.children : []).forEach(link => {{
       stageMenu.append(linkItem(link.href, "Earlier conversation " + link.textContent));
     }});
+    placeMenu(x, y);
+  }}
+  function placeMenu(x, y) {{
     stageMenu.hidden = false;
     stageMenu.style.left = (x + window.scrollX) + "px";
     stageMenu.style.top = (y + window.scrollY) + "px";
   }}
+  function openPullRequestMenu(cell, x, y) {{
+    stageMenu.textContent = "";
+    const heading = document.createElement("div");
+    heading.className = "head";
+    heading.textContent = "pull request · " + cell.dataset.task;
+    stageMenu.append(heading);
+    if (cell.dataset.found) stageMenu.append(linkItem(cell.dataset.found, "Open pull request"));
+    stageMenu.append(actionItem("Create pull request",
+      "Open a new pull request from this task's branch into main, even if one exists. " +
+        "GitHub refuses a second open one for the same branches.",
+      cell.dataset.createReason, () => createPullRequest(cell, true)));
+    stageMenu.append(cell.dataset.compare
+      ? linkItem(cell.dataset.compare, "Open GitHub's new pull request page")
+      : actionItem("Open GitHub's new pull request page", "", cell.dataset.compareReason, () => {{}}));
+    stageMenu.append(actionItem("Refresh pull request",
+      "Look for this task's pull request on GitHub now, without a full sync.",
+      cell.dataset.refreshReason, () => refreshPullRequest(cell)));
+    placeMenu(x, y);
+  }}
+  // Mirrors the server's rendering of the cell, so the answer shows without a reload.
+  function showPullRequest(cell, url, state) {{
+    const icon = cell.querySelector(".pr-icon");
+    cell.dataset.found = url || "";
+    if (url) {{
+      icon.href = url; icon.target = "_blank"; icon.rel = "noopener";
+      icon.removeAttribute("role");
+      icon.dataset.state = "found";
+      icon.title = "Open pull request #" + url.split("/").pop() +
+        (state ? " (" + state.toLowerCase() + ")" : "");
+    }} else {{
+      icon.removeAttribute("href");
+      icon.setAttribute("role", "button");
+      icon.dataset.state = cell.dataset.createReason ? "blocked" : "none";
+      icon.title = cell.dataset.createReason || "No pull request yet. Click to create one.";
+    }}
+  }}
+  async function createPullRequest(cell, force = false) {{
+    const task = cell.dataset.task;
+    if (cell.dataset.createReason) {{ showMessage(cell.dataset.createReason, true); return; }}
+    showMessage("Creating the pull request for " + task + "…");
+    try {{
+      const data = await act("api/tasks/" + encodeURIComponent(task) + "/create-pull-request",
+        force ? {{force: true}} : undefined);
+      showPullRequest(cell, data.pull_request, data.pull_request_state);
+      // One was already open, so this click is the green icon's click: take the operator to it.
+      if (!data.created) window.open(data.pull_request, "_blank", "noopener");
+      showMessage((data.created ? "Opened pull request: " : "Already open, opening it: ") +
+        data.pull_request);
+    }} catch (error) {{ showMessage(error.message, true); }}
+  }}
+  async function refreshPullRequest(cell) {{
+    const task = cell.dataset.task;
+    showMessage("Looking for the pull request of " + task + "…");
+    try {{
+      const data = await act("api/tasks/" + encodeURIComponent(task) + "/pull-request");
+      showPullRequest(cell, data.pull_request, data.pull_request_state);
+      showMessage(data.pull_request ? "Pull request for " + task + ": " + data.pull_request
+                                    : "No pull request from task/" + task + " into main yet.");
+    }} catch (error) {{ showMessage(error.message, true); }}
+  }}
+  document.querySelectorAll("[data-pr-cell]").forEach(cell => {{
+    const icon = cell.querySelector(".pr-icon");
+    // A found pull request is a plain link; without one the click creates it.
+    const create = (event) => {{
+      if (icon.href) return;
+      event.preventDefault();
+      createPullRequest(cell);
+    }};
+    icon.onclick = create;
+    icon.onkeydown = (event) => {{
+      if (event.key === "Enter" || event.key === " ") create(event);
+    }};
+    cell.oncontextmenu = (event) => {{
+      event.preventDefault();
+      openPullRequestMenu(cell, event.clientX, event.clientY);
+    }};
+  }});
   document.querySelectorAll("[data-stage-cell]").forEach(cell => {{
     const icon = stageIcon(cell);
     const launch = (event) => {{
@@ -455,6 +552,7 @@ NODE = """<li>
 ROW = """<tr id="{id}">
   <td><code>{id}</code></td>
   <td class="title">{title}</td>
+  <td class="pr">{pull_request}</td>
   <td class="stage">{refine}</td>
   <td class="stage">{implement}</td>
   <td class="stage">{audit}</td>
@@ -462,7 +560,6 @@ ROW = """<tr id="{id}">
   <td class="deps">{deps}</td>
   <td><span class="tag {status}">{status}</span></td>
   <td>{source}</td>
-  <td class="pr">{pull_request}</td>
   <td>{updated}</td>
   <td class="info">{info}</td>
 </tr>"""
@@ -503,11 +600,23 @@ GITHUB_ICON = (
     '-6.627-5.373-12-12-12"/></svg>'
 )
 
-# A plain speech bubble for Claude sessions, so the panel ships no third-party mark.
+# An approximation of the Claude mark, a burst of uneven rays, drawn here rather than copied
+# from the brand asset. Replace the body with the official path if you have it.
 CLAUDE_ICON = (
     '<svg class="icon" viewBox="0 0 24 24" role="img" aria-label="Claude session">'
-    '<path d="M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z'
-    'm2 5v2h12V8zm0 4v2h8v-2z"/></svg>'
+    + "".join(
+        f'<path transform="rotate({30 * index} 12 12)" d="M11.1 12 11.5 {12 - length}h1l.4 {length}z"/>'
+        for index, length in enumerate((10, 7.5, 9, 8, 10.5, 7, 9.5, 8, 10, 7.5, 9, 8.5))
+    )
+    + "</svg>"
+)
+
+# A circled cross for releasing a task's scheduler slot.
+EXPIRE_ICON = (
+    '<svg class="icon" viewBox="0 0 24 24" role="img" aria-label="Expire">'
+    '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>'
+    '<path d="m8.5 8.5 7 7m0-7-7 7" fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round"/></svg>'
 )
 
 STAGES = ("refine", "implement", "audit")
@@ -515,8 +624,10 @@ STAGES = ("refine", "implement", "audit")
 SERVICES = {"refine": "Codex", "implement": "Codex", "audit": "Claude"}
 
 
-def button(action: str, task_id: str, label: str, hint: str = "") -> str:
+def button(action: str, task_id: str, label: str, hint: str = "", css: str = "") -> str:
     attributes = f' title="{html.escape(hint)}"' if hint else ""
+    if css:
+        attributes += f' class="{css}"'
     return (f'<button type="button" data-action="{html.escape(action)}" '
             f'data-task="{html.escape(task_id)}"{attributes}>{label}</button>')
 
@@ -558,9 +669,9 @@ def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
         actions += button("prepare", entry["id"], "Prepare",
                           hint="Refresh main, claim a scheduler slot, and prepare this branch.")
     if entry["local"] and entry["status"] != "completed":
-        actions += button("expire", entry["id"], "Expire",
+        actions += button("expire", entry["id"], EXPIRE_ICON,
                           hint="Release this task's scheduler slot. Stage records and the "
-                               "conversations they opened are kept.")
+                               "conversations they opened are kept.", css="icon-button")
     return actions or "—"
 
 
@@ -650,16 +761,57 @@ def link_target(value: Any) -> str:
     return url if parsed.scheme in ("http", "https") and parsed.netloc else ""
 
 
-def pull_request_cell(entry: dict[str, Any]) -> str:
-    """Link the merged pull request the scheduler recorded, naming it in the tooltip."""
-    url = link_target(entry["pull_request"])
-    if not url:
-        return "—"
-    number = urlparse(url).path.rstrip("/").rpartition("/")[2]
-    hint = f"open pull request #{number}" if number.isdigit() else "open the pull request"
+def pull_request_blocker(entry: dict[str, Any]) -> str:
+    """Why a pull request cannot be opened for this task now, or an empty string."""
+    if entry["status"] == "completed":
+        return "Task completed."
+    if not entry["prepared"]:
+        return "Prepare this task first; its branch must exist before a pull request can open."
+    return ""
+
+
+def compare_url(entry: dict[str, Any], repository_url: str) -> tuple[str, str]:
+    """GitHub's new-pull-request page for the task branch into main, or why there is none."""
+    blocker = pull_request_blocker(entry)
+    base = link_target(repository_url).rstrip("/").removesuffix(".git")
+    if blocker:
+        return "", blocker
+    if not base:
+        return "", "Set GITHUB_URL on the control panel to open this page."
+    return f"{base}/compare/main...{quote(task_branch(entry['id']), safe='/')}?expand=1", ""
+
+
+def pull_request_cell(entry: dict[str, Any], repository_url: str = "") -> str:
+    """The pull request into main: green and linked once found, otherwise click to create it.
+
+    The icon is always drawn. The right-click menu can create or open GitHub's page for a new
+    pull request even when one exists, since the first may have been closed or not be the one
+    the operator wants.
+    """
+    found = link_target(entry["pull_request"])
+    compare, compare_reason = compare_url(entry, repository_url)
+    blocker = pull_request_blocker(entry)
+    if found:
+        number = urlparse(found).path.rstrip("/").rpartition("/")[2]
+        state = str(entry.get("pull_request_state") or "").lower()
+        hint = f"Open pull request #{number}" if number.isdigit() else "Open the pull request"
+        hint += f" ({state})" if state else ""
+        mark = "found"
+        anchor = f'href="{html.escape(found)}" target="_blank" rel="noopener"'
+    elif blocker:
+        hint, mark, anchor = blocker, "blocked", ""
+    else:
+        hint, mark = "No pull request yet. Click to create one.", "none"
+        anchor = 'role="button" tabindex="0"'
     return (
-        f'<a href="{html.escape(url)}" target="_blank" rel="noopener" '
-        f'title="{hint}">{GITHUB_ICON}</a>'
+        f'<span class="pr-cell" data-pr-cell data-task="{html.escape(entry["id"])}" '
+        f'data-found="{html.escape(found)}" data-compare="{html.escape(compare)}" '
+        f'data-compare-reason="{html.escape(compare_reason)}" '
+        f'data-create-reason="{html.escape(blocker)}" '
+        f'data-refresh-reason="{"" if entry["prepared"] else "Prepare this task first; there is no branch to look on."}">'
+        f'<a class="pr-icon" data-state="{mark}" {anchor} '
+        f'title="{html.escape(hint + (". Right-click for more." if mark != "blocked" else ""))}">'
+        f'{GITHUB_ICON}</a></span>'
     )
 
 
@@ -696,7 +848,8 @@ def branches(nodes: list[dict[str, Any]], runnable: set[str], done: set[str]) ->
     return "\n".join(items)
 
 
-def render(tracker: dict[str, Any], state: dict[str, Any], message: str, busy: bool) -> str:
+def render(tracker: dict[str, Any], state: dict[str, Any], message: str, busy: bool,
+           repository_url: str = "") -> str:
     entries = rows(tracker, state)
     runnable = available_ids(entries)
     done = {entry["id"] for entry in entries if entry["status"] == "completed"}
@@ -720,7 +873,7 @@ def render(tracker: dict[str, Any], state: dict[str, Any], message: str, busy: b
                 source=source_of(entry),
                 **{stage: stage_cell(entry, stage, runnable) for stage in STAGES},
                 info=html.escape(stage_reason(entry, runnable)) or "—",
-                pull_request=pull_request_cell(entry),
+                pull_request=pull_request_cell(entry, repository_url),
                 updated=html.escape((entry["updated_at"] or "—")[:16].replace("T", " ")),
                 actions=actions_for(entry, runnable),
             )

@@ -1,4 +1,5 @@
 import json
+import subprocess
 import threading
 import time
 import unittest
@@ -26,6 +27,83 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
         self.panel = TaskScheduler( self.clone('panel'), self.root / 'state.json',
                                   self.root / 'tracker.json', 'test-env', 1,
                                   'https://api.example/fire', 'routine-token')
+        # No test may reach the real gh; the tests about the lookup replace its answer.
+        patcher = patch.object(repository, 'task_pull_request', return_value=None)
+        self.pull_request = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_sync_records_the_pull_request_into_main_until_it_merges(self):
+        record = lambda: self.panel.snapshot()['state']['tasks']['P0-001']
+        self.panel.sync()
+        # The pass that prepares a task does not look for its pull request yet.
+        self.pull_request.assert_not_called()
+        self.panel.sync()
+        self.assertNotIn('pull_request', record())
+        self.pull_request.return_value = {'url': 'https://example/pr/5', 'state': 'OPEN'}
+        self.panel.sync()
+        self.assertEqual((record()['pull_request'], record()['pull_request_state']),
+                         ('https://example/pr/5', 'OPEN'))
+        self.pull_request.return_value = {'url': 'https://example/pr/5', 'state': 'MERGED'}
+        self.panel.sync()
+        # A merged pull request is final, so later passes stop asking.
+        asked = self.pull_request.call_count
+        self.pull_request.return_value = None
+        self.panel.sync()
+        self.assertEqual(self.pull_request.call_count, asked)
+        self.assertEqual(record()['pull_request_state'], 'MERGED')
+
+    def test_creating_the_pull_request_opens_one_unless_one_is_already_open(self):
+        url = 'https://example/pr/12'
+        with patch.object(repository, 'create_task_pull_request', return_value=url) as create:
+            self.panel.sync()
+            for task, status in (('P9-999', 404), ('P0-002', 409)):
+                with self.assertRaises(TaskError) as refused:
+                    self.panel.create_pull_request(task)
+                self.assertEqual(refused.exception.status, status)
+            result = self.panel.create_pull_request('P0-001')
+            self.assertEqual((result['created'], result['pull_request'], result['pull_request_state']),
+                             (True, url, 'OPEN'))
+            self.assertEqual(create.call_args.args[1:], ('P0-001', 'Upstream'))
+            # Once one is open, a second click reports it instead of opening another.
+            self.pull_request.return_value = {'url': url, 'state': 'OPEN'}
+            self.assertFalse(self.panel.create_pull_request('P0-001')['created'])
+            create.assert_called_once()
+            self.pull_request.return_value = None
+            create.side_effect = subprocess.CalledProcessError(1, ['gh'])
+            with self.assertRaises(TaskError) as failed:
+                self.panel.create_pull_request('P0-001')
+            self.assertEqual(failed.exception.status, 502)
+            self.assertIn('GH_TOKEN', str(failed.exception))
+
+    def test_refreshing_one_task_looks_up_only_its_pull_request(self):
+        self.panel.sync()
+        self.pull_request.return_value = {'url': 'https://example/pr/9', 'state': 'MERGED'}
+        result = self.panel.refresh_pull_request('P0-001')
+        self.assertEqual((result['pull_request'], result['pull_request_state']),
+                         ('https://example/pr/9', 'MERGED'))
+        self.assertEqual(self.pull_request.call_args.args[1], 'P0-001')
+        # An explicit refresh looks again even though a merge is already recorded.
+        self.pull_request.return_value = {'url': 'https://example/pr/10', 'state': 'OPEN'}
+        self.assertEqual(self.panel.refresh_pull_request('P0-001')['pull_request_state'], 'OPEN')
+        for task, status in (('P9-999', 404), ('P0-002', 409)):
+            with self.assertRaises(TaskError) as refused:
+                self.panel.refresh_pull_request(task)
+            self.assertEqual(refused.exception.status, status)
+        self.pull_request.side_effect = subprocess.CalledProcessError(1, ['gh'])
+        with self.assertRaises(TaskError) as failed:
+            self.panel.refresh_pull_request('P0-001')
+        self.assertEqual(failed.exception.status, 502)
+        self.assertEqual(self.panel.snapshot()['state']['tasks']['P0-001']['pull_request_state'], 'OPEN')
+
+    def test_a_pull_request_that_disappears_is_forgotten_and_a_failed_lookup_is_not_fatal(self):
+        self.panel.sync()
+        self.pull_request.return_value = {'url': 'https://example/pr/5', 'state': 'OPEN'}
+        self.panel.sync()
+        self.pull_request.return_value = None
+        self.panel.sync()
+        self.assertNotIn('pull_request', self.panel.snapshot()['state']['tasks']['P0-001'])
+        self.pull_request.side_effect = subprocess.CalledProcessError(1, ['gh'])
+        self.assertEqual(self.panel.sync()['prepared'], [])
 
     def test_merge_pulls_main_prepares_once_and_does_not_launch_codex(self):
         event = {'action': 'closed', 'pull_request': {'merged_at': 'today', 'base': {'ref': 'main'}}}
@@ -435,6 +513,12 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.assertEqual((status, data['expired'], data['stage']), (200, 'P0-001', 'refine'))
             self.assertEqual(request('/api/tasks/P0-001/audit/expire')[0], 409)
             self.assertEqual(request('/api/tasks/P0-001/review/expire')[0], 404)
+            # Refreshing the pull request is a route of its own, answered directly.
+            self.pull_request.return_value = {'url': 'https://example/pr/9', 'state': 'OPEN'}
+            status, data = request('/api/tasks/P0-001/pull-request')
+            self.assertEqual((status, data['pull_request']), (200, 'https://example/pr/9'))
+            self.assertEqual(request('/api/tasks/P0-002/pull-request')[0], 409)
+            self.assertEqual(request('/api/tasks/P0-999/pull-request')[0], 404)
         finally:
             server.shutdown()
             server.server_close()

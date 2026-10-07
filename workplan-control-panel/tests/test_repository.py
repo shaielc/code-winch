@@ -89,3 +89,32 @@ class PullRequestTests(unittest.TestCase):
             run.assert_called_once_with(
                 "gh", "pr", "list", "--base", "task/P0-001", "--state", "open",
                 "--json", "number,url,headRefOid", cwd=clone)
+
+    def test_creating_the_task_pull_request_names_the_branch_and_returns_its_url(self):
+        clone = Path("/checkout")
+        url = "https://github.com/owner/repo/pull/12"
+        with patch.object(repository, "run", return_value="Creating pull request\n" + url) as run:
+            self.assertEqual(repository.create_task_pull_request(clone, "P0-001", "First"), url)
+        args = run.call_args.args
+        self.assertEqual(args[:3], ("gh", "pr", "create"))
+        self.assertIn("task/P0-001", args)
+        self.assertIn("P0-001: First", args)
+        self.assertIn("Task: P0-001", args)
+        with patch.object(repository, "run", return_value="no url here"):
+            with self.assertRaises(ValueError):
+                repository.create_task_pull_request(clone, "P0-001", "First")
+
+    def test_the_task_pull_request_into_main_prefers_open_then_merged(self):
+        listed = [{"url": "https://example/pr/1", "state": "CLOSED"},
+                  {"url": "https://example/pr/2", "state": "MERGED"},
+                  {"url": "https://example/pr/3", "state": "OPEN"}]
+        clone = Path("/checkout")
+        with patch.object(repository, "run", return_value=json.dumps(listed)) as run:
+            self.assertEqual(repository.task_pull_request(clone, "P0-001")["url"],
+                             "https://example/pr/3")
+            self.assertEqual(run.call_args.args[3:7], ("--head", "task/P0-001", "--base", "main"))
+        with patch.object(repository, "run", return_value=json.dumps(listed[:2])):
+            self.assertEqual(repository.task_pull_request(clone, "P0-001")["state"], "MERGED")
+        # A closed pull request that never merged does not count as one.
+        with patch.object(repository, "run", return_value=json.dumps(listed[:1])):
+            self.assertIsNone(repository.task_pull_request(clone, "P0-001"))

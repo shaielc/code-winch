@@ -21,6 +21,7 @@ from .integrations.process import failure_message
 class Handler(BaseHTTPRequestHandler):
     scheduler: TaskScheduler
     token: str
+    repository_url = ""
 
     def log_message(self, *args: Any) -> None:
         return
@@ -86,7 +87,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond(200, snapshot)
             else:
                 message = "" if self.scheduler.tracker_path.exists() else "Sync main to load the task tracker."
-                page = render(snapshot["tracker"], snapshot["state"], message, False)
+                page = render(snapshot["tracker"], snapshot["state"], message, False,
+                              self.repository_url)
                 self.send(200, page.encode(), "text/html; charset=utf-8")
         except (OSError, ValueError):
             self.respond(500, {"error": "Unable to read control-panel state"})
@@ -105,7 +107,9 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(data, dict):
                 raise ValueError("Expected a JSON object")
             path = urlparse(self.path).path
-            match = re.fullmatch(r"/api/tasks/(P\d+-\d{3})/(refine|implement|audit|expire|prepare)", path)
+            match = re.fullmatch(
+                r"/api/tasks/(P\d+-\d{3})/"
+                r"(refine|implement|audit|expire|prepare|pull-request|create-pull-request)", path)
             stage_match = re.fullmatch(r"/api/tasks/(P\d+-\d{3})/(refine|implement|audit)/expire", path)
             if path == "/api/session":
                 if not self.bearer_valid():
@@ -131,6 +135,10 @@ class Handler(BaseHTTPRequestHandler):
                 result = self.scheduler.expire_stage(*stage_match.groups())
             elif match and match[2] == "expire":
                 result = self.scheduler.expire(match[1])
+            elif match and match[2] == "pull-request":
+                result = self.scheduler.refresh_pull_request(match[1])
+            elif match and match[2] == "create-pull-request":
+                result = self.scheduler.create_pull_request(match[1], force=data.get("force") is True)
             elif match:
                 number = data.get("pr_number")
                 if number is not None and (type(number) is not int or number <= 0):
@@ -165,6 +173,7 @@ def main() -> int:
                         format="%(asctime)s %(levelname)s: %(message)s")
     args = parse_args()
     Handler.token = os.environ.get("PANEL_TOKEN", "")
+    Handler.repository_url = os.environ.get("GITHUB_URL", "")
     if not Handler.token:
         raise SystemExit("Set PANEL_TOKEN before starting the control panel")
     Handler.scheduler = TaskScheduler(

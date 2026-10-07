@@ -113,6 +113,9 @@ PANEL_TOKEN=... CODEX_ENV_ID=... python3 -m control_panel \
 Tests use a local Git remote, mocked cloud submissions/PR listing, and a local
 HTTP stub for the Claude routine.
 
+The page tests (`tests/test_ui.py` and `tests/test_ui.cjs`) are paused while the
+interface settles and skip unless `RUN_UI_TESTS=1` is set.
+
 ## Deploy
 
 From this directory, copy `.env.example` to `.env` and set `GITHUB_URL`, a current

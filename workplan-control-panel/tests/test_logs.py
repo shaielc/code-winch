@@ -44,6 +44,10 @@ class RedactionTests(unittest.TestCase):
         self.assertNotIn("Implement P0-001", named)
         self.assertIn(f"<{len(prompt)} chars>", named)
 
+    def test_an_argument_with_spaces_is_quoted_so_its_boundaries_show(self):
+        named = logs.command(("gh", "pr", "create", "--title", "P0-001: A title, with spaces"))
+        self.assertIn("--title 'P0-001: A title, with spaces'", named)
+
     def test_long_output_keeps_its_tail(self):
         clipped = logs.tail("start" + "x" * (logs.TAIL * 2) + "the actual error")
         self.assertTrue(clipped.endswith("the actual error"))

@@ -9,6 +9,7 @@ by its arguments, with anything prompt-sized stood in for by its length.
 import logging
 import os
 import re
+import shlex
 import traceback
 from collections.abc import Iterable
 
@@ -49,7 +50,7 @@ def tail(text: object, *also: str) -> str:
 def command(argv: Iterable[str]) -> str:
     """Name a command without pasting the prompt it carried into the log."""
     return redact(" ".join(
-        arg if len(arg) <= ARGUMENT else f"<{len(arg)} chars>" for arg in argv))
+        shlex.quote(arg) if len(arg) <= ARGUMENT else f"<{len(arg)} chars>" for arg in argv))
 
 
 def _line(label: str, text: object) -> str:
