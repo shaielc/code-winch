@@ -12,7 +12,7 @@
       "title": "The sandbox image starts, serves its attach page, and states its posture",
       "phase": 0,
       "phase_name": "A sandbox you can talk to",
-      "status": "in_progress",
+      "status": "completed",
       "depends_on": [],
       "owner": null,
       "blocked_reason": null,
