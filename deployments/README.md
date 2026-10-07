@@ -10,6 +10,19 @@ filesystem boundaries are present, but network egress is **not enforced**. This
 configuration does not prove an egress allowlist, credential isolation, or protection
 from a malicious harness.
 
-For a machine without Go, `make test-cycle` uses the `toolchain` service to run the
-format, vet, unit-test, and build gates. `make e2e` requires both Go and Docker and
-drives the deployed image through its real entrypoint.
+The compose project is `code-winch`. Tests never use it: `compose.test.yml` layers an
+isolated project, `code-winch-test`, over the same services. The sandbox there publishes
+no host port, so it cannot collide with a running dev sandbox, and it shares a
+`test-network` with the `toolchain` service, which reaches it as `http://sandbox:8080`.
+
+- `make test-cycle` is the whole path and needs only Docker: it starts the test
+  environment, runs the format, vet, unit-test, and build gates plus the e2e scenarios
+  inside the `toolchain` service, and always tears the environment down.
+- `make test-env` starts the test environment and checks that the sandbox is healthy,
+  runs as a non-root user, and that the production compose file pins the published host
+  IP to `127.0.0.1`. `make e2e` runs the scenarios against it, and
+  `make test-env-down` removes it. `make e2e` does not start or stop anything.
+
+The test environment cannot show that the host's routable address refuses the port,
+because nothing is published there. That check stays manual: see the Demonstration in
+`docs/workplan/phase-0/P0-001-sandbox-serves-attach-page.md`.

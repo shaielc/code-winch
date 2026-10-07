@@ -107,13 +107,15 @@ The standard gates are:
 python3 -m unittest discover -s test                        # completion scripts
 cd workplan-control-panel && python3 -m unittest discover -s tests
 make check                                                  # Go host gate
-make e2e                                                    # composed image scenario
-make test-cycle                                             # Docker-only Go path
+make test-cycle                                             # Docker-only path: test env, gates, e2e, teardown
 ```
 
 `make check` is the minimum and always: Go formatting, vet, lint, tests, and the
 build. It is a host target needing Go and golangci-lint. `make test-cycle` is the
-Docker path and does not cover lint, so say which gates you ran.
+Docker path: it starts the isolated `code-winch-test` environment, runs the gates and
+the composed-image e2e scenarios in the `toolchain`, and tears it down. It does not
+cover lint, so say which gates you ran. `make e2e` alone only runs the scenarios
+against an environment already started by `make test-env`.
 
 Then run everything your brief lists under **Verification**. That is the minimum
 evidence expected in the pull request, not a ceiling.

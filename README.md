@@ -56,12 +56,13 @@ python3 -m unittest discover -s test                        # completion scripts
 cd workplan-control-panel && python3 -m unittest discover -s tests
 make check                                                  # host Go gate
 cd web && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build
-make e2e                                                    # real composed image
-make test-cycle                                             # Docker-only Go path
+make test-cycle                                             # Docker-only path: test env, gates, e2e, teardown
 ```
 
 Host targets need Go 1.24+, npm, and golangci-lint 2.1.6 (`go install
 github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6`); `[docker]`
 targets need only Docker and run in the `toolchain` container. `make check` is
-the host gate CI runs; `make test-cycle` is the Docker path and does not run
-golangci-lint.
+the host gate CI runs for Go; `make test-cycle` is the Docker path, which also runs the
+composed-image scenarios in an isolated `code-winch-test` project, and does not run
+golangci-lint. To run only the scenarios, use `make test-env`, `make e2e`, and
+`make test-env-down` (see `deployments/README.md`).

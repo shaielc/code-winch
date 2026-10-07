@@ -2,11 +2,14 @@ GO ?= go
 GOLANGCI_LINT ?= golangci-lint
 BUILD_DIR ?= bin
 COMPOSE ?= docker compose -f deployments/compose.yml
+COMPOSE_TEST ?= $(COMPOSE) -f deployments/compose.test.yml
 GO_PACKAGES := ./cmd/... ./internal/... ./test/contract/...
-# e2e needs Docker, so it is vetted and linted here but only run by `make e2e`.
+# e2e needs a running test-env, so it is vetted and linted here but only run by
+# `make e2e` and `make test-cycle`. It runs in the toolchain, never on the host.
 CHECKED_PACKAGES := $(GO_PACKAGES) ./test/e2e/...
+E2E_TEST := go test -count=1 -timeout=10m ./test/e2e/...
 
-.PHONY: all build check e2e format format-check lint run test test-cycle toolchain-image test-env-down vet web-build
+.PHONY: all build check e2e format format-check lint run test test-cycle test-env test-env-down toolchain-image vet web-build
 all: check
 
 format:
@@ -31,10 +34,14 @@ web-build:
 check: format-check vet lint test build
 
 e2e:
-	$(GO) test -count=1 -timeout=10m ./test/e2e/...
+	$(COMPOSE_TEST) --profile test run --rm toolchain $(E2E_TEST)
 toolchain-image:
-	$(COMPOSE) --profile test build toolchain
+	$(COMPOSE_TEST) --profile test build toolchain
+test-env:
+	$(COMPOSE_TEST) up --build -d --wait sandbox
+	@test "$$($(COMPOSE_TEST) exec -T sandbox id -u)" != 0 || { echo "sandbox runs as root" >&2; exit 1; }
+	@$(COMPOSE) config | grep -q 'host_ip: 127.0.0.1' || { echo "sandbox is not published on 127.0.0.1 only" >&2; exit 1; }
 test-env-down:
-	$(COMPOSE) --profile test down --remove-orphans
+	$(COMPOSE_TEST) --profile test down --remove-orphans
 test-cycle: toolchain-image
-	@status=0; $(COMPOSE) --profile test run --rm toolchain sh -c 'make format-check vet test build' || status=$$?; $(MAKE) test-env-down; exit $$status
+	@status=0; $(MAKE) test-env && $(COMPOSE_TEST) --profile test run --rm toolchain sh -c 'make format-check vet test build && $(E2E_TEST)' || status=$$?; $(MAKE) test-env-down; exit $$status

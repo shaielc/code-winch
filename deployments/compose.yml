@@ -1,3 +1,4 @@
+name: code-winch
 services:
   sandbox:
     build:

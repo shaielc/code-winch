@@ -1,0 +1,16 @@
+name: code-winch-test
+services:
+  sandbox:
+    ports: !reset []
+    networks: [test-network]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 1s
+      timeout: 2s
+      retries: 30
+  toolchain:
+    networks: [test-network]
+    environment:
+      WINCH_E2E_URL: http://sandbox:8080
+networks:
+  test-network: {}
