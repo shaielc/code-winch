@@ -8,30 +8,35 @@ this wires the runner into)
 ## Objective
 
 The sandbox starts a harness process of its own, and a person watching the page or
-running `winch stream` sees what the harness emits as ordered records, including the
-record that says the harness has ended and how. The runner knows a harness only as a
-process; what its bytes mean is the harness codec's business.
+running `winch stream` sees what the harness wrote to stdout, unaltered, as ordered
+records, including the record that says the harness has ended and how. The runner knows
+a harness only as a process; it shows what the harness said and does not yet interpret it.
 
 ## Scope
 
 - `internal/runner/` — the runner owns the harness *process* and nothing about its
   format: spawn, stdout pump, process reaping. It expects only what any harness
-  provides — stdout, stderr, stdin, and an exit status or terminating signal — and it
-  pumps stdout bytes, as read, into a codec. It never parses harness output
+  provides — stdout, stderr, stdin, and an exit status or terminating signal
   (`docs/code-structure.md` §3; roadmap D5 leaves open that a real harness needs a PTY).
-- A **fake harness codec** as its own unit, separate from the runner, holds everything
-  that knows the fake's JSON-lines dialect (`cmd/fake-harness/main.go:23-36`):
-  incremental, tolerant of arbitrary chunk boundaries, with a flush at end of output.
-  It yields unsequenced items `{kind, sensitivity, payload}` and decides what an
-  unparseable line becomes. Unknown fields, a default sensitivity, and the `stream.raw`
-  kind the fake happens to emit (`cmd/fake-harness/main.go:76-77`) are the codec's
-  concerns. It is not the `HarnessDriver` port (see Non-goals); the composition root
-  hands the runner this one codec.
+- **Raw pass-through.** Each chunk read from stdout becomes one `stream.raw` record
+  whose payload is the chunk, verbatim, as `{stream: "stdout", encoding, data}`
+  (`encoding` `utf-8` when the bytes are valid, else `base64`). No line splitting, no
+  JSON parsing, no kind or sensitivity from the harness: a record's `kind` and
+  `sensitivity` are the runner's, and sensitivity is `user-content` because the bytes
+  are the harness's words. Chunk boundaries are whatever the pipe delivers, so record
+  count is not a property of the transcript; the concatenated `data` is. A chunk is
+  bounded by the read buffer, per `docs/security.md` §2.
+- The fake's JSON-lines dialect (`cmd/fake-harness/main.go:23-36`) is **not** decoded
+  here, so the page shows its lines as text. Harness-specific interpretation arrives
+  with P0-006, the first task that must speak the fake's protocol in both directions
+  (`{id,text}` in, replies out); P0-007 hardens what P0-006 builds. Tolerating
+  arbitrary chunk boundaries is then the codec's concern, not this task's.
 - The session record, which is the stage's central shape:
   `{ordinal, kind, occurredAt, sensitivity, payload}`. The runner allocates `ordinal`
-  (runner-local, monotonic, gap-free within the session) and `occurredAt`. `kind`,
-  `sensitivity`, and `payload` are codec output that the runner carries and does not
-  interpret. No `sequence`, no `eventId`, no `schemaVersion` — `docs/contracts.md` §8
+  (runner-local, monotonic, gap-free within the session) and `occurredAt`. In this task
+  `kind` is `stream.raw` or `session.terminated` only. When P0-006 adds a codec, its
+  output supplies `kind`, `sensitivity`, and `payload` and the runner still does not
+  interpret them. No `sequence`, no `eventId`, no `schemaVersion` — `docs/contracts.md` §8
   says the control plane adds those, and roadmap Stage 0 lists them as deliberately
   absent.
 - `record kind: session.terminated` — the runner emits it from the process exit status
@@ -65,13 +70,13 @@ process; what its bytes mean is the harness codec's business.
 - Persistence. Records live in a bounded in-memory buffer and are gone when the
   container stops; reload shows nothing. P0-003.
 - Input of any kind. P0-004, P0-005, P0-006.
-- The `HarnessDriver` port, capability descriptors, and `internal/adapters/harness/`.
+- Any decoding of the fake's dialect, and the `HarnessDriver` port, capability
+  descriptors, and `internal/adapters/harness/`. The fake codec is P0-006's;
   `docs/roadmap.md` §1 — "a port with one implementation is a stage that came too
-  early" — applies to the port; §3 Stage 1 makes a real vendor CLI the second case that
-  forces it. The codec *unit* above is not that port.
+  early" — and §3 Stage 1 keep the port out until a real vendor CLI forces it.
 - More than one record projection. One raw-stream view; roadmap Stage 2 adds the second.
-- Malformed-output and slow-reader guarantees. P0-007. Until then the codec drops a
-  line it cannot parse and the runner is unaffected.
+- Malformed-output and slow-reader guarantees. P0-007. Nothing is parsed
+  here, so no output can be malformed to this task.
 
 ## Runtime reachability
 
@@ -84,7 +89,6 @@ two hands-on paths.
 
 - `internal/runner/runner.go`, `internal/runner/harness.go`, `internal/runner/record.go`,
   `internal/runner/session.go`
-- `internal/runner/fakecodec/codec.go` (the fake's dialect; nothing else imports its format)
 - `internal/adapters/transport/attach/stream.go`, `.../server.go`
 - `cmd/winch-sandbox/main.go`, `cmd/winch-sandbox/config.go`
 - `cmd/winch/stream.go`
@@ -98,12 +102,12 @@ two hands-on paths.
 ## Contract surfaces
 
 - schema: the session record — `{ordinal, kind, occurredAt, sensitivity, payload}`;
-  the runner owns `ordinal` and `occurredAt`, the codec owns the rest
+  the runner owns `ordinal` and `occurredAt`; `kind` is `stream.raw` or
+  `session.terminated` until P0-006
 - the runner-local ordinal namespace and its allocation
 - registry namespace: record kinds, which this task defines
-- `record kind: stream.raw` — the fake codec's output, not a runner guarantee
+- `record kind: stream.raw` — verbatim stdout bytes, payload `{stream, encoding, data}`
 - `record kind: session.terminated`, and the native-exit → outcome mapping
-- the codec unit's input/output shape (bytes in, unsequenced items out)
 - API: `GET /api/session/stream` (WebSocket)
 - profile namespace: `fake`, and the config keys that drive it —
   `WINCH_HARNESS_PROFILE`, `WINCH_HARNESS_TRANSCRIPT`, `WINCH_HARNESS_DELAY`,
@@ -116,8 +120,8 @@ two hands-on paths.
 
     $ docker compose -f deployments/compose.yml up --build -d
     $ ./bin/winch stream
-    → expect: records with ordinals 1, 2, 3, … as the transcript plays (the fake codec
-      yields them as kind stream.raw)
+    → expect: stream.raw records with ordinals 1, 2, 3, … carrying the fake's raw output
+      (its JSON lines, as text) while the transcript plays
 
     $ xdg-open http://127.0.0.1:8080
     → expect: the same lines appearing in the page as they arrive
@@ -138,10 +142,10 @@ two hands-on paths.
   `scenario_harness_output_test.go` added: start the sandbox, read the stream, assert
   ordinals are contiguous from 1 and the transcript's lines arrive in order.
 - `test/contract/attach/` golden test pins the record wire format byte for byte.
-- Unit tests for the fake codec across arbitrary chunk boundaries — a record split
-  across two reads decodes once, not twice and not never.
-- Runner tests with a stub codec and a non-JSON child: ordinals stay contiguous and the
-  terminal mapping holds, which shows the runner does not depend on the fake's format.
+- Runner tests with a non-JSON child, including invalid UTF-8 and a write larger than
+  the read buffer: the concatenated `data` equals the bytes written, ordinals stay
+  contiguous, and the terminal mapping holds. Nothing in the runner reads the fake's
+  format.
 - Two concurrent readers of `/api/session/stream` both receive every record.
 - `make check`, `make e2e`, `make test-cycle`, `cd web && npm test`.
 
@@ -149,11 +153,12 @@ two hands-on paths.
 
 - [ ] Ordinals are monotonic and gap-free from 1 within a session, asserted by the
       standing scenario rather than by inspection.
-- [ ] A record arriving split across two reads produces exactly one record. Inject by
-      feeding the fake codec a transcript line in two chunks.
-- [ ] The runner never reads harness output: with a stub codec and a child that prints
-      non-JSON bytes, ordinals are contiguous and the terminal record is correct.
-      Ordinal contiguity, terminal mapping, and fan-out hold regardless of the codec.
+- [ ] Bytes are neither lost, duplicated, nor reordered: the concatenation of `data`
+      across records equals what the child wrote, however the pipe chunked it,
+      including invalid UTF-8 and a burst larger than the read buffer.
+- [ ] The runner never interprets harness output: a child printing arbitrary non-JSON
+      bytes yields contiguous ordinals and a correct terminal record. Ordinal
+      contiguity, terminal mapping, and fan-out hold for any child.
 - [ ] `-force-failure` produces `session.terminated` with outcome `failed` and the
       native exit code; SIGTERM produces outcome `stopped`; `-early-exit` produces a
       terminal record rather than a stream that simply stops. All three observable
@@ -177,6 +182,7 @@ two hands-on paths.
 | Deferred | Owning task |
 |---|---|
 | Records surviving the container, and reading them from an ordinal | P0-003 |
+| Decoding the fake's JSON-lines dialect into records | P0-006 |
 | Malformed harness output degrading to a diagnostic record | P0-007 |
 | A reader that stops reading not backpressuring the harness | P0-007 |
 
