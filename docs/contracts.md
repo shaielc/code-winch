@@ -240,3 +240,7 @@ the control plane's job rather than the runner's.
 **The surface states its posture.** It reports the sandbox profile in force and
 what that profile does not isolate, so a caller cannot be misled about effective
 isolation — threat T02 in [the security model](security.md#3-threat-and-mitigation-register).
+The standalone surface exposes `GET /healthz` as
+`{"service":"winch-sandbox","status":"ok"}` and `GET /api/session` as
+`{"profile": string, "unenforcedControls": string[]}`. The unenforced-controls
+array is non-empty; for `container-standard` it includes `network-egress`.
