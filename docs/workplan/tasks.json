@@ -23,7 +23,7 @@
       "title": "The runner owns the fake harness and the page shows its output live",
       "phase": 0,
       "phase_name": "A sandbox you can talk to",
-      "status": "pending",
+      "status": "in_progress",
       "depends_on": [
         "P0-001"
       ],
