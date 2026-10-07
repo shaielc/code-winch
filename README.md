@@ -6,8 +6,8 @@ serving its own page; from there it grows a control plane over many runs,
 multiple agent vendors, rich output rendering, real isolation, and durable
 multi-agent workflows.
 
-The repository currently holds the design baseline and the delivery order for
-that, and very little of the implementation — see **Project status** below.
+The repository builds the first runnable slice of that design: a standalone
+sandbox attach surface. See **Project status** below.
 
 ## Design documents
 
@@ -22,10 +22,9 @@ that, and very little of the implementation — see **Project status** below.
 
 ## Project status
 
-**Nothing of the product runs yet.** There is no daemon, no sandbox, no browser
-application, and no way to start a harness. What exists is the design set,
-`cmd/fake-harness` (a controllable stand-in for a vendor CLI), the workplan
-control panel, and the planning skills.
+The sandbox image starts, serves a browser attach page on loopback, and reports
+its effective profile and unenforced controls. It carries `cmd/fake-harness`,
+but does not start it yet. There is no daemon or control plane.
 [`docs/state.md`](docs/state.md) is the authoritative account, with a command or
 a `file:line` behind every claim.
 
@@ -42,27 +41,28 @@ it lands.
 
 ## Building and testing
 
-The root `Makefile` and both CI workflows are **currently broken**. Most targets
-name a path that was removed along with the previous implementation —
-`api/openapi/`, `internal/`, `cmd/winchd`, `web/src/`, `test/e2e/`,
-`test/contract/`, and `deployments/compose.yml`, which the whole `[docker]` group
-depends on — so `make check`, `make build`, and `make test-cycle` all fail before
-reaching any code. `format`, `format-check`, `vet`, and `lint` are the exception
-and would pass on a host with Go installed. `docs/state.md` lists each gate with
-the line that names the missing path. Repairing them is task `P0-001`.
+Start the product on loopback, then inspect it with the maintained CLI:
 
-What runs today:
+```sh
+docker compose -f deployments/compose.yml up --build -d
+docker compose -f deployments/compose.yml exec sandbox winch status
+docker compose -f deployments/compose.yml down
+```
+
+The repository gates are:
 
 ```sh
 python3 -m unittest discover -s test                        # completion scripts
 cd workplan-control-panel && python3 -m unittest discover -s tests
-./scripts/list-available-tasks.sh                           # expect []
+make check                                                  # host Go gate
+cd web && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build
+make test-cycle                                             # Docker-only path: test env, gates, e2e, teardown
 ```
 
-Once the gates are repaired, every `Makefile` target is marked `[host]` or
-`[docker]`: `[host]` targets run on this machine and need Go 1.24+, npm, and
-golangci-lint 2.1.6 (`go install
+Host targets need Go 1.24+, npm, and golangci-lint 2.1.6 (`go install
 github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6`); `[docker]`
-targets need only Docker and run in the `runner` container. `make check` is the
-host gate CI runs, and `make test-cycle` is the Docker path — it covers neither
-`lint` nor `api-check`, so a host run is still required before submitting.
+targets need only Docker and run in the `toolchain` container. `make check` is
+the host gate CI runs for Go; `make test-cycle` is the Docker path, which also runs the
+composed-image scenarios in an isolated `code-winch-test` project, and does not run
+golangci-lint. To run only the scenarios, use `make test-env`, `make e2e`, and
+`make test-env-down` (see `deployments/README.md`).

@@ -1,0 +1,28 @@
+name: code-winch
+services:
+  sandbox:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile
+    environment:
+      WINCH_SANDBOX_ADDR: 0.0.0.0:8080
+      WINCH_SANDBOX_PROFILE: container-standard
+    ports:
+      - target: 8080
+        published: "8080"
+        host_ip: 127.0.0.1
+        protocol: tcp
+  toolchain:
+    profiles: [test]
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile.toolchain
+    working_dir: /workspace
+    environment:
+      GOFLAGS: -buildvcs=false
+    volumes:
+      - ..:/workspace
+      - go-cache:/go/pkg/mod
+    entrypoint: []
+volumes:
+  go-cache:
