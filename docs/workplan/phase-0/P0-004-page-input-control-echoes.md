@@ -39,6 +39,8 @@ nothing leaves the browser, and the composer is ready for the next line.
   a successful submission appears with the `Local` label and no ordinal, while retaining
   the existing posture check. The dependencies needed for these tests are already in
   `web/package.json`; do not add another interaction library solely for this task.
+  `@testing-library/user-event` is not among them, so drive keys with `fireEvent`, and
+  have the Enter handler call `preventDefault()` so Enter never also inserts a newline.
 
 ## Non-goals
 
