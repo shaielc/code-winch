@@ -49,11 +49,13 @@ func TestRejectsMethodsAndUnknownAPI(t *testing.T) {
 	if response.Code != http.StatusMethodNotAllowed || response.Header().Get("Allow") != "GET, HEAD" {
 		t.Fatalf("unexpected method response: %d %#v", response.Code, response.Header())
 	}
-	request = httptest.NewRequest(http.MethodGet, "/api/missing", nil)
-	response = httptest.NewRecorder()
-	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusNotFound || strings.Contains(response.Body.String(), "Attach page") {
-		t.Fatalf("unknown API returned SPA: %d %q", response.Code, response.Body.String())
+	for _, path := range []string{"/api", "/api/missing"} {
+		request = httptest.NewRequest(http.MethodGet, path, nil)
+		response = httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusNotFound || response.Header().Get("Content-Type") != "application/json" || strings.Contains(response.Body.String(), "Attach page") {
+			t.Fatalf("%s returned SPA or non-JSON: %d %q", path, response.Code, response.Body.String())
+		}
 	}
 }
 

@@ -3,6 +3,8 @@ GOLANGCI_LINT ?= golangci-lint
 BUILD_DIR ?= bin
 COMPOSE ?= docker compose -f deployments/compose.yml
 GO_PACKAGES := ./cmd/... ./internal/... ./test/contract/...
+# e2e needs Docker, so it is vetted and linted here but only run by `make e2e`.
+CHECKED_PACKAGES := $(GO_PACKAGES) ./test/e2e/...
 
 .PHONY: all build check e2e format format-check lint run test test-cycle toolchain-image test-env-down vet web-build
 all: check
@@ -12,9 +14,9 @@ format:
 format-check:
 	@files="$$(gofmt -l $$(find cmd internal test -name '*.go' -type f))"; test -z "$$files" || { echo "Not gofmt-formatted:" >&2; echo "$$files" >&2; exit 1; }
 vet:
-	$(GO) vet ./cmd/... ./internal/... ./test/contract/...
+	$(GO) vet $(CHECKED_PACKAGES)
 lint:
-	$(GOLANGCI_LINT) run ./cmd/... ./internal/... ./test/contract/...
+	$(GOLANGCI_LINT) run $(CHECKED_PACKAGES)
 test:
 	$(GO) test $(GO_PACKAGES)
 build:

@@ -3,6 +3,7 @@ package attach
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 type Server struct {
@@ -30,7 +31,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/api/session":
 		writeJSON(w, s.posture)
 	default:
-		if len(r.URL.Path) >= 5 && r.URL.Path[:5] == "/api/" {
+		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = w.Write([]byte("{\"error\":\"not found\"}\n"))

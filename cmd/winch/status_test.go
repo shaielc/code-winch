@@ -43,3 +43,21 @@ func TestStatusRejectsInvalidPosture(t *testing.T) {
 		t.Fatalf("printed success output: %q", out.String())
 	}
 }
+func TestStatusRejectsBadResponses(t *testing.T) {
+	for name, handler := range map[string]http.HandlerFunc{
+		"non-2xx":   func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "boom", http.StatusInternalServerError) },
+		"malformed": func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{not json`)) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(handler)
+			defer server.Close()
+			var out bytes.Buffer
+			if err := runStatus([]string{"--url", server.URL}, &out); err == nil {
+				t.Fatal("accepted bad response")
+			}
+			if out.Len() != 0 {
+				t.Fatalf("printed output: %q", out.String())
+			}
+		})
+	}
+}

@@ -17,14 +17,13 @@ func TestSandboxStarts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK || response.Header.Get("Content-Type") != "application/json" {
 		t.Fatalf("session response: %s %q", response.Status, response.Header.Get("Content-Type"))
 	}
 
 	status := compose(t, "exec", "-T", "sandbox", "winch", "status")
-	want := "service: winch-sandbox (ok)\nprofile: container-standard\nunేనforced control: network-egress\n"
-	want = strings.Replace(want, "unేనforced", "unenforced", 1)
+	want := "service: winch-sandbox (ok)\nprofile: container-standard\nunenforced control: network-egress\n"
 	if status != want {
 		t.Fatalf("status = %q, want %q", status, want)
 	}
@@ -36,11 +35,15 @@ func TestSandboxStarts(t *testing.T) {
 	config := compose(t, "config")
 	assertContains(t, config, "host_ip: 127.0.0.1")
 	connection, err := net.Dial("udp", "1.1.1.1:80")
-	if err == nil {
-		host := strings.Split(connection.LocalAddr().String(), ":")[0]
-		connection.Close()
-		requireFailure(t, "curl", "--noproxy", "*", "-fsS", "--max-time", "2", "http://"+host+":8080/healthz")
+	if err != nil {
+		t.Skipf("no non-loopback route to probe host-IP refusal: %v", err)
 	}
+	host, _, err := net.SplitHostPort(connection.LocalAddr().String())
+	_ = connection.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireFailure(t, "curl", "--noproxy", "*", "-fsS", "--max-time", "2", "http://"+net.JoinHostPort(host, "8080")+"/healthz")
 	if commandOutput(t, "curl", "--noproxy", "*", "-fsS", "http://127.0.0.1:8080/healthz") == "" {
 		t.Fatal("loopback became unhealthy")
 	}

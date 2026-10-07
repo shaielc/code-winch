@@ -40,9 +40,10 @@ func TestTraversalDoesNotEscapeStaticRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler, _ := attach.New(root, attach.DefaultPosture())
-	for _, path := range []string{"http://example/%2e%2e/secret", "/linked-secret"} {
+	for _, path := range []string{"/%2e%2e/secret", "/../secret", "/..%2fsecret", "/a/../../secret", "/linked-secret"} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		response := httptest.NewRecorder()
+		request.URL.Path = strings.NewReplacer("%2e", ".", "%2f", "/").Replace(path)
 		handler.ServeHTTP(response, request)
 		if strings.Contains(response.Body.String(), "secret-value") {
 			t.Fatalf("served a file outside static root through %s", path)

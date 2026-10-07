@@ -20,6 +20,24 @@ func TestLoadConfig(t *testing.T) {
 		t.Fatalf("unexpected config: %#v", config)
 	}
 }
+func TestLoadConfigEmptyOverridesUseDefaults(t *testing.T) {
+	t.Setenv("WINCH_SANDBOX_STATIC_DIR", "")
+	t.Setenv("WINCH_SANDBOX_ADDR", "")
+	t.Setenv("WINCH_SANDBOX_PROFILE", "")
+	config, err := loadConfig()
+	if err != nil && err.Error() != "static page unavailable" {
+		t.Fatal(err)
+	}
+	if err == nil && config.staticDir != "/opt/winch/web" {
+		t.Fatalf("static dir = %q", config.staticDir)
+	}
+	if got := valueOrDefault("WINCH_SANDBOX_STATIC_DIR", "/opt/winch/web"); got != "/opt/winch/web" {
+		t.Fatalf("empty override resolved to %q", got)
+	}
+	if got := valueOrDefault("WINCH_SANDBOX_ADDR", "127.0.0.1:8080"); got != "127.0.0.1:8080" {
+		t.Fatalf("empty override resolved to %q", got)
+	}
+}
 func TestLoadConfigRejectsInvalidValues(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, filepath.Join(dir, "index.html"), []byte("ok"))
