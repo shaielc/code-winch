@@ -3,6 +3,7 @@
 import re
 from pathlib import Path
 
+from .. import logs
 from .process import run
 
 TASK_URL = re.compile(r"(https?://\S*?)/(?:remote|codex/(?:cloud/)?tasks)/(task_[\w-]+)")
@@ -28,6 +29,7 @@ def task_url_from(output: str) -> str | None:
 def submit(clone: Path, environment: str, branch: str, prompt: str) -> str:
     output = run("codex", "cloud", "exec", "--env", environment,
                  "--branch", branch, prompt, cwd=clone)
+    logs.output(f"codex cloud exec on {branch}", output)
     url = task_url_from(output)
     if not url:
         raise ValueError("Codex returned no task URL")

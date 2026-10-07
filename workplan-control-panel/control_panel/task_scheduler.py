@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import threading
 import uuid
 import subprocess
@@ -11,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import prompts, state as task_state
+from . import logs, prompts, state as task_state
 from .integrations import claude, codex, repository
 from .integrations.process import failure_message
 
@@ -76,8 +75,7 @@ class TaskScheduler:
         except (OSError, subprocess.SubprocessError) as error:
             result = {"status": "failed", "error": failure_message(error)}
         except Exception:
-            # Do not log a command, prompt, or exception text that might contain secrets.
-            logging.getLogger("control_panel").error("Unexpected sync failure")
+            logs.unexpected("Unexpected sync failure")
             result = {"status": "failed", "error": "Sync failed unexpectedly; check the tracker and panel configuration."}
         with self._jobs_lock:
             self._resync_requested = False
@@ -176,6 +174,7 @@ class TaskScheduler:
                 record["prepared"] = True
                 task_state.write_json(self.state_file, state)
                 prepared.append(task["id"])
+            logs.output(f"sync at {base[:12]} prepared", ", ".join(prepared) or "nothing")
             return {"prepared": prepared, "main_commit": base}
 
     def task(self, task_id: str, state):

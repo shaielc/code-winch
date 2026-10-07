@@ -1,4 +1,5 @@
 import json
+import logging
 import socket
 import threading
 import unittest
@@ -33,6 +34,9 @@ class Routine(BaseHTTPRequestHandler):
 
 class ClaudeRoutineTests(unittest.TestCase):
     def setUp(self):
+        silence, panel = logging.NullHandler(), logging.getLogger("control_panel")
+        panel.addHandler(silence)
+        self.addCleanup(panel.removeHandler, silence)
         self.handler = type("Handler", (Routine,), {"replies": [], "received": []})
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self.handler)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -77,6 +81,26 @@ class ClaudeRoutineTests(unittest.TestCase):
             with self.assertRaises(ValueError) as error:
                 self.fire(reply)
             self.assertNotIsInstance(error.exception, claude.RoutineError)
+
+    def test_a_refusal_logs_the_body_without_the_fired_token(self):
+        with self.assertLogs("control_panel", "ERROR") as captured:
+            with self.assertRaises(claude.RoutineError):
+                self.fire((401, {"error": "sk-secret is invalid"}, {}))
+        logged = captured.output[0]
+        self.assertIn("HTTP 401", logged)
+        self.assertIn("is invalid", logged)
+        self.assertNotIn("sk-secret", logged)
+
+    def test_a_started_session_is_logged(self):
+        with self.assertLogs("control_panel", "INFO") as captured:
+            self.fire((200, {"claude_code_session_url": SESSION}, {}))
+        self.assertIn(SESSION, captured.output[0])
+
+    def test_an_accepted_call_without_a_session_logs_the_reply(self):
+        with self.assertLogs("control_panel", "ERROR") as captured:
+            with self.assertRaises(ValueError):
+                self.fire((200, {"type": "routine_fire"}, {}))
+        self.assertIn("routine_fire", captured.output[0])
 
     def test_an_unreachable_routine_is_a_transport_failure(self):
         with socket.socket() as probe:

@@ -14,10 +14,8 @@ from urllib.parse import urlparse
 
 from .task_scheduler import TaskScheduler, TaskError
 from .ui import render
-from . import sessions
+from . import logs, sessions
 from .integrations.process import failure_message
-
-LOGGER = logging.getLogger("control_panel")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -146,7 +144,8 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeError):
             self.respond(400, {"error": "Invalid JSON request"})
         except (OSError, subprocess.SubprocessError) as error:
-            LOGGER.error("Control-panel operation failed")
+            detail = "" if isinstance(error, subprocess.SubprocessError) else error
+            logs.failure(f"{self.command} {urlparse(self.path).path} failed", detail)
             self.respond(502, {"error": failure_message(error)})
 
 
@@ -162,7 +161,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    logging.basicConfig(level=os.environ.get("PANEL_LOG_LEVEL", "INFO").upper(),
+                        format="%(asctime)s %(levelname)s: %(message)s")
     args = parse_args()
     Handler.token = os.environ.get("PANEL_TOKEN", "")
     if not Handler.token:
@@ -175,7 +175,7 @@ def main() -> int:
         os.environ.get("CLAUDE_AUDIT_ROUTINE_TOKEN", ""),
     )
     with ThreadingHTTPServer((args.host, args.port), Handler) as server:
-        print(f"control panel on http://{args.host}:{args.port}")
+        logs.output(f"control panel on http://{args.host}:{args.port}")
         try:
             server.serve_forever()
         except KeyboardInterrupt:
