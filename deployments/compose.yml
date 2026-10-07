@@ -18,6 +18,8 @@ services:
       context: ..
       dockerfile: deployments/Dockerfile.toolchain
     working_dir: /workspace
+    environment:
+      GOFLAGS: -buildvcs=false
     volumes:
       - ..:/workspace
       - go-cache:/go/pkg/mod
