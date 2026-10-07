@@ -21,6 +21,12 @@ request, and an exit code that only reports whether the task was *submitted*.
 The scheduler keeps that line as `task_url` on the lease; the task ID any
 follow-up call needs is its last path segment.
 
+ChatGPT now serves that conversation at `/remote/<task_id>` instead, so what
+the CLI prints is no longer where the task opens. `canonical_task_url` rewrites
+the path on the way to the page rather than at dispatch, which also carries
+records written under the two earlier forms. The CLI is unchanged: expect the
+printed URL to keep disagreeing with the link in the panel.
+
 ## What the CLI can tell us
 
 | Command | Result |

@@ -474,7 +474,7 @@ def conversation_cell(entry: dict[str, Any], stage: str) -> str:
     # conversation it opened, which is the only trace of what was already asked for.
     linked = [attempt for attempt in attempts_for(entry, stage)
               if link_target(attempt.get("task_url"))]
-    # Records written before the cloud form was canonical still hold the bare one.
+    # Records written before /remote/ was the task view still hold a retired path.
     url = canonical_task_url(link_target(linked[-1]["task_url"])) if linked else ""
     target = f'href="{html.escape(url)}"' if url else "hidden"
     label = f"Open {stage} conversation"

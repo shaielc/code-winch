@@ -5,20 +5,24 @@ from pathlib import Path
 
 from .process import run
 
-TASK_URL = re.compile(r"https?://\S+/codex/(?:cloud/)?tasks/\S+")
+TASK_URL = re.compile(r"(https?://\S*?)/(?:remote|codex/(?:cloud/)?tasks)/(task_[\w-]+)")
 
 
 def canonical_task_url(url: str) -> str:
-    """Point a task URL at the Codex Cloud view, which is where the conversation opens.
+    """Point a task URL at the view the conversation opens in today, which is /remote/<task_id>.
 
-    The CLI reports the task either way; only the cloud form is worth linking to.
+    Dispatch has printed three shapes so far — /codex/tasks/, /codex/cloud/tasks/ and now
+    /remote/ — and stored records keep whichever was current when they were written. Anything
+    that is not a recognisable task URL is returned untouched, since the scheduler also stores
+    raw dispatch output under the same key.
     """
-    return url.replace("/codex/tasks/", "/codex/cloud/tasks/", 1)
+    match = TASK_URL.search(url)
+    return f"{match[1]}/remote/{match[2]}" if match else url
 
 
 def task_url_from(output: str) -> str | None:
     match = TASK_URL.search(output)
-    return canonical_task_url(match.group(0)) if match else None
+    return f"{match[1]}/remote/{match[2]}" if match else None
 
 
 def submit(clone: Path, environment: str, branch: str, prompt: str) -> str:
