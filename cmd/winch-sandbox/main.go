@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/shaielc/code-winch/internal/adapters/transport/attach"
+	"github.com/shaielc/code-winch/internal/runner"
 )
 
 func main() {
@@ -18,13 +19,20 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	handler, err := attach.New(config.staticDir, config.posture)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	session := runner.NewSession()
+	done := runner.Start(ctx, session, runner.HarnessConfig{Executable: config.harnessExecutable, Args: config.harnessArgs()})
+	handler, err := attach.New(config.staticDir, config.posture, session)
 	if err != nil {
 		log.Fatal(err)
 	}
 	server := &http.Server{Addr: config.addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	go func() {
+		if err := <-done; err != nil {
+			log.Printf("harness ended: %v", err)
+		}
+	}()
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)

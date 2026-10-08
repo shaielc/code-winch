@@ -26,9 +26,7 @@ type record struct {
 	Sensitivity string `json:"sensitivity,omitempty"`
 }
 
-// streamPayload matches schemas/events/v1/fixtures/raw-stream.json. Text is
-// carried as utf-8 rather than base64 so the terminal projection can render it
-// without decoding.
+// streamPayload is the fake harness's invented JSON-lines representation.
 type streamPayload struct {
 	Stream   string `json:"stream"`
 	Encoding string `json:"encoding"`
@@ -69,9 +67,10 @@ func main() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
-		<-signals
+		received := <-signals
 		emit(os.Stdout, operational("fake harness received a termination signal"))
-		os.Exit(0)
+		signal.Reset(received)
+		_ = syscall.Kill(os.Getpid(), received.(syscall.Signal))
 	}()
 	os.Exit(run(config{runID: *runID, transcript: *transcript, delay: *delay, forceFailure: *forceFailure, malformedLine: *malformedLine, earlyExit: *earlyExit}, os.Stdin, os.Stdout))
 }

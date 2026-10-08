@@ -216,12 +216,23 @@ runner-local ordinal, monotonically increasing and gap-free within the session.
 Consumers order by ordinal, never by timestamp. Records carry no canonical
 `sequence` and no `eventId`; §2 says what the control plane adds.
 
+The runner-local wire shape is
+`{ordinal, kind, occurredAt, sensitivity, payload}`. Raw stdout is retained as
+`stream.raw` with payload `{stream:"stdout", encoding, data}`; `encoding` is
+`utf-8` for valid UTF-8 and `base64` otherwise. Harness exit is
+`session.terminated`, whose payload carries the mapped `outcome` (`completed`,
+`failed`, or `stopped`) and the native exit code or terminating signal when
+present.
+
 **Reading is snapshot plus stream.** A caller fetches records from an ordinal and
 opens a stream from an ordinal, the same shape as §5 and without the
 authorization reattachment a long-lived control-plane stream needs. The stream
 emits a heartbeat and an explicit caught-up marker. On a gap or a reconnect, the
 caller refetches from its last ordinal. A slow reader is disconnected with its
 last ordinal and never backpressures the harness.
+
+The standalone live endpoint is `GET /api/session/stream`, upgraded to a
+WebSocket. Its messages use the runner-local record shape above.
 
 **Input is accepted or refused, never queued silently.** A submission carries an
 idempotency key scoped to the session and one typed payload, from the same set
