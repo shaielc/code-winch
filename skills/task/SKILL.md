@@ -183,8 +183,8 @@ output, or a `file:line`. A claim with neither is unmet.
 
 1. **Acceptance criteria** — one at a time, in order. No summarizing several
    into one verdict.
-2. **Demonstration** — run it as written. If it does not produce the stated
-   result, the task is not complete whatever the test suite says.
+2. **Demonstration** — run it as written. Record any discrepancy as a finding
+   and classify it; passing tests do not replace an observed demonstration.
 3. **Runtime reachability** — find the registration in the composition root and
    the profile or command that reaches the code. A port whose only
    implementations are test doubles, or an implementation nothing constructs, is
@@ -204,33 +204,31 @@ output, or a `file:line`. A claim with neither is unmet.
 8. **Invariants** — the seven hold at HEAD with this task in. Start the system,
    run the fake profile by hand, run the standing scenario suite.
 
-The verdict is **complete** or **not complete**; there is no partial. Not
-complete lists the specific criteria that fail and what would satisfy each.
+For every audit check above, report what holds and what does not, with
+evidence. **Classify every finding**, including deviations from acceptance
+criteria and demonstrations as well as findings outside the brief:
 
-Report findings outside the lines above separately, with evidence. Examples
-include a failure path no criterion names or a gap between the objective and
-the criteria. Such findings do not silently change the brief-based verdict.
-Classify each finding with exactly one descriptive decision group:
+- **Blocking** — must be resolved before merge. State the condition to satisfy.
+- **Defect** — real deviation from intended behavior. Requires explicit human
+  disposition before merge: fix now or accept and track. The audit does not
+  choose between these options.
+- **Deferrable** — valid work that could reasonably move elsewhere or later.
+  Requires human disposition before merge: handle now or assign a destination
+  and owner. The auditor may suggest one but does not decide to defer it.
+- **Harden** — recommended robustness, test-quality, or maintainability
+  follow-up; no pre-merge action required.
 
-- **Blocking** — must be resolved before merge. State the evidence and the
-  specific condition that needs to hold before merging.
-- **Defect** — a real deviation from intended behavior. Record an explicit
-  pre-merge disposition (fix now, or accept and track with an owner); the audit
-  does not choose the disposition.
-- **Deferrable** — valid work that belongs in a different task or later step.
-  Name its destination and owner before merge; do not leave it unowned.
-- **Harden** — an optional robustness, test-quality, or maintainability
-  improvement. Record the opportunity and evidence, but taking no action
-  does not affect merge readiness.
+Keep observed acceptance results distinct from classification. A failed
+criterion is not automatically Blocking or an automatic not-complete verdict.
+For example, rejected-button focus behavior may be a non-blocking Defect
+requiring human disposition; test coverage weaknesses may be Harden; stable
+identity for persisted submissions may be Deferrable if a person assigns it
+downstream.
 
-These groups describe the finding and required decision, not severity scores or
-an automatic instruction to modify code. For example, a rejection path that
-unexpectedly moves focus is a Defect; insufficient path-specific test coverage
-may be Harden; replacing temporary positional React keys with persisted record
-identity in an already-planned downstream task is Deferrable. Distinguish a
-failed acceptance criterion (which makes the task not complete) from an
-additional finding even when the two describe similar behavior. A person owns
-fix-versus-accept decisions for Defects and destinations for Deferrable work.
+The audit reports its findings and any outstanding decisions. A person decides
+whether the task is accepted as complete and can merge. Blocking findings must
+be resolved; Defect and Deferrable findings require disposition; Harden findings
+remain recorded recommendations.
 
 When the cause is the brief rather than the code — a seam between two briefs, an
 assumption one brief made about another's output, an invariant no task owns —
