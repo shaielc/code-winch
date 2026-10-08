@@ -207,10 +207,30 @@ output, or a `file:line`. A claim with neither is unmet.
 The verdict is **complete** or **not complete**; there is no partial. Not
 complete lists the specific criteria that fail and what would satisfy each.
 
-Report defects found outside the lines above as separate findings, each with
-its evidence. Examples are a failure path no criterion names, or a gap between
-the objective and the criteria. They do not change the verdict. A person decides
-whether each one blocks the task, becomes its own task, or corrects the brief.
+Report findings outside the lines above separately, with evidence. Examples
+include a failure path no criterion names or a gap between the objective and
+the criteria. Such findings do not silently change the brief-based verdict.
+Classify each finding with exactly one descriptive decision group:
+
+- **Blocking** — must be resolved before merge. State the evidence and the
+  specific condition that needs to hold before merging.
+- **Defect** — a real deviation from intended behavior. Record an explicit
+  pre-merge disposition (fix now, or accept and track with an owner); the audit
+  does not choose the disposition.
+- **Deferrable** — valid work that belongs in a different task or later step.
+  Name its destination and owner before merge; do not leave it unowned.
+- **Harden** — an optional robustness, test-quality, or maintainability
+  improvement. Record the opportunity and evidence, but taking no action
+  does not affect merge readiness.
+
+These groups describe the finding and required decision, not severity scores or
+an automatic instruction to modify code. For example, a rejection path that
+unexpectedly moves focus is a Defect; insufficient path-specific test coverage
+may be Harden; replacing temporary positional React keys with persisted record
+identity in an already-planned downstream task is Deferrable. Distinguish a
+failed acceptance criterion (which makes the task not complete) from an
+additional finding even when the two describe similar behavior. A person owns
+fix-versus-accept decisions for Defects and destinations for Deferrable work.
 
 When the cause is the brief rather than the code — a seam between two briefs, an
 assumption one brief made about another's output, an invariant no task owns —
@@ -223,6 +243,15 @@ The audit reports; it does not act on its findings. It does not create tasks,
 add deferral rows, or edit the brief it judges in the same change as its
 verdict. Those are plan changes, made separately once a person has accepted the
 finding.
+
+## Optional side operations
+
+Keep the delivery loop (refine → implement → audit → merge) unchanged.
+Use `skills/propagate/SKILL.md` only when a discovery materially affects an
+already-planned downstream task. Use `skills/reflect/SKILL.md` only when task
+evidence suggests a reusable improvement to the development system. Neither
+operation is a mandatory new gate, and neither authorizes the audit to edit
+its own findings into the plan.
 
 ## Review rounds
 
