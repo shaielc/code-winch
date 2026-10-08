@@ -26,6 +26,10 @@ why; it is never accepted silently and then dropped.
   the input kind and never the payload content.
 - Bounded payload size, rejected as `INPUT_INVALID` rather than read into memory.
 - `winch input "<text>"`, and the page's composer submits instead of echoing locally.
+- P0-004 deliberately used positional React keys for its transient append-only local
+  echo. Do not carry that implementation detail into persisted submissions: when the
+  local list is replaced, render submitted records with stable runner-backed identity
+  (the submission identifier or other stable record identity), not `key={index}`.
 
 ## Non-goals
 
@@ -53,7 +57,7 @@ P0-003 built. `docker compose -f deployments/compose.yml up --build` reaches it;
 - `internal/adapters/transport/attach/input.go`, `.../server.go`
 - `cmd/winch-sandbox/main.go`
 - `cmd/winch/input.go`
-- `web/src/attach/Composer.tsx`, `web/src/attach/useSubmitInput.ts`
+- `web/src/attach/App.tsx`, `web/src/attach/Composer.tsx`, `web/src/attach/useSubmitInput.ts`
 - `test/e2e/scenario_input_recorded_test.go`
 - `test/contract/attach/input_refusal_test.go`
 
@@ -126,6 +130,8 @@ P0-003 built. `docker compose -f deployments/compose.yml up --build` reaches it;
       the response for it; expect zero occurrences (`docs/security.md` §5).
 - [ ] The page's composer now submits; the local-echo behaviour P0-004 shipped is
       replaced rather than left beside it.
+- [ ] The P0-004 local list's `key={index}` does not survive this replacement.
+      Persisted submitted records use stable runner-backed identity as their React key.
 - [ ] P0-001 through P0-004's demonstrations still pass, except P0-004's reload step,
       which this task deliberately changes — the brief records that the local echo
       becomes a persisted submission here.
