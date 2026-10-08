@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import threading
 import uuid
 import subprocess
@@ -11,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import prompts, state as task_state
+from . import logs, prompts, state as task_state
 from .integrations import claude, codex, repository
 from .integrations.process import failure_message
 
@@ -76,8 +75,7 @@ class TaskScheduler:
         except (OSError, subprocess.SubprocessError) as error:
             result = {"status": "failed", "error": failure_message(error)}
         except Exception:
-            # Do not log a command, prompt, or exception text that might contain secrets.
-            logging.getLogger("control_panel").error("Unexpected sync failure")
+            logs.unexpected("Unexpected sync failure")
             result = {"status": "failed", "error": "Sync failed unexpectedly; check the tracker and panel configuration."}
         with self._jobs_lock:
             self._resync_requested = False
@@ -127,6 +125,79 @@ class TaskScheduler:
                                  f"expire a lease before preparing {task_id}")
         return [task]
 
+    def track_pull_requests(self, state: dict[str, Any]) -> None:
+        """Record the pull request into main for each prepared task, until one has merged.
+
+        A merged pull request is final, so it is not asked about again. One task's lookup
+        failing must not stop the pass, and run() has already logged why.
+        """
+        for task_id, record in state["tasks"].items():
+            if not record.get("prepared") or record.get("pull_request_state") == "MERGED":
+                continue
+            try:
+                self.look_up_pull_request(task_id, record)
+            except (OSError, subprocess.SubprocessError, ValueError):
+                continue
+
+    def look_up_pull_request(self, task_id: str, record: dict[str, Any]) -> None:
+        found = repository.task_pull_request(self.clone, task_id)
+        if found:
+            record.update(pull_request=found["url"], pull_request_state=found["state"])
+        else:
+            record.pop("pull_request", None)
+            record.pop("pull_request_state", None)
+
+    def create_pull_request(self, task_id: str, force: bool = False):
+        """Open the task branch's pull request into main, unless one is already open.
+
+        Forcing skips that check and asks GitHub anyway, which refuses a second open pull
+        request for the same branches, so a forced call only succeeds once the first is closed.
+        """
+        with self.locked():
+            state = task_state.load_state(self.state_file)
+            task = next((t for t in self.tracker()["tasks"] if t["id"] == task_id), None)
+            if task is None:
+                raise TaskError(404, "Unknown task")
+            record = state["tasks"].get(task_id)
+            if not record or not record.get("prepared") or task["status"] == "completed":
+                raise TaskError(409, f"{task_id} must be prepared and incomplete to open a pull request")
+            try:
+                if not force:
+                    self.look_up_pull_request(task_id, record)
+                created = force or record.get("pull_request_state") != "OPEN"
+                if created:
+                    url = repository.create_task_pull_request(self.clone, task_id, task["title"])
+                    record.update(pull_request=url, pull_request_state="OPEN")
+            except (OSError, subprocess.SubprocessError, ValueError) as error:
+                raise TaskError(502, "GitHub did not create the pull request; check that the "
+                                "panel's GH_TOKEN can write pull requests, that the branch has "
+                                "commits ahead of main, and that none is already open for it; "
+                                "the panel log has GitHub's reply") from error
+            task_state.write_json(self.state_file, state)
+            return {"task": task_id, "pull_request": record["pull_request"],
+                    "pull_request_state": record["pull_request_state"], "created": created}
+
+    def refresh_pull_request(self, task_id: str):
+        """Look up one task's pull request now, ignoring a merged one already recorded.
+
+        Unlike a sync this touches no other task and no branch, so it answers directly.
+        """
+        with self.locked():
+            state = task_state.load_state(self.state_file)
+            if not any(t["id"] == task_id for t in self.tracker()["tasks"]):
+                raise TaskError(404, "Unknown task")
+            record = state["tasks"].get(task_id)
+            if not record or not record.get("prepared"):
+                raise TaskError(409, f"Prepare {task_id} before looking for its pull request")
+            try:
+                self.look_up_pull_request(task_id, record)
+            except (OSError, subprocess.SubprocessError, ValueError) as error:
+                raise TaskError(502, "GitHub did not answer the pull request lookup; "
+                                "check the panel's GH_TOKEN and retry") from error
+            task_state.write_json(self.state_file, state)
+            return {"task": task_id, "pull_request": record.get("pull_request"),
+                    "pull_request_state": record.get("pull_request_state")}
+
     def sync(self, event: dict[str, Any] | None = None, only: str | None = None):
         if event is not None:
             pull = event.get("pull_request")
@@ -141,6 +212,7 @@ class TaskScheduler:
                 raise TaskError(409, str(error)) from error
             state = task_state.load_state(self.state_file)
             task_state.retire_completed(tracker, state)
+            self.track_pull_requests(state)
             task_state.write_json(self.tracker_path, tracker)
             task_state.write_json(self.state_file, state)
             effective = task_state.effective_tracker(tracker, state)
@@ -176,6 +248,7 @@ class TaskScheduler:
                 record["prepared"] = True
                 task_state.write_json(self.state_file, state)
                 prepared.append(task["id"])
+            logs.output(f"sync at {base[:12]} prepared", ", ".join(prepared) or "nothing")
             return {"prepared": prepared, "main_commit": base}
 
     def task(self, task_id: str, state):

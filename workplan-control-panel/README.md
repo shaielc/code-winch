@@ -113,6 +113,9 @@ PANEL_TOKEN=... CODEX_ENV_ID=... python3 -m control_panel \
 Tests use a local Git remote, mocked cloud submissions/PR listing, and a local
 HTTP stub for the Claude routine.
 
+The page tests (`tests/test_ui.py` and `tests/test_ui.cjs`) are paused while the
+interface settles and skip unless `RUN_UI_TESTS=1` is set.
+
 ## Deploy
 
 From this directory, copy `.env.example` to `.env` and set `GITHUB_URL`, a current
@@ -139,6 +142,20 @@ The runner's registration/work volumes are separate from the panel's checkout,
 state, and Codex login. When upgrading the old shared-volume installation, stop
 it and preserve its `task-state.json` in scheduler-state and its registration in
 runner-config. Do not run old and new schedulers together.
+
+## Logs
+
+`docker compose logs -f control-panel` is the account of what the panel ran. At the
+default `PANEL_LOG_LEVEL=INFO` it writes one line per scheduling pass, one per cloud
+dispatch carrying the CLI's own output, and one per started audit session; failures add
+the subprocess's exit status and the tail of its stderr, or the routine's HTTP status and
+reply. `WARNING` keeps only the failures.
+
+Operator-facing messages in the panel deliberately name no command or argument, so the
+log is where that detail goes. Every line passes through `logs.redact` first: the panel's
+own secrets, a URL's embedded credentials, and GitHub and Anthropic token shapes are
+replaced, and a prompt-sized argument is logged as its length rather than its text.
+Treat the log as sensitive anyway — it carries branch names, task IDs and tool output.
 
 Use `PANEL_BIND` and `PANEL_PORT` to override `127.0.0.1:8765`. Site-specific
 Compose changes belong in the gitignored `compose.override.yml`; `up.sh` includes
