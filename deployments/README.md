@@ -23,17 +23,20 @@ from a malicious harness.
 
 The compose project is `code-winch`. Tests never use it: `compose.test.yml` layers an
 isolated project, `code-winch-test`, over the same services. The sandbox there publishes
-no host port, so it cannot collide with a running dev sandbox, and it shares a
-`test-network` with the `toolchain` service, which reaches it as `http://sandbox:8080`.
+a random free port on `127.0.0.1`, so it cannot collide with a running dev sandbox, and
+it shares a `test-network` with the `toolchain` service, which reaches it as
+`http://sandbox:8080`.
 
 - `make test-cycle` is the whole path and needs only Docker: it starts the test
   environment, runs the format, vet, unit-test, and build gates plus the e2e scenarios
   inside the `toolchain` service, and always tears the environment down.
 - `make test-env` starts the test environment and checks that the sandbox is healthy,
   runs as a non-root user, and that the production compose file pins the published host
-  IP to `127.0.0.1`. `make e2e` runs the scenarios against it, and
-  `make test-env-down` removes it. `make e2e` does not start or stop anything.
+  IP to `127.0.0.1`. It prints the sandbox URL on its last line. `make e2e` runs the
+  scenarios from the host against it (`WINCH_E2E_URL=<that URL> make e2e`),
+  `make docker-e2e` runs them in the `toolchain` service on the test network, and
+  `make test-env-down` removes the environment. Neither e2e target starts or stops anything.
 
 The test environment cannot show that the host's routable address refuses the port,
-because nothing is published there. That check stays manual: see the Demonstration in
+because it is published on loopback only. That check stays manual: see the Demonstration in
 `docs/workplan/phase-0/P0-001-sandbox-serves-attach-page.md`.
