@@ -219,7 +219,11 @@ Consumers order by ordinal, never by timestamp. Records carry no canonical
 The runner-local wire shape is
 `{ordinal, kind, occurredAt, sensitivity, payload}`. Raw stdout is retained as
 `stream.raw` with payload `{stream:"stdout", encoding, data}`; `encoding` is
-`utf-8` for valid UTF-8 and `base64` otherwise. Harness exit is
+`utf-8` for valid UTF-8 and `base64` otherwise. A record's JSON encoding is at
+most 64 KiB: the runner bounds each chunk so that even its worst-case encoding
+(a control byte escapes to six bytes) fits, so no record is split or dropped for
+its size, and a reader must accept messages of 64 KiB, which exceeds the default
+message limit of common WebSocket client libraries. Harness exit is
 `session.terminated`, whose payload carries the mapped `outcome` (`completed`,
 `failed`, or `stopped`) and the native exit code or terminating signal when
 present.
