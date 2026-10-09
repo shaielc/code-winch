@@ -225,10 +225,36 @@ requiring human disposition; test coverage weaknesses may be Harden; stable
 identity for persisted submissions may be Deferrable if a person assigns it
 downstream.
 
-The audit reports its findings and any outstanding decisions. A person decides
-whether the task is accepted as complete and can merge. Blocking findings must
-be resolved; Defect and Deferrable findings require disposition; Harden findings
-remain recorded recommendations.
+### Audit state
+
+Assign one **audit state** from the classified findings, using this precedence:
+
+- **Not Complete** — at least one Blocking finding exists.
+- **Input Required** — no Blocking finding exists, but at least one Defect or
+  Deferrable finding exists. A person must decide its disposition.
+- **Complete** — no Blocking, Defect, or Deferrable findings exist. Harden
+  findings may still be recorded.
+
+Blocking takes precedence over Defect and Deferrable. **Harden never changes
+the audit state.** Report the state and the evidence for each finding, without
+conflating whether an acceptance criterion held with its classification.
+
+### Merge readiness
+
+**Audit state is not merge readiness.** Not Complete means Blocking findings
+must be resolved before merge. Input Required means the audit cannot decide
+how to handle a Defect or Deferrable finding; a person must record a disposition
+for each before merge. They may fix a Defect now or accept and track it, and
+may handle Deferrable work now or assign a destination and owner. Harden requires
+no pre-merge action.
+
+After the human dispositions are recorded, a pull request may be merge-ready
+even if its original audit state is Input Required. Keep that audit state and
+the original findings as an accurate record; do not silently erase, downgrade,
+or reclassify them because someone accepted the risk or assigned the work.
+A subsequent audit may report a new state when the observed findings change.
+Report the state and any outstanding merge-readiness conditions separately.
+The audit reports; a person makes the product and process tradeoffs.
 
 When the cause is the brief rather than the code — a seam between two briefs, an
 assumption one brief made about another's output, an invariant no task owns —
