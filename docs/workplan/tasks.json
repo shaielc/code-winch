@@ -49,7 +49,7 @@
       "title": "The page has an input control that echoes what you type",
       "phase": 0,
       "phase_name": "A sandbox you can talk to",
-      "status": "in_progress",
+      "status": "completed",
       "depends_on": [
         "P0-001"
       ],
