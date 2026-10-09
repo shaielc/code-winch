@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from control_panel.integrations import repository
+from control_panel.integrations import github, repository
 from control_panel.integrations.process import run
 
 TASK = {"id": "P0-001", "title": "Upstream"}
@@ -16,12 +16,21 @@ TRACKER = {
 }
 
 
+class FixedToken:
+    """Stands in for the GitHub App, which a local file remote needs nothing from."""
+
+    def token(self) -> str:
+        return "test-installation-token"
+
+
 def git(cwd: Path, *arguments: str) -> str:
     return run("git", *arguments, cwd=cwd)
 
 
-def pushes(spy) -> list[tuple[str, ...]]:
-    return [call.args for call in spy.call_args_list if call.args[:2] == ("git", "push")]
+def pushes(*spies) -> list[tuple[str, ...]]:
+    """Every push the spied-on runners were asked for, authenticated or not."""
+    return [call.args for spy in spies for call in spy.call_args_list
+            if call.args[:2] == ("git", "push")]
 
 
 class GitRepositoryFixture:
@@ -34,6 +43,11 @@ class GitRepositoryFixture:
         )
         isolated.start()
         self.addCleanup(isolated.stop)
+        # The panel will not run a GitHub command without credentials installed, so the
+        # fixture installs ones no local remote will ever be asked for.
+        credentials = patch.object(github, "_credentials", FixedToken())
+        credentials.start()
+        self.addCleanup(credentials.stop)
 
         self.origin = self.root / "origin.git"
         git(self.root, "init", "--quiet", "--bare", "--initial-branch=main", str(self.origin))

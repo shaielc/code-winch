@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from .task_scheduler import TaskScheduler, TaskError
 from .ui import render
 from . import logs, sessions
+from .integrations import github, github_app, repository
 from .integrations.process import failure_message
 
 
@@ -168,6 +169,26 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def bootstrap(clone: Path, url: str) -> None:
+    """Authenticate to GitHub, configure Git's credentials, and clone main if it is absent.
+
+    This is where the panel's credential is chosen and first used, so a deployment that
+    cannot authenticate fails here with one message naming what to fix, rather than serving
+    a panel whose every button fails. The clone is part of it because an installation token
+    is short-lived: nothing before the process can hold one on its behalf.
+    """
+    try:
+        github.use(github.from_environment())
+        clone.mkdir(parents=True, exist_ok=True)
+        github.setup_git(url, clone)
+        repository.ensure_clone(clone, url)
+    except github_app.ConfigurationError as error:
+        raise SystemExit(str(error)) from None
+    except (OSError, subprocess.SubprocessError) as error:
+        raise SystemExit("The control panel could not prepare its checkout. "
+                         + failure_message(error)) from None
+
+
 def main() -> int:
     logging.basicConfig(level=os.environ.get("PANEL_LOG_LEVEL", "INFO").upper(),
                         format="%(asctime)s %(levelname)s: %(message)s")
@@ -176,6 +197,9 @@ def main() -> int:
     Handler.repository_url = os.environ.get("GITHUB_URL", "")
     if not Handler.token:
         raise SystemExit("Set PANEL_TOKEN before starting the control panel")
+    if not Handler.repository_url:
+        raise SystemExit("Set GITHUB_URL to the repository the control panel schedules")
+    bootstrap(args.clone, Handler.repository_url)
     Handler.scheduler = TaskScheduler(
         args.clone, args.state_file,
         args.tracker or args.state_file.parent / "tracker.json",

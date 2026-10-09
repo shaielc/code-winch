@@ -18,5 +18,7 @@ deployments/.env
 # Local skill-discovery links; the skills themselves live in skills/
 .claude/
 
+# Workplan control panel secrets and user config
 workplan-control-panel/.env
 workplan-control-panel/compose.override.yml
+workplan-control-panel/secrets/

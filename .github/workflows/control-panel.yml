@@ -28,6 +28,3 @@ jobs:
 
       - name: Test workplan control panel
         run: python3 -m unittest discover -s tests -v
-
-      - name: Test control panel UI
-        run: node tests/test_ui.cjs

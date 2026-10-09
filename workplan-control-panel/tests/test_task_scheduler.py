@@ -73,7 +73,7 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             with self.assertRaises(TaskError) as failed:
                 self.panel.create_pull_request('P0-001')
             self.assertEqual(failed.exception.status, 502)
-            self.assertIn('GH_TOKEN', str(failed.exception))
+            self.assertIn('GitHub App', str(failed.exception))
 
     def test_refreshing_one_task_looks_up_only_its_pull_request(self):
         self.panel.sync()

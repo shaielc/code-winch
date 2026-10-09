@@ -17,13 +17,32 @@ LOGGER = logging.getLogger("control_panel")
 
 # The panel's own secrets, scrubbed out of whatever a tool prints back at us.
 SECRET_VARS = ("GH_TOKEN", "PANEL_TOKEN", "CLAUDE_AUDIT_ROUTINE_TOKEN", "RUNNER_TOKEN")
-# Credentials the panel never held but a tool may still echo: a URL's userinfo, and the
-# token shapes GitHub and Anthropic hand out.
+# Credentials the panel never held but a tool may still echo: a URL's userinfo, the token
+# shapes GitHub and Anthropic hand out — `ghs_` among them, which is what an App
+# installation token is — a signed JWT, and a PEM private key.
 CREDENTIAL = re.compile(r"(?<=://)[^/\s:@]+(?::[^/\s@]*)?(?=@)"
-                        r"|\b(?:gh[pousr]_|github_pat_|sk-ant-)[\w\-]{8,}")
+                        r"|\b(?:gh[pousr]_|github_pat_|sk-ant-)[\w\-]{8,}"
+                        r"|\beyJ[\w\-]{10,}\.[\w\-]{10,}\.[\w\-]{10,}"
+                        r"|-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?"
+                        r"-----END [A-Z ]*PRIVATE KEY-----")
 PLACEHOLDER = "[redacted]"
 TAIL = 1500  # characters of a tool's output worth keeping
 ARGUMENT = 80  # a longer argument is a prompt, not an argument
+MINIMUM = 8  # a shorter secret would redact half the line on a coincidental match
+
+_guarded: tuple[str, ...] = ()
+
+
+def guard(secret: str) -> None:
+    """Keep a secret the environment no longer carries out of the log for this process.
+
+    The panel takes its GitHub token out of its own environment so that only the commands
+    needing it are given it, which also takes it out of redact()'s reach; naming it here
+    puts it back. Rebinding the tuple leaves a concurrent reader a consistent view.
+    """
+    global _guarded
+    if secret and len(secret) >= MINIMUM and secret not in _guarded:
+        _guarded += (secret,)
 
 
 def redact(text: object, *also: str) -> str:
@@ -33,10 +52,9 @@ def redact(text: object, *also: str) -> str:
     the audit routine's, during a fire — has to be named, so `also` takes it.
     """
     out = str(text if text is not None else "")
-    values = [os.environ.get(name, "") for name in SECRET_VARS] + list(also)
+    values = [os.environ.get(name, "") for name in SECRET_VARS] + list(_guarded) + list(also)
     for value in values:
-        # A short value would redact half the line on a coincidental match.
-        if value and len(value) >= 8:
+        if value and len(value) >= MINIMUM:
             out = out.replace(value, PLACEHOLDER)
     return CREDENTIAL.sub(PLACEHOLDER, out)
 
