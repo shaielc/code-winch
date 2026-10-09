@@ -10,7 +10,19 @@ import (
 	"unicode/utf8"
 )
 
-const readBufferSize = 32 * 1024
+const (
+	// jsonExpansion is the worst-case growth of a chunk of valid UTF-8 once it
+	// is a JSON string: a control byte such as 0x01 becomes the six bytes \u0001.
+	// Base64, used for any other chunk, grows by a third and is always smaller.
+	jsonExpansion = 6
+	// recordEnvelopeBytes is the room left for everything in a record except
+	// the chunk itself; the ordinal, kind, timestamp and payload keys take
+	// about 200 bytes.
+	recordEnvelopeBytes = 1024
+	// readBufferSize bounds a chunk so that its worst-case record fits
+	// MaxRecordBytes, however the pipe delivers the bytes.
+	readBufferSize = (MaxRecordBytes - recordEnvelopeBytes) / jsonExpansion
+)
 
 type HarnessConfig struct {
 	Executable string
@@ -32,8 +44,10 @@ func RunHarness(ctx context.Context, session *Session, config HarnessConfig) err
 	if err := command.Start(); err != nil {
 		return err
 	}
-	// Input arrives in a later stage. Keeping stdin open keeps an interactive
-	// harness alive while its output is observed.
+	// Nothing is written to stdin until P0-006 delivers a submission to the
+	// harness (P0-004 and P0-005 build the page control and record the
+	// submission). Keeping stdin open meanwhile keeps an interactive harness
+	// alive while its output is observed.
 	defer func() { _ = stdin.Close() }()
 	readErr := pump(stdout, session)
 	waitErr := command.Wait()

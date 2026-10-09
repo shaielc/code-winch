@@ -6,9 +6,12 @@ import (
 	"net/http"
 
 	"github.com/coder/websocket"
+	"github.com/shaielc/code-winch/internal/runner"
 )
 
-const recordWriteLimit = 64 * 1024
+// recordWriteLimit is the largest record the stream writes. The runner bounds
+// every record to this size, so exceeding it is a defect, not a payload to drop.
+const recordWriteLimit = runner.MaxRecordBytes
 
 func (s *Server) stream(w http.ResponseWriter, request *http.Request) {
 	connection, err := websocket.Accept(w, request, nil)

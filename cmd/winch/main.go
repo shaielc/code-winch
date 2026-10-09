@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 )
@@ -15,7 +16,7 @@ func main() {
 	case "status":
 		err = runStatus(os.Args[2:], os.Stdout)
 	case "stream":
-		err = runStream(os.Args[2:], os.Stdout)
+		err = runStream(context.Background(), os.Args[2:], os.Stdout)
 	default:
 		fmt.Fprintln(os.Stderr, "usage: winch <status|stream> [--url URL]")
 		os.Exit(2)
