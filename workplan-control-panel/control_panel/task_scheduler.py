@@ -170,8 +170,9 @@ class TaskScheduler:
                     record.update(pull_request=url, pull_request_state="OPEN")
             except (OSError, subprocess.SubprocessError, ValueError) as error:
                 raise TaskError(502, "GitHub did not create the pull request; check that the "
-                                "panel's GH_TOKEN can write pull requests, that the branch has "
-                                "commits ahead of main, and that none is already open for it; "
+                                "GitHub App is installed on this repository with Contents and "
+                                "Pull requests write permission, that the branch has commits "
+                                "ahead of main, and that none is already open for it; "
                                 "the panel log has GitHub's reply") from error
             task_state.write_json(self.state_file, state)
             return {"task": task_id, "pull_request": record["pull_request"],
@@ -192,8 +193,8 @@ class TaskScheduler:
             try:
                 self.look_up_pull_request(task_id, record)
             except (OSError, subprocess.SubprocessError, ValueError) as error:
-                raise TaskError(502, "GitHub did not answer the pull request lookup; "
-                                "check the panel's GH_TOKEN and retry") from error
+                raise TaskError(502, "GitHub did not answer the pull request lookup; check the "
+                                "control panel's GitHub App installation and retry") from error
             task_state.write_json(self.state_file, state)
             return {"task": task_id, "pull_request": record.get("pull_request"),
                     "pull_request_state": record.get("pull_request_state")}

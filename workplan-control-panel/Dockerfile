@@ -15,7 +15,7 @@ ENV CLAUDE_CONFIG_DIR=/home/runner/.claude
 COPY --from=node-runtime /usr/local/ /usr/local/
 
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends python3 git gh ca-certificates \
+    && apt-get install --yes --no-install-recommends python3 git gh ca-certificates openssl \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /home/runner/.codex "${CLAUDE_CONFIG_DIR}" /home/runner/_work /var/lib/code-winch/checkout /var/lib/code-winch/state \
     && chown -R runner:runner /home/runner/.codex "${CLAUDE_CONFIG_DIR}" /home/runner/_work /var/lib/code-winch

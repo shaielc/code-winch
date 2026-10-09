@@ -221,7 +221,8 @@ Right-click it for the rest — submit the stage again, expire the submission so
 launches afresh, or open a conversation an earlier attempt left behind. The GitHub icon is grey
 until Sync main finds a pull request from the task branch into main, then green and linked;
 click the grey one to create that pull request, or right-click to create one, open GitHub's
-new-pull-request page, or refresh just this task. Creating needs a GH_TOKEN that can write pull requests.
+new-pull-request page, or refresh just this task. Creating needs the panel's GitHub App to hold
+pull-request write permission on this repository.
 Sync main prepares every
 available task branch; Prepare claims one named task against a free scheduler slot. Refine and
 Implement run Codex on the task branch; merge refinement changes there before starting

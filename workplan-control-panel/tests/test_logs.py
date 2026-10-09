@@ -37,6 +37,30 @@ class RedactionTests(unittest.TestCase):
     def test_a_token_supplied_as_an_argument_can_be_named(self):
         self.assertNotIn("sk-secret", logs.redact('{"error": "sk-secret is invalid"}', "sk-secret"))
 
+    def test_the_github_apps_own_credentials_are_redacted_by_shape(self):
+        installation = "ghs_16C7e42F292c6912E7710c838347Ae178B4a"
+        jwt = ("eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9"
+               ".eyJleHAiOjE3NjAwMDAwMDAsImlhdCI6MTc2MDAwMDAwMCwiaXNzIjoiMTIzNDU2In0"
+               ".Zm9yZ2VkLXNpZ25hdHVyZS1ieXRlcy1zdGFuZC1pbi1mb3ItdGhlLXJlYWwtdGhpbmc")
+        key = ("-----BEGIN RSA PRIVATE KEY-----\n"
+               "MIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo4lgOEePzNm0tRgeLezV6ffAt0gun\n"
+               "-----END RSA PRIVATE KEY-----")
+        for secret in (installation, jwt, key):
+            redacted = logs.redact(f"remote: rejected {secret} at 12:00")
+            self.assertNotIn(secret, redacted)
+            self.assertIn("remote: rejected [redacted] at 12:00", " ".join(redacted.split()))
+        # The JWT shape is a credential; an ordinary dotted word is not.
+        intact = "task_e_01.header.payload"
+        self.assertEqual(logs.redact(intact), intact)
+
+    def test_a_secret_the_environment_no_longer_carries_can_be_guarded(self):
+        # The panel takes its GitHub token out of os.environ, which is how it stays redacted.
+        logs.guard("40characterlegacypersonalaccesstoken0001")
+        self.assertNotIn("40characterlegacypersonalaccesstoken0001",
+                         logs.redact("fatal: 40characterlegacypersonalaccesstoken0001 rejected"))
+        logs.guard("short")
+        self.assertEqual(logs.redact("short of breath"), "short of breath")
+
     def test_a_prompt_sized_argument_is_summarized_not_pasted(self):
         prompt = "Implement P0-001. " * 40
         named = logs.command(("codex", "cloud", "exec", "--branch", "task/P0-001", prompt))

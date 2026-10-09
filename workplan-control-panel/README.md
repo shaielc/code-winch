@@ -15,6 +15,8 @@ There are no imports from the repository's `scripts/` or tests directories.
 | `control_panel/task_scheduler.py` | Task selection, branch preparation, stage orchestration |
 | `control_panel/state.py` | Reservations, locking, tracker reconciliation |
 | `control_panel/integrations/` | Git/GitHub and Codex CLI operations; Claude routine trigger |
+| `control_panel/integrations/github.py` | The only place a GitHub credential enters a command |
+| `control_panel/integrations/github_app.py` | App JWT, installation lookup, installation tokens |
 | `control_panel/prompts/` | Bundled Refine, Implement, and Audit templates |
 | `tests/` | Panel tests, including local Git and HTTP scenarios |
 
@@ -93,6 +95,35 @@ retires the submission rather than deleting it, so its conversation stays linked
 a submission whose outcome is uncertain says so — Codex may have accepted it before
 the reply was lost, so check there first, because expiring can run it twice.
 
+## GitHub identity
+
+The panel authenticates to GitHub as its own GitHub App, using an installation access
+token minted on demand from the App's private key. Nothing it does needs a long-lived
+personal access token, and the identities stay separate:
+
+| | |
+| --- | --- |
+| Task branch opening commit | `Code Winch`, from `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL` |
+| Git and `gh` authentication | the App's installation on this repository |
+| Task pull request into main | `<app-name>[bot]` |
+| Review and approval | a person, who is not the author |
+
+A pull request the panel opens is therefore reviewable by the account that runs the panel,
+which a pull request authored by that account's own token would not be.
+
+`control_panel/integrations/github_app.py` signs a short App JWT with the private key,
+resolves the installation covering `GITHUB_URL`, exchanges it for an installation token,
+and holds that token until five minutes before it expires. Threads share one mint: the
+HTTP server and the sync job cannot each ask for a token of their own. The private key is
+never read into the process — `openssl` signs from the mounted file — so it cannot reach a
+log, a traceback or a command's arguments.
+
+`github_run` in `control_panel/integrations/github.py` is the only thing that puts that
+token in a command's environment, for `git clone`, `fetch`, `pull` and `push` and for the
+`gh pr` calls. The panel's own environment holds no GitHub credential, so `codex cloud
+exec` — which runs agent-chosen work — cannot read one. Everything local, including the
+opening commit itself, runs without a credential.
+
 `task-state.json` is written at schema version 2, which records stages as one list
 per stage. A version 1 file, which keyed each submission `"<stage>:<head>"` in a
 single map, is migrated when the panel reads it; an unrecognised version is refused
@@ -105,22 +136,57 @@ the panel also requires GitHub CLI and an authenticated Codex CLI:
 
 ```sh
 python3 -m unittest discover -s tests -v
-node tests/test_ui.cjs
-PANEL_TOKEN=... CODEX_ENV_ID=... python3 -m control_panel \
+GITHUB_URL=https://github.com/OWNER/REPOSITORY \
+  GITHUB_APP_ID=... GITHUB_APP_PRIVATE_KEY_FILE=/path/to/app.pem \
+  PANEL_TOKEN=... CODEX_ENV_ID=... python3 -m control_panel \
   --clone=/path/to/dedicated-main-checkout --state-file=/path/to/state/task-state.json
 ```
 
-Tests use a local Git remote, mocked cloud submissions/PR listing, and a local
-HTTP stub for the Claude routine.
+Starting the panel mints an installation token before it serves, so a GitHub App that is
+misconfigured or not installed on `GITHUB_URL` is a startup failure naming what to fix
+rather than a panel whose every button fails. It also configures Git's credential helper
+and clones main if the checkout is absent. `openssl` is required for signing.
 
-The page tests (`tests/test_ui.py` and `tests/test_ui.cjs`) are paused while the
-interface settles and skip unless `RUN_UI_TESTS=1` is set.
+Tests use a local Git remote, mocked cloud submissions/PR listing, local HTTP stubs for
+the Claude routine and for GitHub's App endpoints, and a throwaway RSA key. No test
+reaches GitHub, and the App's JWT is verified against that key the way GitHub would
+verify it.
+
+There are no page tests; `render` is exercised through the scheduler tests that assert on
+the HTML it produces.
 
 ## Deploy
 
-From this directory, copy `.env.example` to `.env` and set `GITHUB_URL`, a current
-runner registration `RUNNER_TOKEN`, `GH_TOKEN` (contents write and pull-request
-read), `CODEX_ENV_ID`, `PANEL_TOKEN`, and the audit routine's API trigger as
+### The panel's GitHub App
+
+Create a GitHub App owned by the account that owns the repository, and install it on that
+repository alone. It needs three repository permissions and no user permissions:
+
+| Permission | Access |
+| --- | --- |
+| Contents | Read and write |
+| Pull requests | Read and write |
+| Metadata | Read |
+
+No webhook is required; the merge notification comes from Actions, not from the App. Do
+not configure user access tokens or OAuth — the panel uses an installation access token,
+which is what makes `<app-name>[bot]` the author of the pull requests it opens.
+
+Generate a private key and save the PEM where Compose can mount it, by default
+`./secrets/github-app-private-key.pem` (gitignored). It is mounted read-only at
+`/run/secrets/github_app_private_key` and must be readable by the image's unprivileged
+`runner` user; `chmod 0444` is the simplest way. Never put the PEM in `.env`.
+
+The repository's `main` ruleset must leave **dismiss stale pull request approvals when new
+commits are pushed** disabled, as [ADR-0004](../docs/decisions/0004-task-status-authority.md)
+requires: the completion stamp is pushed after approval, and dismissal would invalidate the
+approval that triggered it.
+
+### Configuration
+
+From this directory, copy `.env.example` to `.env` and set `GITHUB_URL`, `GITHUB_APP_ID`,
+`GITHUB_APP_PRIVATE_KEY_PATH`, a current runner registration `RUNNER_TOKEN`,
+`CODEX_ENV_ID`, `PANEL_TOKEN`, and the audit routine's API trigger as
 `CLAUDE_AUDIT_ROUTINE_URL` and `CLAUDE_AUDIT_ROUTINE_TOKEN`. Set the repository Actions secret
 `CONTROL_PANEL_TOKEN` to that same panel token.
 
@@ -133,6 +199,12 @@ docker compose --env-file .env -f compose.yml up -d
 The Docker build context is this directory alone. The panel clones main on first
 start; use **Sync main** or the **Schedule available tasks** workflow to prepare
 the initial tasks. Rebuild the image after code or prompt changes.
+
+`GH_TOKEN` is a temporary fallback for rolling back to a personal access token without
+reverting code: it is used only while `GITHUB_APP_ID` is empty, and the panel logs a line
+saying so. It, `StaticTokenAuth`, and this paragraph go away once the App path has been
+stable. A token set alongside a configured App is ignored, and removed from the panel's
+environment either way.
 
 The workflow uses `curl` directly, defaulting to `http://control-panel:8765` on the
 Compose network. Set Actions variable `CONTROL_PANEL_URL` for another address;
@@ -153,9 +225,13 @@ reply. `WARNING` keeps only the failures.
 
 Operator-facing messages in the panel deliberately name no command or argument, so the
 log is where that detail goes. Every line passes through `logs.redact` first: the panel's
-own secrets, a URL's embedded credentials, and GitHub and Anthropic token shapes are
-replaced, and a prompt-sized argument is logged as its length rather than its text.
-Treat the log as sensitive anyway — it carries branch names, task IDs and tool output.
+own secrets, a URL's embedded credentials, GitHub and Anthropic token shapes — `ghs_`
+installation tokens among them — a signed JWT, and a PEM private key are replaced, and a
+prompt-sized argument is logged as its length rather than its text. A credential the panel
+holds but its environment no longer carries is named to `logs.guard` so redaction keeps
+its reach. Treat the log as sensitive anyway — it carries branch names, task IDs and tool
+output. One line per mint records which installation the token came from and when it
+expires, and never the token.
 
 Use `PANEL_BIND` and `PANEL_PORT` to override `127.0.0.1:8765`. Site-specific
 Compose changes belong in the gitignored `compose.override.yml`; `up.sh` includes
