@@ -24,5 +24,16 @@ services:
       - ..:/workspace
       - go-cache:/go/pkg/mod
     entrypoint: []
+  web:
+    profiles: [test]
+    image: node:22-alpine
+    working_dir: /workspace/web
+    volumes:
+      - ..:/workspace
+      - web-modules:/workspace/web/node_modules
+      - npm-cache:/root/.npm
+    entrypoint: []
 volumes:
   go-cache:
+  npm-cache:
+  web-modules:

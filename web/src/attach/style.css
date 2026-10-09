@@ -55,3 +55,60 @@ ul {
   border-left: 3px solid #f0a53b;
   padding-left: 0.8rem;
 }
+.composer {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+.composer label,
+.local-label {
+  color: #98e3ae;
+  font-weight: 700;
+}
+.composer textarea {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #779582;
+  border-radius: 0.25rem;
+  padding: 0.75rem;
+  color: inherit;
+  background: #101f16;
+  font: inherit;
+}
+.composer textarea:focus-visible {
+  outline: 3px solid #98e3ae;
+  outline-offset: 2px;
+}
+.composer button {
+  justify-self: start;
+  border: 0;
+  border-radius: 0.25rem;
+  padding: 0.65rem 1rem;
+  color: #0d1712;
+  background: #98e3ae;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.validation {
+  margin: 0;
+  color: #ffd18d;
+}
+.empty-state {
+  color: #b5c7ba;
+}
+.local-messages {
+  display: grid;
+  gap: 1rem;
+  padding: 0;
+  list-style: none;
+}
+.local-messages li {
+  border-left: 3px solid #98e3ae;
+  padding-left: 0.8rem;
+}
+.local-messages p {
+  margin: 0.35rem 0 0;
+  white-space: pre-wrap;
+}

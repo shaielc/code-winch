@@ -23,6 +23,8 @@ skills/
 |---|---|---|
 | [`workplan`](workplan/SKILL.md) | planning agent | Creating, extending, updating, or auditing the plan in `docs/workplan/`, or closing it into `docs/state.md` |
 | [`task`](task/SKILL.md) | task agent — refiner, implementer, or auditor, never two for one task | Refining one task's brief before implementation, or implementing, finishing, reviewing, or auditing that task |
+| [`propagate`](propagate/SKILL.md) | task agent or maintainer carrying an agreed downstream handoff | Optionally carrying a task discovery into an already-planned downstream brief after human disposition |
+| [`reflect`](reflect/SKILL.md) | task agent or maintainer improving development practices | Optionally applying evidence-based improvements to instructions, skills, tools, environment, or verification |
 
 Audience matters. Say who a skill is for when you add one: an agent should be
 able to tell from the table whether a skill is addressed to it before loading
