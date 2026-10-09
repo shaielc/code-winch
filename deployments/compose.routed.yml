@@ -1,0 +1,6 @@
+services:
+  sandbox:
+    networks: [winch-proxy]
+networks:
+  winch-proxy:
+    name: winch-proxy
