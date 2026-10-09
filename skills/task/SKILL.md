@@ -183,8 +183,8 @@ output, or a `file:line`. A claim with neither is unmet.
 
 1. **Acceptance criteria** — one at a time, in order. No summarizing several
    into one verdict.
-2. **Demonstration** — run it as written. If it does not produce the stated
-   result, the task is not complete whatever the test suite says.
+2. **Demonstration** — run it as written. Record any discrepancy as a finding
+   and classify it; passing tests do not replace an observed demonstration.
 3. **Runtime reachability** — find the registration in the composition root and
    the profile or command that reaches the code. A port whose only
    implementations are test doubles, or an implementation nothing constructs, is
@@ -204,13 +204,57 @@ output, or a `file:line`. A claim with neither is unmet.
 8. **Invariants** — the seven hold at HEAD with this task in. Start the system,
    run the fake profile by hand, run the standing scenario suite.
 
-The verdict is **complete** or **not complete**; there is no partial. Not
-complete lists the specific criteria that fail and what would satisfy each.
+For every audit check above, report what holds and what does not, with
+evidence. **Classify every finding**, including deviations from acceptance
+criteria and demonstrations as well as findings outside the brief:
 
-Report defects found outside the lines above as separate findings, each with
-its evidence. Examples are a failure path no criterion names, or a gap between
-the objective and the criteria. They do not change the verdict. A person decides
-whether each one blocks the task, becomes its own task, or corrects the brief.
+- **Blocking** — must be resolved before merge. State the condition to satisfy.
+- **Defect** — real deviation from intended behavior. Requires explicit human
+  disposition before merge: fix now or accept and track. The audit does not
+  choose between these options.
+- **Deferrable** — valid work that could reasonably move elsewhere or later.
+  Requires human disposition before merge: handle now or assign a destination
+  and owner. The auditor may suggest one but does not decide to defer it.
+- **Harden** — recommended robustness, test-quality, or maintainability
+  follow-up; no pre-merge action required.
+
+Keep observed acceptance results distinct from classification. A failed
+criterion is not automatically Blocking or an automatic not-complete verdict.
+For example, rejected-button focus behavior may be a non-blocking Defect
+requiring human disposition; test coverage weaknesses may be Harden; stable
+identity for persisted submissions may be Deferrable if a person assigns it
+downstream.
+
+### Audit state
+
+Assign one **audit state** from the classified findings, using this precedence:
+
+- **Not Complete** — at least one Blocking finding exists.
+- **Input Required** — no Blocking finding exists, but at least one Defect or
+  Deferrable finding exists. A person must decide its disposition.
+- **Complete** — no Blocking, Defect, or Deferrable findings exist. Harden
+  findings may still be recorded.
+
+Blocking takes precedence over Defect and Deferrable. **Harden never changes
+the audit state.** Report the state and the evidence for each finding, without
+conflating whether an acceptance criterion held with its classification.
+
+### Merge readiness
+
+**Audit state is not merge readiness.** Not Complete means Blocking findings
+must be resolved before merge. Input Required means the audit cannot decide
+how to handle a Defect or Deferrable finding; a person must record a disposition
+for each before merge. They may fix a Defect now or accept and track it, and
+may handle Deferrable work now or assign a destination and owner. Harden requires
+no pre-merge action.
+
+After the human dispositions are recorded, a pull request may be merge-ready
+even if its original audit state is Input Required. Keep that audit state and
+the original findings as an accurate record; do not silently erase, downgrade,
+or reclassify them because someone accepted the risk or assigned the work.
+A subsequent audit may report a new state when the observed findings change.
+Report the state and any outstanding merge-readiness conditions separately.
+The audit reports; a person makes the product and process tradeoffs.
 
 When the cause is the brief rather than the code — a seam between two briefs, an
 assumption one brief made about another's output, an invariant no task owns —
@@ -223,6 +267,15 @@ The audit reports; it does not act on its findings. It does not create tasks,
 add deferral rows, or edit the brief it judges in the same change as its
 verdict. Those are plan changes, made separately once a person has accepted the
 finding.
+
+## Optional side operations
+
+Keep the delivery loop (refine → implement → audit → merge) unchanged.
+Use `skills/propagate/SKILL.md` only when a discovery materially affects an
+already-planned downstream task. Use `skills/reflect/SKILL.md` only when task
+evidence suggests a reusable improvement to the development system. Neither
+operation is a mandatory new gate, and neither authorizes the audit to edit
+its own findings into the plan.
 
 ## Review rounds
 
