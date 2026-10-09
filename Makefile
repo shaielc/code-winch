@@ -2,14 +2,18 @@ GO ?= go
 GOLANGCI_LINT ?= golangci-lint
 BUILD_DIR ?= bin
 COMPOSE ?= docker compose -f deployments/compose.yml
-COMPOSE_TEST ?= $(COMPOSE) -f deployments/compose.test.yml
+PROXY_PORT ?= 8088
+COMPOSE_PROXY ?= WINCH_PROXY_PORT=$(PROXY_PORT) docker compose -f deployments/compose.proxy.yml
+TEST_NAME ?= $(shell (git symbolic-ref --short -q HEAD || git rev-parse --short HEAD) | tr 'A-Z/' 'a-z-' | tr -c 'a-z0-9_\n-' '-')
+TEST_PROJECT = code-winch-test-$(TEST_NAME)
+COMPOSE_TEST ?= $(COMPOSE) -p $(TEST_PROJECT) -f deployments/compose.routed.yml -f deployments/compose.test.yml
 GO_PACKAGES := ./cmd/... ./internal/... ./test/contract/...
 # e2e needs a running sandbox, so it is vetted and linted here but only run by
 # `make e2e`, `make docker-e2e` and `make test-cycle`.
 CHECKED_PACKAGES := $(GO_PACKAGES) ./test/e2e/...
 E2E_TEST := go test -count=1 -timeout=10m ./test/e2e/...
 
-.PHONY: all build check docker-e2e e2e format format-check lint run test test-cycle test-env test-env-down toolchain-image vet web-build
+.PHONY: all build check docker-e2e e2e format format-check lint proxy-down proxy-up run test test-cycle test-env test-env-down toolchain-image vet web-build
 all: check
 
 format:
@@ -39,11 +43,17 @@ docker-e2e:
 	$(COMPOSE_TEST) --profile test run --rm toolchain $(E2E_TEST)
 toolchain-image:
 	$(COMPOSE_TEST) --profile test build toolchain
+proxy-up:
+	$(COMPOSE_PROXY) up -d --wait proxy
+proxy-down:
+	$(COMPOSE_PROXY) down --remove-orphans
 test-env:
 	$(COMPOSE_TEST) up --build -d --wait sandbox
 	@test "$$($(COMPOSE_TEST) exec -T sandbox id -u)" != 0 || { echo "sandbox runs as root" >&2; exit 1; }
 	@$(COMPOSE) config | grep -q 'host_ip: 127.0.0.1' || { echo "sandbox is not published on 127.0.0.1 only" >&2; exit 1; }
-	@echo "sandbox: http://$$($(COMPOSE_TEST) port sandbox 8080)"
+	@echo "sandbox: http://127.0.0.1:$(PROXY_PORT)/test/$(TEST_NAME)  [project: $(TEST_PROJECT)]"
+	@echo "page:    http://127.0.0.1:$(PROXY_PORT)/test/$(TEST_NAME)/app"
+	@echo "(reachable from the host only while the proxy is up: make proxy-up)"
 test-env-down:
 	$(COMPOSE_TEST) --profile test down --remove-orphans
 test-cycle: toolchain-image
