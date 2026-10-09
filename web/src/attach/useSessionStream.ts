@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getBasePath } from "./basePath";
 
 export interface SessionRecord {
   ordinal: number;
@@ -14,7 +15,7 @@ export function useSessionStream() {
   useEffect(() => {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
     const socket = new WebSocket(
-      `${protocol}//${location.host}/api/session/stream`,
+      `${protocol}//${location.host}${getBasePath()}/api/session/stream`,
     );
     socket.onmessage = (event) => {
       const record = JSON.parse(String(event.data)) as SessionRecord;

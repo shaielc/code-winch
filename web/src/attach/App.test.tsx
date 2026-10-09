@@ -18,3 +18,21 @@ test("shows effective and unenforced posture", async () => {
   expect(screen.getByText("network-egress")).toBeInTheDocument();
   expect(screen.getByText(/not enforced by this profile/i)).toBeInTheDocument();
 });
+
+test("reaches the API under the proxy prefix of the page URL", async () => {
+  history.pushState({}, "", "/main/app");
+  const socket = vi.fn(() => ({ close: vi.fn() }));
+  vi.stubGlobal("WebSocket", socket);
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ profile: "proxied-profile", unenforcedControls: [] }),
+  });
+  globalThis.fetch = fetchMock;
+  render(<App />);
+  expect(await screen.findByText("proxied-profile")).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledWith("/main/api/session");
+  expect(socket).toHaveBeenCalledWith(
+    expect.stringMatching(/^ws:\/\/[^/]+\/main\/api\/session\/stream$/),
+  );
+  history.pushState({}, "", "/");
+});

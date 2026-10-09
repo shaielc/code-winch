@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getBasePath } from "./basePath";
 import { Posture, type SessionPosture } from "./Posture";
 import { RecordList } from "./RecordList";
 import { useSessionStream } from "./useSessionStream";
@@ -7,7 +8,7 @@ export function App() {
   const [error, setError] = useState(false);
   const { records, streamError } = useSessionStream();
   useEffect(() => {
-    fetch("/api/session")
+    fetch(`${getBasePath()}/api/session`)
       .then((response) => {
         if (!response.ok) throw new Error("request failed");
         return response.json() as Promise<SessionPosture>;
