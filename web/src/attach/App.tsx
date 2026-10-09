@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getBasePath } from "./basePath";
 import { Composer } from "./Composer";
 import { Posture, type SessionPosture } from "./Posture";
 import { RecordList } from "./RecordList";
@@ -9,7 +10,7 @@ export function App() {
   const [localMessages, setLocalMessages] = useState<string[]>([]);
   const { records, streamError } = useSessionStream();
   useEffect(() => {
-    fetch("/api/session")
+    fetch(`${getBasePath()}/api/session`)
       .then((response) => {
         if (!response.ok) throw new Error("request failed");
         return response.json() as Promise<SessionPosture>;
