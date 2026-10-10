@@ -25,7 +25,15 @@ ordinal rather than slowing the harness down.
   consuming fills its buffer and is then disconnected with its last ordinal in the close
   reason, so it knows where to refetch from. The harness is never blocked waiting for a
   browser — `docs/contracts.md` §8: "A slow reader is disconnected with its last ordinal
-  and never backpressures the harness."
+  and never backpressures the harness." P0-002's `Session.append` sends to each
+  subscriber while holding the session lock (`internal/runner/session.go:20-27`), so one
+  full buffer blocks the harness's output pump, every new subscriber, and the stalled
+  reader's own unsubscribe. No subscriber send may block while that lock is held, and
+  dropping a subscriber never waits on it.
+- A reader that has gone away is released without waiting for another record. P0-002's
+  stream handler never reads the socket (`internal/adapters/transport/attach/stream.go`),
+  so a client close is noticed only at the next write — and after `session.terminated`
+  there is none.
 - The disconnect is itself observable: an operational diagnostic record naming that a
   subscriber was dropped and at which ordinal, with no content.
 
@@ -54,6 +62,7 @@ what was recorded in both cases.
 
 - `internal/runner/harness.go`, `internal/runner/record.go`, `internal/runner/session.go`
 - `internal/adapters/transport/attach/stream.go`
+- `internal/runner/runner_test.go`, `internal/adapters/transport/attach/stream_test.go`
 - `test/e2e/scenario_malformed_output_test.go`, `test/e2e/scenario_stalled_reader_test.go`
 - `test/contract/attach/record_golden_test.go` (the diagnostic record's shape)
 
@@ -100,9 +109,12 @@ the reader stops reading; the command above is the hands-on version of the same 
   a subscriber is not reading, and that the subscriber is closed.
 - Decoder unit tests: a line over the bound, a line that is valid JSON but not a record, a
   truncated line at EOF, and a bad line between two good ones.
+- Session unit tests, run with `-race`: a stalled subscriber's unsubscribe and a new
+  subscribe both return while its buffer is full; a closed reader's subscription is
+  released while no record is being published.
 - The golden fixture in `test/contract/attach/` gains the diagnostic record's shape.
 - Every earlier scenario still passes unchanged, including with `-delay` set.
-- `make check`, `make e2e`, `make test-cycle`.
+- `make check`, `make docker-e2e` (against `make test-env`), `make test-cycle`.
 
 ## Acceptance criteria
 
@@ -117,6 +129,12 @@ the reader stops reading; the command above is the hands-on version of the same 
 - [ ] While that subscriber is stuck, the harness keeps producing records and other
       subscribers keep receiving them. This is the guarantee the objective states: inject
       a stalled reader alongside a healthy one and assert the healthy one is unaffected.
+- [ ] A stalled subscriber's unsubscribe completes while its buffer is full, and a new
+      subscriber can attach meanwhile. Inject a reader that never reads, fill its buffer,
+      then cancel it and attach another; neither call blocks.
+- [ ] A reader that disconnects while the session is idle is released with no further
+      record published. Inject by attaching readers after `session.terminated`, closing
+      them, and observing their subscriptions gone.
 - [ ] A dropped subscriber leaves an operational diagnostic record naming the ordinal and
       containing no content.
 - [ ] The diagnostic record's preserved bytes are classified `confidential`, and appear in

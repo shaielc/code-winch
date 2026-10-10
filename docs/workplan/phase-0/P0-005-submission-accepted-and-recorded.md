@@ -109,7 +109,8 @@ P0-003 built. `docker compose -f deployments/compose.yml up --build` reaches it;
   keys with the same payload.
 - Bounded-size test: a payload over the limit is refused as `INPUT_INVALID` and the
   process memory does not grow by the payload's size.
-- `make check`, `make e2e`, `make test-cycle`, `cd web && npm test`.
+- `make check`, `make docker-e2e` (against `make test-env`), `make test-cycle`,
+  `cd web && npm test`.
 
 ## Acceptance criteria
 
