@@ -27,6 +27,9 @@ stage's hand check.
   and a submission is refused with `INPUT_UNSUPPORTED` rather than written to a closed
   pipe. `docs/contracts.md` §8 — "the session accepts no further input", and "there is no
   retry and no new attempt: restarting means starting another sandbox".
+  A harness that never started is not input-capable either. In P0-002, a failed
+  `command.Start()` returns before any `session.terminated` is emitted
+  (`internal/runner/harness.go:44`), so the predicate cannot rest on that record alone.
 - The reply correlates to the submission: the harness echoes the submission id, and the
   resulting `stream.raw` record keeps it, so a reader can tell which line was answered.
 
@@ -54,6 +57,7 @@ reaches it; `winch input` and the page's composer are the two hands-on paths, an
 ## Write set
 
 - `internal/runner/harness.go`, `internal/runner/input.go`, `internal/runner/session.go`
+- `internal/runner/runner_test.go`
 - `test/e2e/scenario_harness_echo_test.go`
 - `test/contract/attach/input_refusal_test.go` (the after-exit refusal)
 - `cmd/winch/input.go` (surface the correlation identifier in its output)
@@ -91,11 +95,14 @@ reaches it; `winch input` and the page's composer are the two hands-on paths, an
   for the reply, assert the reply cites the submission and arrives at a later ordinal
   than the submission.
 - `test/contract/attach/input_refusal_test.go` gains the after-exit case.
+- Unit test: a harness whose executable does not exist is not input-capable, and a
+  submission to it is refused with `INPUT_UNSUPPORTED`.
 - Unit test: a submission whose stdin write fails produces a diagnostic record naming the
   submission id and not its text.
 - The fake profile still passes every earlier scenario, including with `-delay` set, so
   delivery does not depend on the harness replying promptly.
-- `make check`, `make e2e`, `make test-cycle`, `cd web && npm test`.
+- `make check`, `make docker-e2e` (against `make test-env`), `make test-cycle`,
+  `cd web && npm test`.
 
 ## Acceptance criteria
 
@@ -110,6 +117,9 @@ reaches it; `winch input` and the page's composer are the two hands-on paths, an
 - [ ] After `session.terminated`, every submission is refused with `INPUT_UNSUPPORTED` and
       nothing is written to a closed pipe. Inject with `-early-exit` and with a SIGTERM to
       the harness, and observe the same refusal in both cases.
+- [ ] A harness that failed to start refuses every submission with `INPUT_UNSUPPORTED`.
+      Inject in a runner test by starting a harness whose executable does not exist;
+      expect the refusal and no write attempt.
 - [ ] No submission is written to the harness twice, including when its idempotency key is
       replayed. Replay the key and count the harness's replies: expect one.
 - [ ] The submitted text appears in no log line or diagnostic. Canary as in P0-005.

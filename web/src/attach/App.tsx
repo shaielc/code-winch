@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
+import { getBasePath } from "./basePath";
 import { Composer } from "./Composer";
 import { Posture, type SessionPosture } from "./Posture";
+import { RecordList } from "./RecordList";
+import { useSessionStream } from "./useSessionStream";
 export function App() {
   const [posture, setPosture] = useState<SessionPosture>();
   const [error, setError] = useState(false);
   const [localMessages, setLocalMessages] = useState<string[]>([]);
+  const { records, streamError } = useSessionStream();
   useEffect(() => {
-    fetch("/api/session")
+    fetch(`${getBasePath()}/api/session`)
       .then((response) => {
         if (!response.ok) throw new Error("request failed");
         return response.json() as Promise<SessionPosture>;
@@ -23,6 +27,8 @@ export function App() {
       </header>
       {error && <p role="alert">Sandbox posture is unavailable.</p>}
       {posture && <Posture posture={posture} />}
+      {streamError && <p role="alert">Harness output is unavailable.</p>}
+      <RecordList records={records} />
       <section aria-labelledby="local-messages-heading">
         <h2 id="local-messages-heading">Local messages</h2>
         {localMessages.length === 0 ? (

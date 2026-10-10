@@ -4,6 +4,10 @@ import { App } from "./App";
 
 afterEach(cleanup);
 test("shows effective and unenforced posture", async () => {
+  vi.stubGlobal(
+    "WebSocket",
+    vi.fn(() => ({ close: vi.fn() })),
+  );
   globalThis.fetch = vi.fn().mockResolvedValue({
     ok: true,
     json: async () => ({
@@ -29,4 +33,22 @@ test("shows a submitted message as local without an ordinal", () => {
   expect(region).toHaveTextContent("Local");
   expect(region).toHaveTextContent("a local message");
   expect(container).not.toHaveTextContent(/ordinal/i);
+});
+
+test("reaches the API under the proxy prefix of the page URL", async () => {
+  history.pushState({}, "", "/main/app");
+  const socket = vi.fn(() => ({ close: vi.fn() }));
+  vi.stubGlobal("WebSocket", socket);
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ profile: "proxied-profile", unenforcedControls: [] }),
+  });
+  globalThis.fetch = fetchMock;
+  render(<App />);
+  expect(await screen.findByText("proxied-profile")).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledWith("/main/api/session");
+  expect(socket).toHaveBeenCalledWith(
+    expect.stringMatching(/^ws:\/\/[^/]+\/main\/api\/session\/stream$/),
+  );
+  history.pushState({}, "", "/");
 });

@@ -63,6 +63,7 @@ Host targets need Go 1.24+, npm, and golangci-lint 2.1.6 (`go install
 github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6`); `[docker]`
 targets need only Docker and run in the `toolchain` container. `make check` is
 the host gate CI runs for Go; `make test-cycle` is the Docker path, which also runs the
-composed-image scenarios in an isolated `code-winch-test` project, and does not run
-golangci-lint. To run only the scenarios, use `make test-env`, `make e2e`, and
-`make test-env-down` (see `deployments/README.md`).
+composed-image scenarios in an isolated `code-winch-test-<branch>` project, and does not run
+golangci-lint. To run only the scenarios, use `make test-env`, then `make e2e` (host,
+with `WINCH_E2E_URL` set to the URL it prints, after `make proxy-up`) or `make docker-e2e` (in the `toolchain`
+container), then `make test-env-down` (see `deployments/README.md`).
