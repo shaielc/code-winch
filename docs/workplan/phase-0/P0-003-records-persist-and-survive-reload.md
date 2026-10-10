@@ -21,7 +21,16 @@ joining the live stream.
   arrives later sees what an earlier reader saw.
 - `GET /api/session/records?after_ordinal=N` — the snapshot half of §8's "snapshot plus
   stream", with a bounded page size.
+- The store becomes the session's history. P0-002 keeps every record in an in-memory
+  slice that never shrinks and replays all of it, from ordinal 1, to every new stream
+  subscriber (`internal/runner/session.go:11,34-37`). After this task the runner holds
+  no unbounded history in memory.
 - The page loads the snapshot, then opens the stream, and shows one continuous list.
+  Because the stream replays from ordinal 1 today, joining the two must not duplicate
+  the overlap — whether the stream starts after an ordinal or the page drops ordinals it
+  already holds is this task's choice.
+- The page shows when the stream has closed. P0-002's `useSessionStream.ts` handles only
+  a message and an error, so a server close leaves the list looking live.
 - `winch records --after <ordinal>`.
 - `WINCH_SANDBOX_STORE_PATH` and a compose volume, so the store survives a container
   restart as well as a browser reload.
@@ -50,7 +59,8 @@ the runner; the `sandbox` service mounts the volume behind it.
 - `internal/adapters/transport/attach/records.go`, `.../server.go`
 - `cmd/winch-sandbox/main.go`, `cmd/winch-sandbox/config.go`
 - `cmd/winch/records.go`
-- `web/src/attach/App.tsx`, `web/src/attach/useSessionRecords.ts`
+- `web/src/attach/App.tsx`, `web/src/attach/useSessionRecords.ts`,
+  `web/src/attach/useSessionStream.ts`
 - `deployments/compose.yml`
 - `test/e2e/scenario_records_survive_reload_test.go`
 
@@ -88,7 +98,8 @@ the runner; the `sandbox` service mounts the volume behind it.
 - Store unit tests: append-then-read round trip, read from an ordinal beyond the end
   returns empty rather than erroring, read from a negative or non-numeric ordinal is
   rejected.
-- `make check`, `make e2e`, `make test-cycle`, `cd web && npm test`.
+- `make check`, `make docker-e2e` (against `make test-env`), `make test-cycle`,
+  `cd web && npm test`.
 
 ## Acceptance criteria
 
@@ -97,6 +108,13 @@ the runner; the `sandbox` service mounts the volume behind it.
       publishing a record with no reader attached, then fetching from ordinal 0.
 - [ ] Reloading the page loses no record and duplicates none. The list after a reload
       equals the list before it.
+- [ ] Joining the snapshot to the stream repeats no ordinal and skips none. Inject by
+      fetching a snapshot up to ordinal N, then opening the stream while the harness
+      emits; the joined list runs N+1, N+2, … with no ordinal at or below N repeated.
+- [ ] The runner's memory does not grow with the session's history: history is read
+      from the store, and a new subscriber's buffer is not sized to it. Inject by
+      emitting many records, then attaching a reader; observe no in-memory copy of the
+      history and a subscriber buffer of fixed size.
 - [ ] `after_ordinal` beyond the last issued ordinal returns an empty page with a
       success status, not an error.
 - [ ] A restart of the `sandbox` service preserves records written before it.
