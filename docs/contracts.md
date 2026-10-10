@@ -244,3 +244,27 @@ The standalone surface exposes `GET /healthz` as
 `{"service":"winch-sandbox","status":"ok"}` and `GET /api/session` as
 `{"profile": string, "unenforcedControls": string[]}`. The unenforced-controls
 array is non-empty; for `container-standard` it includes `network-egress`.
+
+## 9. Fake runtime profile contract
+
+The fake is a supported way to exercise product behavior without a vendor
+account. Its contract is reproducible scenarios through the product surface,
+runtime selection of transcripts and delay, and injection of the failures the
+implemented capability supports. The introducing brief documents those controls
+and what the fake does not prove. New controls arrive with the concern they
+exercise; a catalogue of possible controls does not require bundling their
+product handling into one task.
+
+The fake's process protocol is internal development infrastructure. Its current
+JSON-lines dialect, `kind` and `sensitivity` fields, `-run-id` flag, and signal
+handler do not define the sandbox attach contract or the canonical event model.
+The runner owns the product record envelope and maps harness output into it.
+It must not blindly promote invented fake fields into that contract.
+
+An increment may change the fake's protocol or controls along with its callers,
+scenario fixtures, tests, and operator documentation. Preserve the supported
+behavior; require exact interface compatibility only where a documented
+consumer needs it. Declare affected profile configuration and product surfaces
+in the brief so concurrent tasks can reconcile them. No change to the fake
+executable is made merely by this distinction; the introducing implementation
+chooses and documents the simplest protocol its scenarios need.

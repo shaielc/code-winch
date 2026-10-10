@@ -1,12 +1,12 @@
 ---
 name: workplan
-description: Write and review the implementation workplan in docs/workplan/ — its task briefs, its dependency graph, and its tracker. Use when deriving a plan from the design set, adding tasks to a plan already in flight, correcting status or ownership, widening a plan that has become serial, auditing the plan for coverage gaps, unjustified dependency edges, and unreachable code, or closing a finished plan into a statement of what the system now is. Assumes a design-document set exists (at minimum docs/architecture.md and docs/decisions/).
+description: Design phases and write or review the implementation workplan in docs/workplan/ — its phase design artifacts, task briefs, dependency graph, and tracker. Use when designing a phase before drafting tasks, deriving a plan from the design set, adding tasks to a plan already in flight, correcting status or ownership, widening a plan that has become serial, auditing the plan for coverage gaps, unjustified dependency edges, and unreachable code, or closing a finished plan into a statement of what the system now is. Assumes a design-document set exists (at minimum docs/architecture.md and docs/decisions/).
 ---
 
 # Workplan
 
-This skill covers the plan as an artifact: the briefs, the tracker, and the
-index that ties them together.
+This skill covers the plan as an artifact: phase designs, briefs, the tracker,
+and the index that ties them together.
 
 Read `skills/shared/workplan-model.md` first. It defines the layout, the four
 properties, the seven invariants, the four task shapes, dependency-edge reasons,
@@ -17,10 +17,10 @@ Everything below is how to apply that model when the plan changes or is judged.
 
 Establish which mode applies before doing anything else.
 
-1. **Create** — no plan exists. Read the full design set, derive phases, write
-   every brief and the tracker. Where a previous plan was closed, read
-   `docs/state.md` first: it says what already exists, what broke last time, and
-   what is still missing. Creating against the design set alone re-plans work
+1. **Create** — no plan exists. Read the full design set, derive phases, design
+   each phase, then write its briefs and the tracker. Where a previous plan was
+   closed, read `docs/state.md` first: it says what already exists, what broke
+   last time, and what is still missing. Creating against the design set alone re-plans work
    that is already done. See *Creating a plan over existing code*.
 2. **Extend** — add tasks to a plan in flight. Append IDs from the plan-wide
    counter, whatever phase they land in; never renumber. This
@@ -38,6 +38,36 @@ Whichever mode applies, check the seven invariants explicitly. They hold of the
 plan as a whole, so a plan can violate one while every individual brief reads
 well.
 
+## Design the phase before the tasks
+
+Write `docs/workplan/phase-N/README.md` using *Phase design* in the shared
+model. Produce it before drafting detailed briefs, not as a summary derived
+from them. Start from the verified system at HEAD and the roadmap's outcome.
+List the distinct concerns and evaluate the smallest observable increments
+before allocating task IDs or committing to a transport, record format, or
+fixture protocol. Keep required product contracts and provisional approaches
+explicitly distinct.
+
+Challenge combinations at this step. "Required by the objective" does not
+justify a bundle when the objective itself combined several concerns. Neither
+does preserving an invariant require implementing every associated feature in
+one increment: identify the minimum needed to keep it true. Safe process
+cleanup, reporting native exit, mapping exit outcomes, and operator stop are
+separate concerns even when they touch one supervisor.
+
+Then allocate IDs, map included concerns to them, write briefs, and derive the
+graph and collision report. Before opening a phase, review the artifact against
+its briefs and HEAD: every scope item is a change from the starting point and
+every bundle has a boundary justification independent of its own objective.
+If a demonstration's mechanics cannot be exercised yet, say what is a
+prediction and identify how implementation will verify it.
+
+In extend mode, revise the affected phase design before assigning new scope.
+In update mode, reconcile it with discoveries that change boundaries or the
+starting point. In audit mode, judge its decomposition and baseline as well as
+the individual briefs. Backfilling an existing phase records current boundaries
+and unresolved findings honestly; it does not certify the original derivation.
+
 ## Writing briefs
 
 Briefs are drafts until their phase opens. Writing all of them up front is
@@ -45,8 +75,8 @@ correct — it is what makes the whole-system map useful — but a brief written
 before its phase's dependencies exist is a hypothesis, and contact with the code
 is where it gets tested against reality.
 
-Every brief follows the anatomy in the shared model. The sections that carry the
-most weight, and that a draft most often leaves thin:
+Every brief follows the phase design and the anatomy in the shared model. The
+sections that carry the most weight, and that a draft most often leaves thin:
 
 - **Runtime reachability** — never empty. A task that cannot name the
   composition root, profile, and command that reach its code fits none of the
@@ -92,6 +122,11 @@ preservation, future enablement, hardening, or refactor.
 
 A seam normally contains only the first four. Extract the rest unless removing
 it would make the objective false or break an invariant at completion.
+
+Also compare the objective with the phase's concern list and candidate
+increments. If several concerns appear required only because the objective
+bundles them, narrow or split the objective first, then repeat this test. Check
+each bullet against completed work; describe only its missing delta.
 
 ## Creating a plan over existing code
 
@@ -318,6 +353,10 @@ Report, without changing the plan:
 - **Coverage** — every section of the design set maps to at least one task;
   every task traces back to a documented requirement. Name the gaps and the
   scope inflation separately.
+- **Phase design** — each phase has its README, an evidenced starting point,
+  distinct concerns, and justified increment boundaries. Report work duplicated
+  from completed tasks, bundles justified only by their own objectives, and
+  fixture details promoted to product contracts without a compatibility need.
 - **Reachability** — every port, interface, or boundary in the codebase has at
   least one implementation registered in a composition root and reachable at
   runtime. List the orphans.
@@ -390,6 +429,9 @@ fix, not a style preference.
 
 In close mode, only the last item applies. In every other mode:
 
+- Every phase has a linked design README; its concern ownership, boundaries,
+  and verified starting point agree with the briefs. Unresolved retrospective
+  findings are explicitly identified, not presented as passed design checks.
 - Every brief has a non-empty **Runtime reachability** section and declares its
   **write set** and its **contract surfaces**.
 - Every brief has a **Demonstration** with commands a person can actually run.

@@ -3,10 +3,12 @@
 Instructions for any agent working in this repository. One unit of work, one
 pull request.
 
-No implementation plan is in flight, and the product does not run.
-[`docs/state.md`](docs/state.md) is the authoritative account of what exists and
-what does not; read it before assuming a capability exists, because the design
-set describes a destination and almost none of it is built.
+Phase 0 is in flight. The first sandbox/page slice and local composer exist;
+the harness is shipped but is not started by the sandbox yet.
+[`docs/state.md`](docs/state.md) records the starting point of this plan.
+[`docs/workplan/phase-0/README.md`](docs/workplan/phase-0/README.md) records its
+current source-verified baseline and boundary findings. Check code at HEAD
+before assuming a capability exists; the design set describes a destination.
 
 An `AGENTS.md` deeper in the tree adds to or narrows these rules for its own
 subtree.
@@ -62,6 +64,12 @@ In-memory and fake implementations are a supported way to run this product, not
 test-only doubles. Keep them working and keep them controllable — scripted
 transcripts, injectable latency, failure, malformed output. When you add one,
 state in its documentation what it does not prove.
+
+Their supported behavior and controllability must survive changes. Their
+invented protocols, flags, and signal behavior may change with their consumers,
+scenarios, and documentation unless explicit compatibility is required. The
+product contract determines what the fake exercises; the fake does not dictate
+the product's record model. See `docs/contracts.md` §9.
 
 ### Prove behavior, not only contracts
 

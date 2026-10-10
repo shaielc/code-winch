@@ -13,9 +13,12 @@ stage's hand check.
 
 ## Scope
 
-- Encode an accepted submission into the frame the fake harness reads from stdin:
-  `{"id": "<submission id>", "text": "<text>"}` (`cmd/fake-harness/main.go:39-42`),
-  newline-delimited.
+- Encode an accepted submission into the documented harness input protocol at
+  HEAD. The current fake reads newline-delimited
+  `{"id": "<submission id>", "text": "<text>"}`, but this is a proposed
+  encoding, not a compatibility requirement. Update the fake and its tests
+  together if delivery or correlation needs a different protocol; preserve the
+  live-output behavior and document the selected mapping. `docs/contracts.md` §9.
 - Deliver after acceptance, not instead of it: the submission is recorded first, then
   written. A write that fails after acceptance produces a diagnostic record naming the
   submission, so an accepted-but-undelivered submission is visible rather than silent.
@@ -57,6 +60,9 @@ reaches it; `winch input` and the page's composer are the two hands-on paths, an
 - `test/e2e/scenario_harness_echo_test.go`
 - `test/contract/attach/input_refusal_test.go` (the after-exit refusal)
 - `cmd/winch/input.go` (surface the correlation identifier in its output)
+- `cmd/fake-harness/main.go`, `cmd/fake-harness/main_test.go` (input and reply
+  correlation protocol as needed)
+- `deployments/README.md` (document changes to the fake's controls or protocol)
 
 ## Contract surfaces
 
@@ -113,8 +119,9 @@ reaches it; `winch input` and the page's composer are the two hands-on paths, an
 - [ ] No submission is written to the harness twice, including when its idempotency key is
       replayed. Replay the key and count the harness's replies: expect one.
 - [ ] The submitted text appears in no log line or diagnostic. Canary as in P0-005.
-- [ ] `cmd/fake-harness/` is unchanged — the stdin dialect is the fixture's and this task
-      speaks it rather than altering it.
+- [ ] The supported fake scenarios still work; any fake protocol change updates
+      its consumers, tests, and documentation in the same change. The fixture's
+      invented dialect does not determine the product submission or record contract.
 - [ ] A harness that stops reading stdin does not block the input handler. Inject by
       stopping the harness process with SIGSTOP and submitting; expect the deadline to
       expire, a diagnostic record, and a surface that still answers `winch status`.

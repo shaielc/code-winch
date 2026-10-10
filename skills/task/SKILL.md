@@ -32,6 +32,9 @@ or audit that task.
 
 1. **Read the brief end to end**, including **Non-goals**. Note its **Shape** —
    the shape determines what counts as a demonstration.
+   Read the phase's `README.md` for the starting point, concern ownership, and
+   boundary decisions. Report a conflict with the brief rather than silently
+   inheriting a larger objective.
 2. **Read the design sections under Traces to.** They are the authority the
    brief is derived from; where the brief and the design set disagree, that is a
    finding, not a choice.
@@ -56,6 +59,11 @@ Check, with evidence — a command with its observed output, or a `file:line`:
 1. **Assumptions about the existing code** — the type, contract, or behavior
    each dependency edge names exists at HEAD. So do the interfaces, files, and
    behavior the Scope relies on without an edge, in the form the brief assumes.
+   Compare every Scope item with completed dependency work and the phase's
+   starting point. Remove work already delivered from Scope; retain only the
+   missing change and the evidence for it. Inspect the implementation, not
+   merely a completed status. Shipping a binary is not starting its process;
+   server shutdown is not child-process supervision.
 2. **Deferrals into this task** — search every brief's Deferrals table, every
    phase's *Deferrals in* register, and the tree for this task's ID. Carry each
    hit into Scope, or add a Scope item that gives it a different owner.
@@ -65,12 +73,24 @@ Check, with evidence — a command with its observed output, or a `file:line`:
    Or a Scope item gives it to a hardening task.
 4. **Demonstration** — the tools and existing commands it uses are present where
    it will run, and each expectation can be observed without false matches.
+   Check fixture selection, Compose environment forwarding, startup versus
+   subscriber timing, and signal delivery to the intended process. Exercise
+   existing mechanics where possible. State which observations remain
+   predictions about new code; plausible commands are not validation evidence.
+
+Check the brief's concern boundary before making its implementation concrete.
+If the phase design reveals an independent concern bundled into the objective,
+report the plan change needed through `workplan` rather than adding details to
+justify the bundle. Distinguish binding product contracts from proposed
+approaches and inherited fixture behavior; preserving the latter needs an
+explicit compatibility reason.
 
 Then make the brief concrete, in the sections it already has:
 
-- **Scope** — implementation instructions written against the code at HEAD:
+- **Scope** — the required behavior and wiring written against the code at HEAD:
   where the code lives, how it connects to what exists, and the order where
-  order matters, with a short reason for each judgment call. Work beyond this
+  order matters, with a short reason for each binding judgment call and proposed
+  approaches identified as such. Work beyond this
   task's own code is a Scope item too, for the implementation to carry out. That
   includes a hardening task to add, and a deferral to re-own in another brief.
 - **Non-goals** — what the refinement explicitly excludes.
@@ -114,6 +134,9 @@ it is operable (I5).
 supported way to run the product. Keep them controllable — scripted transcripts,
 injectable latency, failure, malformed output — and state in their documentation
 what they do not prove.
+Follow I3's behavioral contract: change fake interfaces and their consumers,
+tests, and documentation together when useful. Preserve supported scenarios;
+do not treat an invented fake dialect or historical flag as product authority.
 
 **Stay inside the declared scope and contract surfaces.** Work the brief's
 Scope does not ask for, or its Non-goals exclude, is scope creep. Changing a
