@@ -1,18 +1,25 @@
 # Implementation workplan
 
 **Phase 0 is open.** It decomposes Stage 0 of [`docs/roadmap.md`](../roadmap.md) — "a
-sandbox you can talk to" — into seven tasks. `P0-001` is the only available task until it
-lands, because I1 and I2 require one task that makes the system start and deploy before
-anything else has a demonstration.
+sandbox you can talk to" — into seven tasks. The tracker records `P0-001` and `P0-004`
+as completed; `P0-002` is available. The
+[phase design](phase-0/README.md) records the current baseline and the boundary
+findings from reviewing this already-open phase.
 
     $ ./scripts/list-available-tasks.sh
-    → P0-001
+    → P0-002
 
 [`skills/shared/workplan-model.md`](../../skills/shared/workplan-model.md) is the
 definition this plan is written against: the four properties, the seven invariants, the
 four task shapes, dependency-edge reasons, write sets, contract surfaces, brief anatomy,
 and the frozen tracker schema. [`docs/state.md`](../state.md) says what existed at HEAD
 when this plan was derived.
+
+New phases are designed in `phase-N/README.md` before their briefs are drafted.
+That artifact records the starting point, concerns, candidate increments,
+boundary decisions, verification mechanics, and phase exit. The phase design
+justifies task boundaries; this index and `tasks.json` describe the executable
+graph. Retrospective findings in Phase 0's design do not change that graph.
 
 ## Scope of this plan
 

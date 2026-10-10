@@ -20,9 +20,13 @@ the record that says the harness has ended and how.
   monotonic, and gap-free within the session. No `sequence`, no `eventId`, no
   `schemaVersion` — `docs/contracts.md` §8 says the control plane adds those, and
   roadmap Stage 0 lists them as deliberately absent.
-- Decode the fake harness's dialect: one JSON object per line as
-  `{kind, payload, sensitivity?}` (`cmd/fake-harness/main.go:23-36`). The runner adds
-  the ordinal and `occurredAt`; the harness's own `kind` and `sensitivity` pass through.
+- Map harness output into the runner-owned session record contract. The current
+  fake emits JSON lines as `{kind, payload, sensitivity?}`, but that invented
+  dialect is not a required product interface. Choose the simplest fake output
+  protocol needed for the live-output scenario and update the fake and its tests
+  together if changing it simplifies the runner. The runner determines record
+  kinds, sensitivity, ordinal, and `occurredAt`; fixture fields do not acquire
+  product-contract authority by being passed through. `docs/contracts.md` §9.
 - `record kind: session.terminated` — when the harness process exits, the runner emits a
   terminal record carrying the native exit and its mapped outcome: clean exit →
   `completed`, nonzero exit → `failed`, terminating signal → `stopped`. A runner that
@@ -38,8 +42,10 @@ the record that says the harness has ended and how.
   no tool calls, approvals, usage reporting, login, or terminal semantics, and its
   dialect is invented, so an event model built only against it would be modelling the
   fixture.
-- Pass the sandbox's session identifier as the fixture's required `-run-id`. Stage 0 has
-  no runs; the flag name belongs to the fixture and the fixture is left unchanged.
+- Stage 0 has sessions, not runs. The fake's historical `-run-id` flag may be
+  renamed or removed with its callers and tests; no compatibility requirement
+  protects it. Document the selected launch and output protocol for downstream
+  tasks, including input delivery, to consume.
 - `test/contract/attach/` — a golden fixture pinning the record wire format, replacing
   the deleted `schemas/events/v1/fixtures/raw-stream.json` that
   `cmd/fake-harness/main.go:29` still cites, and removing that dangling comment.
@@ -75,8 +81,11 @@ two hands-on paths.
   `web/src/attach/useSessionStream.ts`
 - `test/e2e/scenario_harness_output_test.go`
 - `test/contract/attach/record_golden_test.go`, `test/contract/attach/testdata/stream-raw.json`
-- `cmd/fake-harness/main.go` (remove the comment citing the deleted fixture)
-- `deployments/README.md`
+- `cmd/fake-harness/main.go`, `cmd/fake-harness/main_test.go` (protocol and launch
+  changes as needed, and removal of the comment citing the deleted fixture)
+- `deployments/README.md`, `deployments/compose.yml` (wire the documented controls
+  into the container)
+- `docs/contracts.md` if the chosen mapping changes a product contract
 
 ## Contract surfaces
 

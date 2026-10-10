@@ -37,6 +37,7 @@ still produce a system nobody can start.
 | Path | Purpose |
 |---|---|
 | `docs/workplan/README.md` | Narrative index, per-phase dependency tables, phase exit rule, how to use the plan |
+| `docs/workplan/phase-N/README.md` | Phase design: verified starting point, concerns, proposed increments, boundary decisions, and phase exit |
 | `docs/workplan/phase-N/<id>-<slug>.md` | One brief per task |
 | `docs/workplan/tasks.json` | Machine-readable tracker — status, ownership, dependencies |
 | `docs/workplan/tasks.schema.json` | Schema for the tracker |
@@ -45,6 +46,52 @@ still produce a system nobody can start.
 
 An existing plan's conventions win: match its ID scheme, directory layout, and
 brief structure rather than the illustrative ones here.
+
+## Phase design
+
+Design each phase before drafting its task briefs. Write the result in
+`docs/workplan/phase-N/README.md`; link it from the plan index. The artifact is
+where the phase's task boundaries are justified. A list of individually
+necessary scope items does not establish that they belong in one task.
+
+Include these sections:
+
+- **Outcome and constraints** — the smallest observable phase outcome, its
+  source in the roadmap, and its non-goals. Separate binding product contracts
+  from provisional design choices; cite the requirement behind each binding
+  constraint. An existing fixture interface is not such a requirement.
+- **Starting point** — what works at HEAD, with commands or `file:line`
+  evidence. Distinguish completed behavior, behavior needing revision, and new
+  work. Check completed briefs against code; do not derive this from statuses
+  or the previous state report alone.
+- **Concerns** — distinct behavior and guarantees to consider, before assigning
+  them to tasks: for example live output, durable history, input delivery,
+  harness exit reporting, and intentional stop. For each, record the need,
+  existing coverage, and inclusion in or exclusion from the phase. Concerns
+  describe responsibilities, not packages or a mandatory list of features.
+- **Candidate increments and boundary decisions** — give each increment a
+  before/after observation, the concern it advances, its prerequisites, and the
+  minimum operator path. Explain why combined concerns must arrive together;
+  shared code, an expansive objective, and a reference to another planning rule
+  are insufficient reasons. Evaluate a smaller closed loop before accepting a
+  bundle. Distinguish safe child cleanup from exit records, outcome mapping,
+  and a stop capability: one does not automatically require all the others.
+- **Verification mechanics and phase exit** — explain how observations are
+  produced, including fixture controls, environment forwarding, attachment
+  timing, and which process receives a signal. Record what was exercised
+  against existing code and what predicts behavior yet to be built.
+
+Before opening the phase, resolve its boundary decisions and map included
+concerns to real task IDs and briefs. Record excluded work's roadmap stage or
+deferred decision. Candidate names may precede IDs during design; they are not
+deferral owners in an executable plan. The tracker remains the authority for
+dependencies and status, and the phase design links rather than duplicates it.
+
+When changing a plan in flight, update the affected phase design and briefs
+together. Keep completed work's historical identity and exclude it from new
+scope unless a specific revision is justified. A retrospective phase design
+may report unresolved boundary findings in an existing plan; it must identify
+that state and must not claim the old boundaries passed this design step.
 
 ## The seven invariants
 
@@ -88,9 +135,22 @@ Controllable means a person can drive the fake, not just replay it:
 - deterministic seeding when determinism is wanted, and the ability to turn it
   off when exploration is wanted.
 
+Introduce each control with the concern it exercises and preserve controls
+already supported. This catalogue describes the profile across the plan; it
+does not require one increment to implement every associated product guarantee.
+
 A fake has real drawbacks — it is not the provider, the database, or the
 kernel — and the brief that introduces it says what it does not prove. Stating
 those limits is what makes the profile safe to rely on for everything else.
+
+The supported contract is the behavior exercised through the product and the
+controls needed to reproduce it. A fake's invented wire dialect, flags, record
+names, and signal handling are changeable implementation details unless a
+documented compatibility requirement protects them. Change the fake and its
+consumers, scenarios, and documentation together when that simplifies the
+increment. Do not preserve a fixture interface by making the product adapt to
+it without a reason, or derive the product event model from the fake's fields.
+State the distinction in the brief's Contract surfaces.
 
 ### I4 — Substrate swaps prove parity against a standing scenario suite
 
@@ -227,6 +287,11 @@ The two are one rule with two edges:
 > it by pulling future refactors and hardening into it.
 
 ### What belongs in a task
+
+First check the phase design: is this behavior new, does this concern belong in
+this increment, and is the objective itself the smallest useful closed loop?
+The questions below judge scope inside that boundary; they cannot justify a
+boundary merely because the objective already includes everything in it.
 
 Before adding a scope item, three questions:
 
@@ -406,7 +471,9 @@ One sentence, stated as an observable change to the running system.
 
 - Bullets. What this task builds. Written as a prediction when the plan is
   created. The refinement in `skills/task/SKILL.md` makes them concrete
-  implementation instructions against the code before implementation starts.
+  against the code before implementation starts. State the change from the
+  phase design's starting point; completed work is a prerequisite, not scope.
+  Distinguish binding requirements from suggested implementation approaches.
 
 ## Non-goals
 

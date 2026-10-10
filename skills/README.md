@@ -21,7 +21,7 @@ skills/
 
 | Skill | Audience | Use it when |
 |---|---|---|
-| [`workplan`](workplan/SKILL.md) | planning agent | Creating, extending, updating, or auditing the plan in `docs/workplan/`, or closing it into `docs/state.md` |
+| [`workplan`](workplan/SKILL.md) | planning agent | Designing a phase in its README before drafting tasks; creating, extending, updating, or auditing the plan in `docs/workplan/`, or closing it into `docs/state.md` |
 | [`task`](task/SKILL.md) | task agent — refiner, implementer, or auditor, never two for one task | Refining one task's brief before implementation, or implementing, finishing, reviewing, or auditing that task |
 | [`propagate`](propagate/SKILL.md) | task agent or maintainer carrying an agreed downstream handoff | Optionally carrying a task discovery into an already-planned downstream brief after human disposition |
 | [`reflect`](reflect/SKILL.md) | task agent or maintainer improving development practices | Optionally applying evidence-based improvements to instructions, skills, tools, environment, or verification |
@@ -37,7 +37,7 @@ what it needs and does not restate it.
 
 | Document | Defines |
 |---|---|
-| [`shared/workplan-model.md`](shared/workplan-model.md) | The workplan's layout, its seven invariants, the four task shapes, dependency-edge reasons, write sets and contract surfaces, brief anatomy, and the frozen tracker schema |
+| [`shared/workplan-model.md`](shared/workplan-model.md) | The workplan's layout and phase design artifact, its seven invariants, the four task shapes, dependency-edge reasons, write sets and contract surfaces, brief anatomy, and the frozen tracker schema |
 
 ## Getting an agent to use them
 
