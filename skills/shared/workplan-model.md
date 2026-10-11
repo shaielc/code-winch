@@ -42,6 +42,7 @@ still produce a system nobody can start.
 | `docs/workplan/tasks.json` | Machine-readable tracker — status, ownership, dependencies |
 | `docs/workplan/tasks.schema.json` | Schema for the tracker |
 | `docs/workplan/post-mortems/` | Records of plan failures — defects whose root cause is a seam between briefs rather than an implementation |
+| `docs/workplan/propagations/` | Audit finding ledgers linking task-branch PR stacks, human dispositions, and follow-up tasks or issues |
 | `docs/state.md` | Written when a plan closes: what was done, what went wrong, what is not implemented. Outlives the plan, which the close strips back to an empty tracker |
 
 An existing plan's conventions win: match its ID scheme, directory layout, and
@@ -151,6 +152,10 @@ brief cites it.
 
 The test is that a reader can always answer "when does this get finished?" with
 an ID rather than a shrug.
+
+Audit follow-ups accepted through an explicit human disposition may be tracked
+as issues under `propagate-task`. That does not make an issue a task ID for a
+brief's completion deferral or clear a Blocking finding.
 
 ### I7 — The plan stays wide
 

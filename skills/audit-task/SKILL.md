@@ -109,7 +109,7 @@ must be resolved before merge. Input Required means the audit cannot decide
 how to handle a Defect or Deferrable finding; a person must record a disposition
 for each before merge. They may fix a Defect now or accept and track it, and
 may handle Deferrable work now or assign a destination and owner. Harden requires
-no pre-merge action.
+no human verdict or pre-merge fix; `propagate-task` tracks its follow-up issue.
 
 After the human dispositions are recorded, a pull request may be merge-ready
 even if its original audit state is Input Required. Keep that audit state and
@@ -137,4 +137,6 @@ finding.
 Give acceptance results, classified findings, audit state, and outstanding
 merge-readiness conditions separately. Include observed commands or source
 references. Make no implementation, brief, tracker, or phase edits as part of
-this verdict. Optional `propagate-task` or `reflect-task` work is a separate operation.
+this verdict. `propagate-task` routes findings and `reflect-task` examines the
+methodology as separate operations. `task-implement-merge` obtains required
+human verdicts and decides merge readiness without changing this audit.

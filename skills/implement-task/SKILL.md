@@ -125,8 +125,9 @@ not settle.
 
 ## Optional handoffs
 
-Use `skills/propagate-task/SKILL.md` for an agreed discovery affecting an existing
-downstream task, and `skills/reflect-task/SKILL.md` for a reusable process improvement.
+Use `skills/propagate-task/SKILL.md` to route findings to tasks or issues through
+a separate PR into the task branch, and `skills/reflect-task/SKILL.md` to examine
+the development methodology.
 These are optional operations, not delivery gates.
 
 ## Done
@@ -136,3 +137,5 @@ brief verification pass or their limits are reported. Contract changes have
 matching design updates, deferrals have real owners, and the PR names only
 `Task: <ID>`. Status fields remain untouched. A different auditor uses
 `skills/audit-task/SKILL.md` to judge the result.
+Use `skills/task-implement-merge/SKILL.md` to handle finding verdicts and merge
+that audited implementation PR into the task branch.

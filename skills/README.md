@@ -29,14 +29,17 @@ skills/
 | [`refine-task`](refine-task/SKILL.md) | task refiner | Making a derived brief concrete against dispatch-time code |
 | [`implement-task`](implement-task/SKILL.md) | task implementer | Building, verifying, and opening the task PR |
 | [`audit-task`](audit-task/SKILL.md) | independent task auditor | Judging the implementation against its accepted brief |
+| [`task-implement-merge`](task-implement-merge/SKILL.md) | implementation merge operator | Checking the current audit, obtaining finding verdicts, and merging implementation into the task branch |
 | [`close-workplan`](close-workplan/SKILL.md) | plan closer | Explicitly ending a plan and preserving its system record |
-| [`propagate-task`](propagate-task/SKILL.md) | task agent or maintainer | Carrying an agreed discovery into an existing downstream brief |
-| [`reflect-task`](reflect-task/SKILL.md) | task agent or maintainer | Improving the development process from task evidence |
+| [`propagate-task`](propagate-task/SKILL.md) | task agent or maintainer | Routing audit findings to tasks/issues and opening a new-branch propagation PR into the task branch |
+| [`reflect-task`](reflect-task/SKILL.md) | task agent or maintainer | Finding flaws in the development methodology and improving its planning, handoffs, and decisions |
 
 Use different authors for phase design and task derivation. Derivation,
 refinement, implementation, and audit of a task are separate assignments.
 The flow is architecture → phase → task → optional phase revision → next task;
-dispatched task delivery is refine → implement → audit → merge.
+dispatched task delivery is refine → implement → audit → task-implement-merge.
+That merge goes into the task integration branch; its PR to the default branch
+remains a separate operation.
 
 Audience matters. Say who a skill is for when you add one: an agent should be
 able to tell from the table whether a skill is addressed to it before loading
@@ -77,6 +80,12 @@ its own skill: `refine.md` uses `refine-task`, `implement.md` uses
 brief before implementation; the implementer builds the accepted brief; the
 auditor posts its report on the implementation PR. The root `AGENTS.md` routes
 agents to the same operations.
+
+`task-implement-merge` handles the audited implementation PR explicitly; it is
+not a new automatically dispatched control-panel stage. `propagate-task`
+reconstructs the branch stack and submits follow-up changes through a separate
+PR into the task branch. `reflect-task` examines the development method rather
+than deciding findings or merging changes.
 
 Keep that wiring narrow. A dispatched agent is pointed at the skill addressed to
 it, not at every skill in this directory.

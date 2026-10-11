@@ -34,6 +34,9 @@ subtree.
   use `create-phase`, `extend-phase`, `revise-phase`, or `audit-phase`. A separate
   task author uses `derive-task`. Dispatched tasks use `refine-task`,
   `implement-task`, and `audit-task`, with a different author for each operation.
+  `task-implement-merge` merges audited implementation into its task branch after
+  finding verdicts. `propagate-task` routes follow-ups through a separate PR to
+  that branch; `reflect-task` examines the development methodology.
   Explicit plan closure uses `close-workplan`.
 
 ## Rules that bind every task

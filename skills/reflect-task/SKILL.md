@@ -1,62 +1,65 @@
 ---
 name: reflect-task
-description: Optionally improve task-development instructions, skills, tools, environment, and verification using evidence from completed work.
+description: Find and improve flaws in the development methodology using evidence from a task's planning, execution, handoffs, reviews, and decisions. Use to explain recurring process failures or wasted effort, including nontechnical causes.
 ---
 
 # Reflect task
 
-Use this optional side operation when a task reveals a repeatable source of
-error, wasted effort, or ambiguity in the development system itself. Reflect
-is not part of the mandatory task delivery loop (refine → implement → audit →
-merge) and must not become a routine ceremony.
+Examine **how the work was planned, communicated, decided, and reviewed**.
+Find methodology problems that made the task harder, less reliable, or more
+expensive. Product defects are evidence to inspect, not the output of reflection.
 
-## Trigger
+Read applicable `AGENTS.md`, the task and phase artifacts, PRs and discussions,
+audit findings, decisions, and follow-up tasks or issues. Establish what happened
+before attributing it to the process. Keep reflection separate from the audit
+verdict and from finding propagation.
 
-Ask: **What did this task reveal about our instructions, skills, tools,
-environment, or workflow that could make similar future tasks more reliable
-or cheaper?**
+## Look for methodology failures
 
-Reflect only when the evidence suggests a recurring problem or a broadly
-reusable clarification. One-off product changes belong in tasks or
-propagation, not in this skill.
+- Goals or acceptance expectations were interpreted differently by participants.
+- Planning combined concerns, omitted ownership, or assumed prerequisite work.
+- A handoff lost a decision, changed its meaning, or reached the wrong owner.
+- Review or approval rules caused repeated rounds without resolving disagreement.
+- Information arrived too late, feedback had no destination, or an accepted
+  tradeoff was forgotten.
+- Instructions or incentives encouraged unsupported claims, redundant work, or
+  a ritual that did not improve the outcome.
+
+Consider planning, collaboration, prioritization, communication, and decision
+making before narrowing to tools, code, or tests. A technical symptom may have
+a nontechnical cause. A single task can expose a reusable methodology defect;
+repeat occurrence strengthens the evidence but is not a prerequisite.
 
 ## Procedure
 
-1. **Reconstruct the actual sequence.** Read the task brief, implementation,
-   PR discussion and review rounds, and related issues created from audit
-   findings. Before saying a finding was dropped, check whether an issue
-   or downstream task already owns it.
-2. **Collect evidence.** Record the observed failure, ambiguity, or unnecessary
-   cost and cite a command with output, a `file:line`, an issue, or review.
-   Distinguish what was observed from a proposed explanation.
-3. **Choose the narrowest durable fix.** Prefer a sentence or example in an
-   existing instruction, skill, or verification document to new mandatory
-   phases, gates, or templates. Do not change product contracts under the
-   guise of workflow improvement.
-4. **Preserve gate accuracy.** Specify what a command actually checks and what
-   it does not. In particular, do not describe Go checks as covering web UI,
-   or a Docker path as covering host-only lint, unless verified.
-5. **Show the difference.** Record the evidence, exact amendment, how it
-   prevents recurrence, and any tradeoff. If no small reusable change is
-   justified, report that and leave the process untouched.
+1. Reconstruct the sequence: expectations, responsibilities, handoffs, decisions,
+   changes, review findings, and their dispositions. Link the actual records;
+   check existing follow-ups before claiming something was dropped.
+2. Describe an observed cost or failure and the development practice that
+   plausibly caused it. Separate evidence from inference and consider competing
+   explanations. A bad outcome alone does not prove a bad methodology.
+3. Identify the rule, role, artifact, or feedback path that should change. Explain
+   how that change would have altered the observed sequence.
+4. Propose or make the smallest reusable amendment in the relevant instructions
+   or workflow. Include a way to assess whether it improves the next comparable
+   task and any added cost. Avoid adding a mandatory ceremony without a reason.
+5. Report the observation, process cause, exact change, expected effect, and
+   remaining uncertainty. If no methodology problem is supported, say so and
+   leave the process unchanged.
 
-## Examples from interactive UI work
+## Example
 
-- Audits use Blocking, Defect, Deferrable and Harden as *descriptions* with
-  explicit human dispositions, not as automatic product decisions.
-- When reconstructing whether audit findings were addressed, inspect issues
-  opened from those findings as well as the source PR.
-- For behavior with multiple input methods or submission paths, consider a
-  behavior/action-path matrix (e.g. keyboard submit, button submit, invalid
-  submit, focus behavior). Use it when it reveals path-specific gaps; do not
-  require it on every task.
-- Verification docs should distinguish the Go host gate, Docker integration
-  path, and web-specific checks by their actual coverage. A green Go gate
-  alone cannot establish that web interaction behavior was verified.
+A contributor and reviewer repeatedly disagree because the expected audience
+was never stated in the brief. Reflection traces the disagreement to the
+planning handoff and proposes recording the audience before work begins. It
+checks whether the next comparable task avoids that repeated clarification.
+The output is an improvement to the development method, not a redesign of the
+product being reviewed.
 
 ## Boundary
 
-Reflection proposes or makes small *development-system* amendments separately
-from the task audit's verdict and from downstream product propagation. It
-does not revise the audited brief to justify code, decide defect dispositions,
-or add merge requirements without an explicit process decision.
+Do not revise an audited brief to justify its implementation, choose human
+finding dispositions, redefine product contracts, or close issues as a result
+of reflection. Route product follow-ups through `propagate-task`. Reflection
+may improve technical or nontechnical practices, but its conclusion must be
+about the methodology that produced the work.

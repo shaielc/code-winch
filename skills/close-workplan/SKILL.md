@@ -25,6 +25,8 @@ decision to end the plan runs this.
 2. **Read every post-mortem.** Each one names a plan rule that would have caught
    its defect, and those rules are the most valuable thing the plan produced.
    They must be restated in the report, because `post-mortems/` is about to go.
+   Read propagation ledgers too; carry unresolved accepted findings and their
+   task/issue destinations into the state report before removing those ledgers.
 3. **Read the code that exists**, not the briefs' account of it. What runs, what
    is registered in the composition root, what the standing suite actually
    covers, what a person can reach by hand.
@@ -37,7 +39,7 @@ decision to end the plan runs this.
 7. **Empty the plan in the same commit** that adds the report, so the two replace
    each other in one step. Git keeps the old plan; the working tree should not go
    on presenting a plan nobody is executing. Remove the briefs, the phase
-   directories, `README.md`, and `post-mortems/`. Keep two files:
+   directories, `README.md`, `post-mortems/`, and `propagations/`. Keep two files:
 
    - `docs/workplan/tasks.schema.json`, unchanged. It is the definition of the ID
      scheme and the tracker's shape, and it is what the next plan is written
