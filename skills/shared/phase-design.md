@@ -18,14 +18,13 @@ separate even when an increment needs both as required wiring.
 
 ## Ordered increments
 
-Number increments in delivery order and give each a stable local label:
+Number increments in delivery order. Put the **number only** in `Order` and a **descriptive title** (not a number or identifier such as `0.1`) in `Increment`:
 
 | Order | Increment | Observable change | Includes | Excludes | Prerequisites |
 |---|---|---|---|---|---|
-| 1 | `<label>` | Before/after behavior | Responsibility and minimum operator path | Neighboring concerns owned elsewhere | Existing behavior or earlier increments |
+| 1 | Live harness output | Before/after behavior | Responsibility and minimum operator path | Neighboring concerns owned elsewhere | Existing behavior or earlier increments |
 
-Keep numbers separate from labels so the order can change without losing
-coverage references. Order guides derivation; task edges still need the model's
+`Order` is the increment's sequence number; `Increment` names the work in plain language. Do not embed the order number in the increment title. Keep numbers separate from titles so the order can change without renaming the increment or breaking coverage references. Order guides derivation; task edges still need the model's
 reasons. State independent branches explicitly rather than treating neighboring
 rows as dependencies.
 
