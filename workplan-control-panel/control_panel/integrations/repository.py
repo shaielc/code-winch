@@ -45,7 +45,7 @@ def pull_main(clone: Path) -> tuple[dict[str, Any], str]:
 
 def task_head(clone: Path, task_id: str) -> str:
     branch = task_branch(task_id)
-    github_run("git", "fetch", "--quiet", "origin",
+    github_run("git", "fetch", "origin",
                f"refs/heads/{branch}:refs/remotes/origin/{branch}", cwd=clone)
     return run("git", "rev-parse", f"origin/{branch}", cwd=clone)
 
@@ -63,12 +63,23 @@ def ensure_task_branch(clone: Path, remote: str, base: str, task_id: str,
     """Create the task branch on the remote from the base branch unless it exists."""
     ref = f"refs/heads/{task_branch(task_id)}"
     if base_commit is None:
-        github_run("git", "fetch", "--quiet", remote, base, cwd=clone)
+        github_run("git", "fetch", remote, base, cwd=clone)
     if not github_run("git", "ls-remote", "--heads", remote, ref, cwd=clone):
         source = base_commit or f"{remote}/{base}"
-        github_run("git", "push", "--quiet", remote, f"{source}:{ref}", cwd=clone)
-    github_run("git", "fetch", "--quiet", remote,
+        github_run("git", "push", remote, f"{source}:{ref}", cwd=clone)
+    github_run("git", "fetch", remote,
                f"{ref}:refs/remotes/{remote}/{task_branch(task_id)}", cwd=clone)
+
+
+def delete_task_branch(clone: Path, remote: str, task_id: str) -> None:
+    """Remove the task branch from the remote and the clone's tracking ref, if either exists.
+
+    GitHub closes any open pull request whose head branch is deleted.
+    """
+    ref = f"refs/heads/{task_branch(task_id)}"
+    if github_run("git", "ls-remote", "--heads", remote, ref, cwd=clone):
+        github_run("git", "push", "--quiet", remote, "--delete", ref, cwd=clone)
+    run("git", "update-ref", "-d", f"refs/remotes/{remote}/{task_branch(task_id)}", cwd=clone)
 
 
 def push_opening_commit(clone: Path, remote: str, task_id: str) -> bool:
@@ -93,7 +104,6 @@ def push_opening_commit(clone: Path, remote: str, task_id: str) -> bool:
             "git",
             "worktree",
             "add",
-            "--quiet",
             "--detach",
             str(worktree),
             f"{remote}/{branch}",
@@ -103,8 +113,8 @@ def push_opening_commit(clone: Path, remote: str, task_id: str) -> bool:
             save_tracker(worktree / TRACKER, tracker)
             run("git", "add", str(TRACKER), cwd=worktree)
             message = f"chore: mark {task_id} in progress"
-            run("git", "commit", "--quiet", "-m", message, cwd=worktree)
-            github_run("git", "push", "--quiet", remote, f"HEAD:refs/heads/{branch}", cwd=worktree)
+            run("git", "commit", "-m", message, cwd=worktree)
+            github_run("git", "push", remote, f"HEAD:refs/heads/{branch}", cwd=worktree)
         finally:
             run("git", "worktree", "remove", "--force", str(worktree), cwd=clone)
     return True
