@@ -6,5 +6,93 @@
     "blocked",
     "completed"
   ],
-  "tasks": []
+  "tasks": [
+    {
+      "id": "P0-001",
+      "title": "Plan phase-1: sandbox exchange",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-001-plan-phase-1-sandbox-exchange.md"
+    },
+    {
+      "id": "P0-002",
+      "title": "Plan phase-2: first real vendor",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-002-plan-phase-2-first-real-vendor.md"
+    },
+    {
+      "id": "P0-003",
+      "title": "Plan phase-3: structured views and resume",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [
+        "P0-002"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-003-plan-phase-3-structured-views-resume.md"
+    },
+    {
+      "id": "P0-004",
+      "title": "Plan phase-4: observe existing sandboxes",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [
+        "P0-003"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-004-plan-phase-4-observe-sandboxes.md"
+    },
+    {
+      "id": "P0-005",
+      "title": "Plan phase-5: run lifecycle control",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [
+        "P0-004"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-005-plan-phase-5-run-lifecycle.md"
+    },
+    {
+      "id": "P0-006",
+      "title": "Plan phase-6: enforced isolation",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-006-plan-phase-6-enforce-isolation.md"
+    },
+    {
+      "id": "P0-007",
+      "title": "Plan phase-7: second adapter and workflows",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [
+        "P0-002",
+        "P0-005"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-007-plan-phase-7-second-adapter-workflows.md"
+    }
+  ]
 }
+
