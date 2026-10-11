@@ -37,7 +37,7 @@ subtree.
   `task-implement-merge` merges audited implementation into its task branch after
   finding verdicts. `propagate-task` routes follow-ups through a separate PR to
   that branch; `reflect-task` examines the development methodology.
-  Explicit plan closure uses `close-workplan`.
+  Explicit phase closure uses `close-phase`; ending a whole plan closes all its phases.
 
 ## Rules that bind every task
 

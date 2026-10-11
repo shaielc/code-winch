@@ -47,15 +47,6 @@ repeat occurrence strengthens the evidence but is not a prerequisite.
    remaining uncertainty. If no methodology problem is supported, say so and
    leave the process unchanged.
 
-## Example
-
-A contributor and reviewer repeatedly disagree because the expected audience
-was never stated in the brief. Reflection traces the disagreement to the
-planning handoff and proposes recording the audience before work begins. It
-checks whether the next comparable task avoids that repeated clarification.
-The output is an improvement to the development method, not a redesign of the
-product being reviewed.
-
 ## Boundary
 
 Do not revise an audited brief to justify its implementation, choose human

@@ -1,27 +1,28 @@
 ---
-name: close-workplan
-description: Close an implementation workplan into docs/state.md and a supported empty tracker. Use only when explicitly asked to end a plan and preserve the system record and lessons.
+name: close-phase
+description: Close an explicitly selected phase into docs/state.md, preserving the system record, lessons, and other active phases. Use only when asked to end a phase; an explicit whole-workplan closure applies this operation to all its phases and leaves a supported empty tracker.
 ---
 
-# Close workplan
+# Close phase
 
 Read applicable `AGENTS.md` files and [the model](../shared/workplan-model.md).
-Run this operation only for an explicit request to end the plan.
+Run this operation only for an explicit request to end a phase or the whole plan.
 
 ## Procedure
 
-Close ends a plan. It reads what happened, writes the record to `docs/state.md`,
-and strips `docs/workplan/` back to an empty tracker. It writes no briefs: the
-next plan is created against the design set and this record.
+Identify the selected phase before changing anything. An explicit request to
+close the current workplan selects all its phases. Read what happened, write
+the record to `docs/state.md`, and retire the selected phase artifacts. Preserve
+the records of other active phases. Closure records unfinished work as gaps;
+it does not assert that the phase's outcome was completed.
 
-Close happens because someone asked for it, never as a consequence of an audit
-finding the plan in bad shape. An audit that finds problems reports them; only a
-decision to end the plan runs this.
+Close happens because someone asked for it. An audit reports problems; it does
+not authorize closure.
 
 1. **Settle every task.** Status, brief, and whether the acceptance criteria
    hold at HEAD. A `completed` status is a claim about the repository — check it
    against the repository, not against the pull request that closed it. Sample
-   nothing; the point of a close is that the whole tracker gets resolved.
+   nothing in the selected phase; a whole-plan close resolves the whole tracker.
 2. **Read every post-mortem.** Each one names a plan rule that would have caught
    its defect, and those rules are the most valuable thing the plan produced.
    They must be restated in the report, because `post-mortems/` is about to go.
@@ -36,10 +37,16 @@ decision to end the plan runs this.
    unreachable error paths whether or not a brief named them; promises in the
    design set that never became a task at all.
 6. **Write `docs/state.md`.** See below.
-7. **Empty the plan in the same commit** that adds the report, so the two replace
-   each other in one step. Git keeps the old plan; the working tree should not go
-   on presenting a plan nobody is executing. Remove the briefs, the phase
-   directories, `README.md`, `post-mortems/`, and `propagations/`. Keep two files:
+7. **Retire the phase in the same commit** that adds the report. Remove its
+   briefs and directory, task records, index entries, and related post-mortems
+   and propagation ledgers after carrying their evidence into the report.
+   Preserve other phases and their graph. Before removing a task referenced by
+   a remaining phase, verify the prerequisite at HEAD and replace the reference
+   with its evidenced baseline. An unmet prerequisite needs a phase-author
+   decision; do not silently erase its edge or fabricate completion.
+
+   When the last phase closes, remove the plan `README.md`, remaining phase
+   directories, `post-mortems/`, and `propagations/`. Keep two files:
 
    - `docs/workplan/tasks.schema.json`, unchanged. It is the definition of the ID
      scheme and the tracker's shape, and it is what the next plan is written
@@ -59,7 +66,8 @@ decision to end the plan runs this.
      reporting no available tasks. Validate it before committing the close; an
      example that omits a required key is how this went wrong once already.
 
-   The empty tracker is the closed state, not a stub to fill in. `create-phase`
+   Validate a retained tracker and its graph too. The empty tracker is the
+   whole-plan closed state, not a stub to fill in. `create-phase`
    designs the next phase; a separate `derive-task` author writes its tasks.
 8. **Sanitize the references.** See below.
 
@@ -96,9 +104,11 @@ Each hit resolves one of three ways.
   claim rather than assuming it — run the availability query and the status gate
   against the emptied tracker and see them succeed with an empty result.
 
-The check is that no task ID and no `docs/workplan/` brief path survives outside
-git history, and that every document describing how to pick up work either
-describes the empty state truthfully or is gone.
+The check is that no reference to a retired task or deleted brief survives as a
+live owner or link. Generic formats, synthetic test fixtures, and historical
+citations are not live owners. Preserve historical citations with a resolvable
+git-history link where needed. For a whole-plan close, contributor guidance
+describes the empty state truthfully and automation still works against it.
 
 ### The report
 

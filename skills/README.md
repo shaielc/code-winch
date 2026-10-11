@@ -30,7 +30,7 @@ skills/
 | [`implement-task`](implement-task/SKILL.md) | task implementer | Building, verifying, and opening the task PR |
 | [`audit-task`](audit-task/SKILL.md) | independent task auditor | Judging the implementation against its accepted brief |
 | [`task-implement-merge`](task-implement-merge/SKILL.md) | implementation merge operator | Checking the current audit, obtaining finding verdicts, and merging implementation into the task branch |
-| [`close-workplan`](close-workplan/SKILL.md) | plan closer | Explicitly ending a plan and preserving its system record |
+| [`close-phase`](close-phase/SKILL.md) | phase closer | Explicitly ending a phase and preserving its system record |
 | [`propagate-task`](propagate-task/SKILL.md) | task agent or maintainer | Routing audit findings to tasks/issues and opening a new-branch propagation PR into the task branch |
 | [`reflect-task`](reflect-task/SKILL.md) | task agent or maintainer | Finding flaws in the development methodology and improving its planning, handoffs, and decisions |
 

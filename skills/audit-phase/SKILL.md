@@ -15,8 +15,11 @@ Report findings; change none of the artifacts being judged.
 
 ## Check
 
-- Starting point: completed behavior exists; assumptions distinguish source
-  evidence from runtime observations.
+- Starting point: distinguish capabilities present at the audited commit from
+  prerequisites planned in earlier phases or tasks. Check claims about existing
+  behavior against source or runtime evidence; check planned prerequisites for
+  an explicit owner and a valid order. A future phase need not be implemented
+  before its design can be audited.
 - Design: numbered increments add observable properties in a valid order;
   boundaries are decided and excluded concerns have destinations.
 - Task fit: each task belongs to an increment, fits a shape, and keeps its
@@ -29,8 +32,9 @@ Report findings; change none of the artifacts being judged.
   exist, and contract collisions have an owner and edge. Report concurrent
   write collisions separately.
 - Records: briefs, tracker, mappings, index, and collision report agree.
-- Completion: criteria, reachability, demonstrations, and invariants hold at
-  the audited commit, rather than merely having completed statuses.
+- Completion claims, when made: criteria, reachability, demonstrations, and
+  invariants hold at the audited commit. Unimplemented planned work is not a
+  false completion claim merely because its phase was designed in advance.
 
 Give each finding a command and observed output or `file:line`, its effect,
 and the artifact or responsibility needing correction. Distinguish incomplete
@@ -46,4 +50,4 @@ Record a plan defect in `docs/workplan/post-mortems/` through a separate change
 when the cause is a seam between briefs or an unowned invariant.
 
 An audit neither changes statuses nor closes the plan. An explicitly requested
-close uses `skills/close-workplan/SKILL.md`.
+close uses `skills/close-phase/SKILL.md`.

@@ -162,7 +162,7 @@ fails validation — and therefore fails every pull request, since
 `.github/workflows/task-status-gate.yml` reads it on each one. (An earlier
 revision of this file cited `skills/shared/workplan-model.md:221`, which is a
 different sentence; the defect was in the historical `workplan` skill.) The
-current close operation is `skills/close-workplan/SKILL.md`.
+current close operation is `skills/close-phase/SKILL.md`.
 
 **A code comment cites a fixture that was deleted.**
 `cmd/fake-harness/main.go:29` says `streamPayload` matches
