@@ -1,462 +1,224 @@
 ---
 name: workplan
-description: Design phases and write or review the implementation workplan in docs/workplan/ — its phase design artifacts, task briefs, dependency graph, and tracker. Use when designing a phase before drafting tasks, deriving a plan from the design set, adding tasks to a plan already in flight, correcting status or ownership, widening a plan that has become serial, auditing the plan for coverage gaps, unjustified dependency edges, and unreachable code, or closing a finished plan into a statement of what the system now is. Assumes a design-document set exists (at minimum docs/architecture.md and docs/decisions/).
+description: Derive an implementation workplan from the architecture and roadmap by designing a phase, deriving one task at a time, and revising the phase when derivation exposes a better boundary. Use to create or extend docs/workplan/, revise phase designs or task ownership, audit decomposition and dependencies, update plan records, or close a plan into docs/state.md.
 ---
 
 # Workplan
 
-This skill covers the plan as an artifact: phase designs, briefs, the tracker,
-and the index that ties them together.
-
-Read `skills/shared/workplan-model.md` first. It defines the layout, the four
-properties, the seven invariants, the four task shapes, dependency-edge reasons,
-write sets and contract surfaces, brief anatomy, and the frozen tracker schema.
-Everything below is how to apply that model when the plan changes or is judged.
-
-## Modes
-
-Establish which mode applies before doing anything else.
-
-1. **Create** — no plan exists. Read the full design set, derive phases, design
-   each phase, then write its briefs and the tracker. Where a previous plan was
-   closed, read `docs/state.md` first: it says what already exists, what broke
-   last time, and what is still missing. Creating against the design set alone re-plans work
-   that is already done. See *Creating a plan over existing code*.
-2. **Extend** — add tasks to a plan in flight. Append IDs from the plan-wide
-   counter, whatever phase they land in; never renumber. This
-   is where revision tasks arrive: a defect found while implementing, a failed
-   task audit, a write collision that needed more than a rebase.
-3. **Update** — status, ownership, or blocked reason changed; or a merged change
-   wrote outside its task's write set. See *Keeping status true* and *Report it*.
-4. **Audit** — report coverage gaps, invariant violations, and unreachable code
-   without changing the plan.
-5. **Close** — the plan is finished or is being abandoned. Record what the
-   system actually is in `docs/state.md` and strip `docs/workplan/` back to an
-   empty tracker. See *Close procedure*.
-
-Whichever mode applies, check the seven invariants explicitly. They hold of the
-plan as a whole, so a plan can violate one while every individual brief reads
-well.
-
-## Design the phase before the tasks
-
-Write `docs/workplan/phase-N/README.md` using *Phase design* in the shared
-model. Produce it before drafting detailed briefs, not as a summary derived
-from them. Start from the verified system at HEAD and the roadmap's outcome.
-List the distinct concerns and evaluate the smallest observable increments
-before allocating task IDs or committing to a transport, record format, or
-fixture protocol. Keep required product contracts and provisional approaches
-explicitly distinct.
-
-Challenge combinations at this step. "Required by the objective" does not
-justify a bundle when the objective itself combined several concerns. Neither
-does preserving an invariant require implementing every associated feature in
-one increment: identify the minimum needed to keep it true. Safe process
-cleanup, reporting native exit, mapping exit outcomes, and operator stop are
-separate concerns even when they touch one supervisor.
-
-Then allocate IDs, map included concerns to them, write briefs, and derive the
-graph and collision report. Before opening a phase, review the artifact against
-its briefs and HEAD: every scope item is a change from the starting point and
-every bundle has a boundary justification independent of its own objective.
-If a demonstration's mechanics cannot be exercised yet, say what is a
-prediction and identify how implementation will verify it.
-
-In extend mode, revise the affected phase design before assigning new scope.
-In update mode, reconcile it with discoveries that change boundaries or the
-starting point. In audit mode, judge its decomposition and baseline as well as
-the individual briefs. Backfilling an existing phase records current boundaries
-and unresolved findings honestly; it does not certify the original derivation.
-
-## Writing briefs
-
-Briefs are drafts until their phase opens. Writing all of them up front is
-correct — it is what makes the whole-system map useful — but a brief written
-before its phase's dependencies exist is a hypothesis, and contact with the code
-is where it gets tested against reality.
-
-Every brief follows the phase design and the anatomy in the shared model. The
-sections that carry the most weight, and that a draft most often leaves thin:
-
-- **Runtime reachability** — never empty. A task that cannot name the
-  composition root, profile, and command that reach its code fits none of the
-  four shapes; merge it into the task that first reaches it.
-- **Write set and Contract surfaces** — the two together are what makes
-  concurrency derivable, and they are not interchangeable: an overlapping write
-  set is a merge warning, an overlapping contract surface is a missing
-  dependency edge. A brief that declares neither is asserting width instead of
-  showing it. Derive the write set from the Scope bullets, as the shared model
-  describes; it is a forecast, not a boundary.
-- **Demonstration** — commands a person can actually run, and what they should
-  see. Not a formality, and not a restatement of the test names.
-- **Acceptance criteria** — when the objective promises a guarantee, the
-  criteria name the failures that would break it and what a person observes in
-  each. Criteria that describe only the happy path leave the implementer and the
-  auditor each to pick their own failures.
-
-Deferrals name an ID that exists in `tasks.json` at the moment the deferral is
-written. Writing a deferral therefore sometimes means creating the owning task
-first.
-
-### The split test
-
-When a proposed task looks like it should be two, inspect the dependency between
-the halves.
-
-The split is invalid if the second half's objective is substantially *make the
-capability the first half introduces usable through the maintained operator
-surface*. That is the first half's completion condition wearing a task ID. Merge
-the operator path back in.
-
-The split is valid when the second half introduces a distinct observable
-property: a new capability, a new substrate, failure or recovery guarantees,
-performance or security guarantees, a revision of an implementation that already
-works, or operator ergonomics beyond what is needed to drive the existing
-capability.
-
-### The overstuffed-seam test
-
-After drafting a seam brief, classify every scope bullet as one of: required
-behavior, required wiring, required operator reachability, required invariant
-preservation, future enablement, hardening, or refactor.
-
-A seam normally contains only the first four. Extract the rest unless removing
-it would make the objective false or break an invariant at completion.
-
-Also compare the objective with the phase's concern list and candidate
-increments. If several concerns appear required only because the objective
-bundles them, narrow or split the objective first, then repeat this test. Check
-each bullet against completed work; describe only its missing delta.
-
-## Creating a plan over existing code
-
-A plan is rarely written against an empty repository. After a close, and any
-time one is derived for a system that already runs, the code arrives with some
-invariants held and others not.
-
-Check I1–I7 against that code before deriving phases. Start the system. Run the
-fake profile by hand. Run the standing scenario suite, or find that there is not
-one. `docs/state.md` says what the last plan believed; the repository says what
-is true.
-
-**Every invariant that fails becomes a task in the new plan.** Not a note in the
-README, not a caveat inside some brief, not an assumption that a task will get
-to it on the way past — a task with an ID, in a phase, with acceptance criteria
-that prove the invariant holds again. A plan that inherits a system which does
-not deploy, and does not contain the task that makes it deploy, is built on a
-claim it never checked.
-
-I1 and I2 failures go in the first phase. Every other task's demonstration
-assumes a system that starts and deploys, so a plan that schedules those repairs
-late has no demonstrable task before them.
-
-A repair brief fills the ordinary anatomy, with three sections carrying the
-weight:
-
-- **Objective** — the invariant restored, stated as observable behavior.
-- **Acceptance criteria** — checkable against the repository, including the
-  invariant's own evidence: the command and the output that show it holding.
-- **Traces to** — the invariant, and the section of `docs/state.md` that
-  recorded the gap.
-
-Repair tasks take the ordinary four shapes. The shape follows from what becomes
-observable, not from the fact that something is being restored: a repair that
-makes the system deploy again is demonstrated the way the first task of a
-greenfield plan would demonstrate it.
-
-The gaps `docs/state.md` records under *what is not implemented* are a different
-input and get ordinary treatment. Those are missing capabilities, derived from
-the design set like any other. An invariant failure is not a missing capability
-— it is the plan's own floor giving way, which is why it goes first.
-
-## Width is designed, not hoped for
-
-Concurrency is derived from dependency edges, write sets, and contract surfaces,
-in the same way availability is derived from status. Those declarations are
-defined in the shared model; what follows is how to shape a plan so they produce
-width.
-
-### Design the spine so it does not collide
-
-I1 and I4 create a shared spine — composition root, scenario suite, CLI — that
-every task has reason to touch. Left alone, that spine serializes the plan. The
-remedy is architectural and belongs in the design documents, not only in the
-plan:
-
-- wiring is **append-only** — implementations self-register from their own
-  files and the composition root reads a registry, rather than every task
-  editing one central switch;
-- profiles, scenarios, and CLI commands are **one file each**;
-- migration identifiers are allocated so two open branches cannot claim the
-  same one.
-
-Where the architecture cannot offer this, say so in the brief and accept the
-serialization knowingly.
-
-### Shape and width
-
-Swap tasks are naturally parallel: different substrates, disjoint surfaces.
-Seam tasks contend for the composition root, so define seams early and in as few
-tasks as the boundaries allow. Capability tasks contend for the scenario suite.
-A phase that opens with two or three independent roots stays wide; a phase that
-opens with one is a chain whatever its task count.
-
-### Report it
-
-Whenever the plan is created, extended, or audited, compute and record per
-phase: the **critical path** (longest
-dependency chain), the **average width** (task count over critical path length),
-the **write-collision set** (pairs of concurrently-available tasks with
-overlapping write sets), and the **contract-collision set** (pairs sharing a
-contract surface).
-
-Report the two collision sets separately, because they mean different things. A
-write collision is a cost to acknowledge — those two will rebase. A contract
-collision between concurrently-available tasks is a defect to fix before the
-phase opens: the edge is missing, or one task's surface needs narrowing, or the
-two are one task.
-
-Report the numbers and justify any chain that is long relative to its phase; do
-not adopt a target width in the abstract.
-
-## Close procedure
-
-Close ends a plan. It reads what happened, writes the record to `docs/state.md`,
-and strips `docs/workplan/` back to an empty tracker. It writes no briefs: the
-next plan is created against the design set and this record.
-
-Close happens because someone asked for it, never as a consequence of an audit
-finding the plan in bad shape. An audit that finds problems reports them; only a
-decision to end the plan runs this.
-
-1. **Settle every task.** Status, brief, and whether the acceptance criteria
-   hold at HEAD. A `completed` status is a claim about the repository — check it
-   against the repository, not against the pull request that closed it. Sample
-   nothing; the point of a close is that the whole tracker gets resolved.
-2. **Read every post-mortem.** Each one names a plan rule that would have caught
-   its defect, and those rules are the most valuable thing the plan produced.
-   They must be restated in the report, because `post-mortems/` is about to go.
-3. **Read the code that exists**, not the briefs' account of it. What runs, what
-   is registered in the composition root, what the standing suite actually
-   covers, what a person can reach by hand.
-4. **Check the invariants at HEAD.** I1–I7 against the real repository. Start
-   the system. Run the fake profile by hand. Run the standing scenario suite.
-5. **Find what no task claimed.** Stubs, TODOs, unimplemented branches, and
-   unreachable error paths whether or not a brief named them; promises in the
-   design set that never became a task at all.
-6. **Write `docs/state.md`.** See below.
-7. **Empty the plan in the same commit** that adds the report, so the two replace
-   each other in one step. Git keeps the old plan; the working tree should not go
-   on presenting a plan nobody is executing. Remove the briefs, the phase
-   directories, `README.md`, and `post-mortems/`. Keep two files:
-
-   - `docs/workplan/tasks.schema.json`, unchanged. It is the definition of the ID
-     scheme and the tracker's shape, and it is what the next plan is written
-     against. A close that deletes it deletes the format its own report cites.
-   - `docs/workplan/tasks.json`, emptied to the smallest body its own schema
-     accepts — `schema_version`, `status_values`, and an empty `tasks` array, all
-     three of which `tasks.schema.json` requires:
-
-         {
-           "schema_version": 1,
-           "status_values": ["pending", "in_progress", "blocked", "completed"],
-           "tasks": []
-         }
-
-     The dispatch automation opens this file unconditionally and validates it, so
-     an absent or shapeless tracker fails every pull request rather than
-     reporting no available tasks. Validate it before committing the close; an
-     example that omits a required key is how this went wrong once already.
-
-   The empty tracker is the closed state, not a stub to fill in. Create mode
-   writes the next plan's tasks into it.
-8. **Sanitize the references.** See below.
-
-### Sanitizing the references
-
-The plan is cited from outside itself: by the automation that dispatches it, by
-the contributor documentation that explains how to pick a task up, by code
-comments that name an owning task, and by deferrals that name the ID meant to
-resolve them. Once the briefs are gone every one of those is dangling — nothing
-can resolve a task ID any more, and nothing can open a brief path. A close that
-leaves them behind hands the next plan a tree that describes a plan that no
-longer exists.
-
-Sweep the whole tree, not only `docs/`. Two searches find nearly all of it: the
-ID pattern, and the string `docs/workplan/`. Read the surrounding sentence in
-each hit rather than pattern-replacing, and check at least contributor
-documentation (`AGENTS.md`, `README.md`), CI workflows, dispatch scripts and
-their prompts, decision records, and comments in source.
-
-Each hit resolves one of three ways.
-
-- **It carried something.** A deferral naming an owning task, a code comment
-  naming the task that removes a stub, a workflow-slot comment naming who
-  allocated it. What the reference was holding is a gap in the system, so it
-  belongs in *What is not implemented* under a description of the gap. Then the
-  reference goes.
-- **It points at the plan as a place.** A brief path, a link into
-  `docs/workplan/README.md`, a "start here" that routes a contributor to the
-  tracker. Repoint it at `docs/state.md` or delete it, whichever leaves a true
-  sentence.
-- **It is machinery.** Scripts, workflows, and control panels that read the
-  tracker keep working against the empty one and report nothing available; that
-  is the whole reason the tracker survives. Leave them alone, and confirm the
-  claim rather than assuming it — run the availability query and the status gate
-  against the emptied tracker and see them succeed with an empty result.
-
-The check is that no task ID and no `docs/workplan/` brief path survives outside
-git history, and that every document describing how to pick up work either
-describes the empty state truthfully or is gone.
-
-### The report
-
-`docs/state.md` is a statement about the system, not a plan. It has three parts,
-and someone writing the next plan should need nothing else from the one that
-closed.
-
-**What was done.** The capabilities that exist and are reachable, each with the
-evidence: the command that drives it and the profile it runs under. Group by
-capability rather than by task ID — the next plan does not inherit this one's
-decomposition, and organising the record around it smuggles that decomposition
-forward.
-
-**What went wrong.** Every post-mortem's rule, restated so it survives the
-briefs being removed. Tasks marked complete that were not. Seams that leaked.
-Invariants that were established and then lost, and what lost them.
-
-**What is not implemented.** Every design-set promise with no working code
-behind it, every stub and unreachable branch still in the tree, and every
-deferral whose owning task never landed. State each as a gap in the system
-rather than as a task: naming the work is the next plan's job, and a state
-document that reads like a backlog will be treated as one.
-
-Every claim carries a command with its output or a `file:line`. A close report
-whose claims cannot be rechecked is worth less than the tracker it replaced.
-
-## Keeping status true
-
-Statuses are claims about the repository, and claims decay.
-
-- Mark `completed` only after verifying the acceptance criteria against HEAD,
-  not against the pull request description.
-- In update mode, re-verify any task whose completion is a dependency of the
-  work being planned.
-- In audit mode, sample completed tasks and report any whose criteria do not
-  hold.
-- `blocked` requires a reason naming what would unblock it, ideally a task ID.
-
-## Audit mode
-
-Report, without changing the plan:
-
-- **Coverage** — every section of the design set maps to at least one task;
-  every task traces back to a documented requirement. Name the gaps and the
-  scope inflation separately.
-- **Phase design** — each phase has its README, an evidenced starting point,
-  distinct concerns, and justified increment boundaries. Report work duplicated
-  from completed tasks, bundles justified only by their own objectives, and
-  fixture details promoted to product contracts without a compatibility need.
-- **Reachability** — every port, interface, or boundary in the codebase has at
-  least one implementation registered in a composition root and reachable at
-  runtime. List the orphans.
-- **Invariants** — I1 through I7, each with the evidence checked.
-- **Graph** — no unknown references, no forward references, no cycles. Every
-  edge carries one of the four reasons; list the unjustified ones, since each is
-  width the plan is giving away. List `revision` edges in phases that have not
-  opened separately: a revision planned before the implementation exists is work
-  scheduled to be done twice.
-- **Width** — critical path, average width, and the write- and
-  contract-collision sets per phase. A contract collision between two
-  concurrently-available tasks is a blocking finding; a write collision is
-  reported as a cost.
-- **Completion closure** — a task whose main purpose is to expose through the
-  maintained CLI a capability an earlier task introduced, and which depends
-  directly on that task. Report the pair: this is the earlier task's completion
-  condition filed under a separate ID. Report the mirror case too — scope
-  bullets that exist mainly to prepare later tasks.
-- **Round trips** — every user-facing interaction that is modelled or rendered
-  is also actionable. A payload kind that can be displayed but not submitted, or
-  a state transition the documentation promises but no API exposes, is a round
-  trip that stops halfway.
-- **Status** — sampled completed tasks that do not hold.
-
-## Plan failures get post-mortems
-
-When a defect's root cause is the plan rather than an implementation — a seam
-between two briefs, an invariant with no owning task, an assumption one brief
-made about another's output — record it in `docs/workplan/post-mortems/`. Each
-record names the briefs involved, explains why no single one is wrong on its
-face, and states what plan rule would have caught it. Ordinary implementation
-bugs do not belong there.
-
-Those rules outlive the plan that produced them. Close restates every one of
-them in `docs/state.md` before `post-mortems/` goes, which is the only reason
-removing it is safe.
-
-## Smells
-
-Concrete patterns that have produced broken plans. Treat each as a defect to
-fix, not a style preference.
-
-- A port whose only implementations are test doubles.
-- An empty composition root past the first task.
-- A roadmap line — "minimal local authentication", "credential-reference
-  storage" — that maps to no task. Every promise in the design set has an owner
-  or an explicit deferral.
-- Telemetry, configuration, or logging foundations scheduled as the final task,
-  while every earlier brief asserts logging requirements. Retrofitting the whole
-  plan's ad-hoc logging at the end is the expensive path; split a small
-  foundation task into the first phase and leave dashboards and runbooks late.
-- A capability that is modelled and rendered in one phase but only actionable in
-  a much later one. Ship the round trip in one task.
-- A task whose purpose is to make an earlier task's capability reachable by hand.
-- Scope bullets that exist mainly to prepare later tasks: pre-emptive file
-  restructuring, extension registries, permissive policy hooks, unrelated
-  metrics, or failure-mode hardening that could be demonstrated on its own.
-- Identical prose sections across every brief.
-- A first phase whose tasks are all infrastructure and whose only user-visible
-  result is at the end.
-- An aggregate that many tasks assume as a precondition and no task builds.
-- A phase that opens with one root task, so everything in it inherits one chain.
-- A dependency edge whose only justification is ordering intuition.
-- A central switch, registry, or specification file every task must edit to make
-  its own work reachable.
-- A plan created over a system that does not start, with no task that makes it
-  start.
+Own the phase designs, task briefs, tracker, and plan index. Read
+`skills/shared/workplan-model.md` for the invariants, task shapes, brief anatomy,
+dependency reasons, and frozen tracker schema. Read applicable `AGENTS.md` files.
+Use [Phase design](references/phase-design.md) for the phase artifact and
+[Closing a workplan](references/close.md) when closing a plan.
+
+## Choose the operation
+
+- **Create** — establish the next phase from the design set and current system,
+  then derive its tasks through the loop below.
+- **Extend** — incorporate a new requirement or discovery into an existing
+  phase, revise its increments if needed, then derive the affected tasks.
+- **Update** — reconcile recorded ownership, dependency evidence, or write-set
+  forecasts with agreed changes. Keep status changes under repository automation.
+- **Audit** — report discrepancies with evidence; do not change the artifacts
+  being judged.
+- **Close** — when explicitly requested, settle the plan and replace it with
+  `docs/state.md` using the close reference. An audit never closes a plan itself.
+
+## Derivation loop
+
+Follow this order:
+
+1. Read the architecture, contracts, decisions, and roadmap for the phase.
+2. Establish what already works in the repository.
+3. Create the phase design with explicit increments and boundary decisions.
+4. Derive one specific task from one increment.
+5. If that derivation exposes a phase-level issue, revise the phase design and
+   reconcile affected derived tasks.
+6. Derive the next task. Repeat until the phase's increments are covered.
+
+The phase is the map before detailed task derivation. It approximates task
+splitting; it is not a collection of possible scopes or a summary written after
+all briefs exist. An increment may split further into several observable tasks.
+Writing one task does not require implementing it before deriving another.
+Future phases remain phase-level designs until their dependencies justify more
+detail; do not write every future brief in advance.
+
+### Establish the starting point
+
+Read `docs/state.md`, completed briefs, and the code they describe. Treat the
+state report as a dated input and completed statuses as claims. Check the exact
+behavior each planned change relies on. Run existing entrypoints and gates where
+the environment allows; otherwise state the source evidence and runtime limits.
+
+Separate existing behavior, required revisions, and missing behavior. A shipped
+executable is not a running child; graceful server shutdown is not child
+supervision. Reuse completed work rather than assigning it again.
+
+Check I1–I7 against that starting point. Allocate explicit repair work for a
+failed invariant, with I1/I2 repairs first. A capability that has not yet been
+introduced is missing work, not an invariant failure that requires building all
+of it immediately.
+
+### Create the phase
+
+Write `docs/workplan/phase-N/README.md` using the phase reference. Decide:
+
+- the observable outcome and the minimum properties the phase needs;
+- the concerns included and the concerns assigned to another roadmap stage;
+- the increments, their before/after observations, and prerequisites;
+- the boundary of each increment: included work and explicitly excluded work;
+- why any two concerns must arrive together.
+
+Challenge upstream requirements before accepting scope. "Required by this
+objective" is circular when the objective itself bundles several concerns.
+"Required by the contract" requires checking the contract's intended stage;
+correct a contradictory or premature contract in the same change. Shared files,
+an existing fixture, or convenience are not boundary justifications.
+
+Choose the smallest closed loops that reach the phase outcome. Do not infer a
+stop API, an exit-outcome taxonomy, or a lifecycle event model merely from owning
+a child process. Safe child cleanup is required wiring; the other concerns need
+their own product reason and stage.
+
+Make these decisions in the phase artifact. A list of concerns followed by
+"decide during task refinement" has not designed the phase.
+
+### Derive one task
+
+Select the next uncovered part of an increment whose prerequisites are known.
+Inspect the implementation and design surfaces needed to derive it, then
+write the brief using the shared anatomy.
+
+1. State one observable change from the current or prerequisite-produced state.
+   Remove already completed work from its scope.
+2. Apply the split test below. The task must fit inside its increment; it may
+   cover less than the increment when a smaller useful loop exists.
+3. Declare required behavior and wiring. Distinguish product constraints from
+   proposed implementation approaches. A filename forecast or fixture protocol
+   does not make an approach binding.
+4. Provide the minimum maintained operator path in the same task. Add the
+   product UI behavior the task promises, with the substrate and wiring it needs.
+5. Define acceptance criteria for that change. Select verification that actually
+   exercises it, using the current system and an adaptable fake.
+6. Allocate the next plan-wide task ID, declare its surfaces and dependency
+   reasons, and add the brief, tracker entry, index row, and increment mapping
+   together. Preserve completed IDs and never edit status fields by hand.
+
+Keep the fake's product-visible behavior supported. Its invented dialect,
+flags, record fields, and signal handling may change with its consumers,
+scenarios, and documentation. Require compatibility only for a documented
+consumer. Do not derive a record model from the fake or force production code to
+adapt to a fixture detail without a product reason; contracts §9 governs this.
+Expose only the fake controls needed for the selected behavior or already used
+by a supported product path. A fixture's standalone flags are not a checklist
+of new sandbox configuration keys. Preserve their existing consumers when
+changing the fake; do not forward every flag into the product merely because
+the executable already has it.
+
+Give demonstrations a reliable observation path. Inspect existing mechanisms,
+exercise what is available, and identify predictions for new code. An early
+output task can observe newly produced output after attachment; it need not gain
+transcript playback, startup replay, or durable history just to make its test
+convenient. Keep exact commands and test setup in the task brief.
+
+A brief cannot defer to an increment label: a deferral owner must be a real task
+in `tasks.json`, or a roadmap deferred decision with a trigger. If required
+completion work has no derived owner, include it in this task or derive its
+owner before recording the deferral. Do not create placeholder tracker entries
+or skeletal briefs just to provide an ID.
+
+### Revise the phase when needed
+
+Revise the phase when deriving a task shows a missing increment, redundant work,
+an incompatible contract, an unjustified bundle, or a prerequisite that changes
+the partition. A different filename or local implementation choice alone does
+not require a phase revision.
+
+Record the changed increment and boundary decision in the phase README. Update
+affected pending briefs, their mappings, dependencies, index, and collision
+report in the same plan change. Preserve completed work and IDs; newly found
+rework of completed implementation becomes a revision task with evidence.
+Then continue task derivation from the revised phase.
+
+When revising an already-open phase, identify which legacy briefs still need
+rederivation. Do not present those briefs as conforming to the new partition.
+Reconcile a task before assigning it under the revised phase. An unchanged
+tracker status is not evidence that this reconciliation happened.
+
+## Decide task boundaries
+
+Split when the next task adds a distinct observable property: ownership,
+delivery, persistence, an input action, recovery, performance, or security.
+Each part must close its own loop at its own depth. Keep the basic maintained
+operator path with the behavior it exposes; a second task whose only purpose is
+to make the first task operable is an invalid split.
+
+For each scope item, ask whether it is needed for the selected change, its
+operator path, or invariant preservation. Extract future enablement, standalone
+hardening, and refactoring. If several concerns appear indispensable because
+the objective already combines them, revisit the objective and the phase
+partition first. Do not use scope classification to rubber-stamp a bundle.
+
+## Derive and report concurrency
+
+Dependencies name compile, contract, semantic, or revision in one clause.
+Shared files create write-collision warnings, not dependency edges. Shared
+contract meaning requires ownership and an edge; if both tasks define it, narrow
+their scopes or combine the relevant work. Revision edges describe discoveries
+about existing implementation, never planned rewrites of code yet to be built.
+
+Avoid unnecessary central edits when the existing architecture permits it, but
+do not build a registry solely to enable later tasks. A claimed one-file command
+still needs registration in the actual composition root; include that wiring in
+the forecast and collision report.
+
+After each task derivation or phase revision, report the graph currently derived:
+critical path, average width, concurrent write collisions, and concurrent
+contract collisions. Label partial coverage explicitly. Do not claim an
+underived phase is wide because its unnamed increments look independent.
+At complete phase derivation, every included increment has real task coverage,
+the graph is acyclic, and no concurrently available tasks redefine one contract.
+
+## Audit
+
+Judge the architecture-to-phase-to-task chain against HEAD. Report, with commands
+and observed output or `file:line` evidence:
+
+- phase outcome, explicit increments, boundaries, and excluded concern ownership;
+- completed work incorrectly planned again, or assumptions about a prerequisite;
+- task scope that crosses its increment or combines independently observable work;
+- missing phase coverage, and tasks implementing requirements outside the phase;
+- fake interfaces elevated into product requirements without justification;
+- runtime reachability, invariant preservation, and demonstration credibility;
+- unknown dependency references, cycles, unjustified edges, and surface collisions;
+- agreement among increment mappings, briefs, index, and tracker;
+- completed statuses whose acceptance criteria no longer hold.
+
+Report incomplete task derivation separately from an unresolved phase decision.
+The former means a decided increment needs a brief; the latter means the phase
+has not yet selected a boundary. An audit reports; it does not silently fix,
+re-own, or close the plan it judges.
+
+Record a plan failure in `docs/workplan/post-mortems/` when its cause is a seam
+between briefs, an unowned invariant, or a faulty derivation assumption. Name
+the involved briefs and the rule that would have caught it. Close preserves
+those rules in `docs/state.md`.
 
 ## Before finishing
 
-In close mode, only the last item applies. In every other mode:
-
-- Every phase has a linked design README; its concern ownership, boundaries,
-  and verified starting point agree with the briefs. Unresolved retrospective
-  findings are explicitly identified, not presented as passed design checks.
-- Every brief has a non-empty **Runtime reachability** section and declares its
-  **write set** and its **contract surfaces**.
-- Every brief has a **Demonstration** with commands a person can actually run.
-- Every guarantee a brief's objective states has acceptance criteria naming the
-  failures that would break it, and every write set is derived from its Scope.
-- Every dependency edge names compile, contract, semantic, or revision in one
-  clause, and no `revision` edge was written before the implementation it
-  revises exists.
-- Every deferral names an ID that exists in `tasks.json`.
-- `tasks.json` validates against the frozen schema; `README.md` tables agree
-  with it; every `brief` path resolves.
-- Every ID is unique and matches `P<phase>-<NNN>`, the counter runs plan-wide
-  with no reuse, and no ID was reissued to follow a task that changed phase.
-- The dependency graph has no unknown references, forward references, or cycles.
-- Critical path, average width, and both collision sets are recorded per phase.
-- No two concurrently-available tasks share a contract surface.
-- The first task produces a system that starts and deploys.
-- Every invariant failing in the code the plan was created over has a task that
-  restores it, and any I1 or I2 repair is in the first phase.
-- No task defers part of its own completion condition; every operator-visible
-  capability is drivable by hand in the task that introduces it.
-- Every task fits one of the four shapes.
-- A close left `docs/state.md` in place of the plan: every post-mortem rule
-  restated, every claim carrying a command or a `file:line`, no section written
-  as a backlog, and both changes in one commit. `docs/workplan/` retains its
-  schema and an empty tracker and nothing else, the availability query and the
-  status gate both succeed against that tracker, and no task ID or brief path
-  survives anywhere in the tree.
+- Every designed phase has an explicit partition, with outcomes, boundaries,
+  prerequisites, and concern ownership; detail follows the phase reference.
+- Every derived task maps to an increment and fits a shared task shape.
+- Each new task leaves a runnable, deployable system and its basic operator path.
+- Every brief has the shared anatomy, evidenced prerequisites, credible
+  demonstrations, declared write sets, and contract surfaces.
+- Each deferral has a valid task or triggered decision owner.
+- Tracker/schema conventions remain intact; IDs are append-only and status
+  fields were not edited by the planning change.
+- Index, tracker, briefs, increment mapping, and current collision report agree.
+- Partial derivation and legacy briefs awaiting reconciliation are stated
+  explicitly; completion is not claimed for uncovered increments.
+- Contract or roadmap changes required by the selected boundaries accompany the
+  phase change.
+- Close follows the close reference, leaves a supported empty tracker, and
+  records the system rather than another backlog.

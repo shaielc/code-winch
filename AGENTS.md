@@ -7,7 +7,7 @@ Phase 0 is in flight. The first sandbox/page slice and local composer exist;
 the harness is shipped but is not started by the sandbox yet.
 [`docs/state.md`](docs/state.md) records the starting point of this plan.
 [`docs/workplan/phase-0/README.md`](docs/workplan/phase-0/README.md) records its
-current source-verified baseline and boundary findings. Check code at HEAD
+current source-verified baseline and explicit increment boundaries. Check code at HEAD
 before assuming a capability exists; the design set describes a destination.
 
 An `AGENTS.md` deeper in the tree adds to or narrows these rules for its own
@@ -22,9 +22,10 @@ subtree.
   becomes true in each, what is deliberately absent, and the deferred decisions
   with their triggers.
 - **Implementation plan** — [`docs/workplan/README.md`](docs/workplan/README.md).
-  Phase 0 is open: seven tasks decomposing roadmap Stage 0. It carries the
-  dependency graph, the width report, and the rule for what a brief may defer.
-  `./scripts/list-available-tasks.sh` says which tasks you can pick up now.
+  Phase 0 has a revised increment partition; pending briefs in the earlier
+  seven-task tracker need reconciliation before assignment under that design.
+  It carries the graph, width report, and rule for what a brief may defer.
+  `./scripts/list-available-tasks.sh` computes tracker dependency availability.
 - **Design baseline** — `docs/architecture.md`, `docs/code-structure.md`,
   `docs/contracts.md`, `docs/security.md`, and the ADRs in `docs/decisions/`.
   It describes the destination, not the build order — the roadmap is the order,
@@ -34,7 +35,8 @@ subtree.
   complete. It expands on the rules below.
 - **Planning rules** — `skills/workplan/SKILL.md`. Read it when deriving the next
   plan from the design set and `docs/state.md`, or when changing a plan in
-  flight.
+  flight. Create the phase's explicit increment partition first, then derive
+  one task at a time, revising the phase when derivation changes a boundary.
 
 ## Rules that bind every task
 
@@ -61,8 +63,9 @@ finished, however well it is tested.
 ### Fakes are a shipped configuration
 
 In-memory and fake implementations are a supported way to run this product, not
-test-only doubles. Keep them working and keep them controllable — scripted
-transcripts, injectable latency, failure, malformed output. When you add one,
+test-only doubles. Keep them working and controllable for their current behavior.
+Introduce controls such as transcripts, latency, or failure with the concerns
+they exercise; malformed native output matters when decoding exists. When you add one,
 state in its documentation what it does not prove.
 
 Their supported behavior and controllability must survive changes. Their

@@ -26,18 +26,18 @@ stage's hand check.
   expire and a diagnostic record, not a handler that blocks forever. This belongs here
   rather than in P0-007 because it is a property of the pipe this task opens.
 - Check input-capability before delivering. The harness is input-capable while its process
-  is running and its stdin is open; once `session.terminated` has been emitted it is not,
-  and a submission is refused with `INPUT_UNSUPPORTED` rather than written to a closed
-  pipe. `docs/contracts.md` §8 — "the session accepts no further input", and "there is no
-  retry and no new attempt: restarting means starting another sandbox".
+  is running and its stdin is open. If either is unavailable, a submission is
+  refused with `INPUT_UNSUPPORTED` rather than written to a closed pipe. Check
+  direct process/channel availability; no terminal lifecycle record is required.
+  `docs/contracts.md` §8: *Harness ownership and lifecycle reporting are separate*.
 - The reply correlates to the submission: the harness echoes the submission id, and the
   resulting `stream.raw` record keeps it, so a reader can tell which line was answered.
 
 ## Non-goals
 
-- A run state machine, attempts, and retry. `docs/contracts.md` §8 is explicit that
-  harness exit is a record and not a state machine; the run aggregate is roadmap
-  Stage 3 and its lifecycle Stage 4.
+- Exit records and native-outcome interpretation. Roadmap Stage 1.
+- A run state machine, attempts, and retry. The run aggregate is roadmap Stage 3
+  and its lifecycle Stage 4.
 - Restarting the harness inside a live sandbox. Restarting means starting another
   sandbox, which is the property that keeps the run aggregate the control plane's job.
 - Terminal semantics — a PTY, raw mode, resize, TTY detection. The fake speaks JSON lines
@@ -113,8 +113,8 @@ reaches it; `winch input` and the page's composer are the two hands-on paths, an
       the harness's stdin, or kill the process between acceptance and delivery) and
       observe the `input.submitted` record present **and** a diagnostic record naming the
       submission — never an accepted submission with no trace.
-- [ ] After `session.terminated`, every submission is refused with `INPUT_UNSUPPORTED` and
-      nothing is written to a closed pipe. Inject with `-early-exit` and with a SIGTERM to
+- [ ] When the child or its input channel is unavailable, every submission is
+      refused with `INPUT_UNSUPPORTED` and nothing is written to a closed pipe. Inject with `-early-exit` and with a SIGTERM to
       the harness, and observe the same refusal in both cases.
 - [ ] No submission is written to the harness twice, including when its idempotency key is
       replayed. Replay the key and count the harness's replies: expect one.
@@ -136,5 +136,5 @@ None.
 `docs/roadmap.md` §2 (Stage 0 hand check), §1 rule 4 (*The same submission reaching the
 harness is observable by the harness's reply*), §3 Stage 0, §4 input path, §6 D5;
 `docs/contracts.md` §3, §8 (*Input is accepted or refused, never queued silently*,
-*Harness exit is a record, not a state machine*); `docs/architecture.md` §4 *Harness
+*Harness ownership and lifecycle reporting are separate*); `docs/architecture.md` §4 *Harness
 adapters*; `docs/code-structure.md` §3; ADR-0003, ADR-0005.

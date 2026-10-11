@@ -105,6 +105,13 @@ function — capability descriptors, launch construction, native-to-canonical
 decoding, and whatever login the vendor requires. It may also force terminal
 semantics the fake never needed; that is deferred decision D5.
 
+This stage also introduces explicit harness-exit reporting: a native exit
+result and its harness-specific interpretation become visible through the
+attach surface. Stage 0 needs child ownership, cleanup, and input-availability
+checks, but no terminal-record taxonomy or operator stop capability. Stage 4
+owns intentional run stop and its lifecycle; Stage 5 owns escalation and orphan
+recovery.
+
 *Deliberately absent:* a second vendor. One real adapter proves the seam; two is
 Stage 6's job, and building both here would be designing the abstraction before
 the second case exists.

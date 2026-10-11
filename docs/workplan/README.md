@@ -1,10 +1,11 @@
 # Implementation workplan
 
-**Phase 0 is open.** It decomposes Stage 0 of [`docs/roadmap.md`](../roadmap.md) — "a
-sandbox you can talk to" — into seven tasks. The tracker records `P0-001` and `P0-004`
-as completed; `P0-002` is available. The
-[phase design](phase-0/README.md) records the current baseline and the boundary
-findings from reviewing this already-open phase.
+**Phase 0's revised partition is specified; task rederivation is incomplete.**
+The [phase design](phase-0/README.md) separates ownership, live output, history,
+input, and output hardening. The tracker still contains the earlier seven-task
+graph, with `P0-001` and `P0-004` completed. Its dependency query returns
+`P0-002`; reconcile that legacy brief with the `harness-owned` increment before
+assigning it under the revised phase.
 
     $ ./scripts/list-available-tasks.sh
     → P0-002
@@ -15,11 +16,11 @@ four task shapes, dependency-edge reasons, write sets, contract surfaces, brief 
 and the frozen tracker schema. [`docs/state.md`](../state.md) says what existed at HEAD
 when this plan was derived.
 
-New phases are designed in `phase-N/README.md` before their briefs are drafted.
-That artifact records the starting point, concerns, candidate increments,
-boundary decisions, verification mechanics, and phase exit. The phase design
-justifies task boundaries; this index and `tasks.json` describe the executable
-graph. Retrospective findings in Phase 0's design do not change that graph.
+Derive a plan through `architecture → phase → task → optional phase revision →
+next task`. The phase README specifies increments and boundary decisions before
+briefs are derived. A task may split an increment further; combining increments
+requires revising the phase first. Phase-local labels are not task IDs or
+deferral owners. See [the workplan skill](../../skills/workplan/SKILL.md).
 
 ## Scope of this plan
 
@@ -43,6 +44,10 @@ A brief that puts a later stage's work in Deferrals, or that says "later" with n
 and no ID, is a defect.
 
 ## Phase 0 — A sandbox you can talk to
+
+The following tables record the **legacy tracker graph**, not the new phase's
+task partition. Keep them synchronized with `tasks.json` as pending briefs are
+rederived increment by increment; the phase README records that progress.
 
 | ID | Title | Shape | Depends on |
 |---|---|---|---|
@@ -114,10 +119,10 @@ opens, not a cost to report.
 
 ### Phase exit
 
-Phase 0 is finished when all seven tasks are `completed`, verified against HEAD rather
-than against the pull requests that closed them, and the Stage 0 hand check in
-`docs/roadmap.md` §2 passes: start the sandbox, type a line, the fake harness echoes, and
-the exchange survives a reload.
+Phase exit is defined in [the phase design](phase-0/README.md#phase-exit).
+Completion requires all selected increments to have derived tasks whose
+acceptance criteria hold at HEAD, and the Stage 0 hand check to pass. Completing
+only the old seven-task graph does not certify coverage of the revised design.
 
 ## How the invariants are owned
 

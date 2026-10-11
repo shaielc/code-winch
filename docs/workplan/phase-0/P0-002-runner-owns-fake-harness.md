@@ -8,8 +8,7 @@ this wires the runner into)
 ## Objective
 
 The sandbox starts a harness process of its own, and a person watching the page or
-running `winch stream` sees each line the harness emits as an ordered record, including
-the record that says the harness has ended and how.
+running `winch stream` sees the output the harness produces while attached.
 
 ## Scope
 
@@ -27,11 +26,6 @@ the record that says the harness has ended and how.
   together if changing it simplifies the runner. The runner determines record
   kinds, sensitivity, ordinal, and `occurredAt`; fixture fields do not acquire
   product-contract authority by being passed through. `docs/contracts.md` §9.
-- `record kind: session.terminated` — when the harness process exits, the runner emits a
-  terminal record carrying the native exit and its mapped outcome: clean exit →
-  `completed`, nonzero exit → `failed`, terminating signal → `stopped`. A runner that
-  owns a process and does not report its end leaves the page silently frozen, which is
-  why this is not a later task.
 - `GET /api/session/stream` — WebSocket, ordinal-ordered, fanning out to more than one
   reader. Origin validated and payloads bounded, per `docs/security.md` §2.
 - The fake harness as a controllable **profile**, not a test double (I3). Sandbox
@@ -61,7 +55,9 @@ the record that says the harness has ended and how.
   is a stage that came too early" — and §3 Stage 1 makes a real vendor CLI the second
   case that forces the seam. Harness ownership stays inside `internal/runner/`.
 - More than one record projection. One raw-stream view; roadmap Stage 2 adds the second.
-- Malformed-output and slow-reader guarantees. P0-007.
+- Slow-reader guarantees. P0-007, to be rederived against raw output.
+- Exit records and outcome mapping. Roadmap Stage 1; intentional stop belongs
+  to Stage 4. Basic child reaping and cleanup stay with process ownership.
 
 ## Runtime reachability
 
@@ -93,7 +89,6 @@ two hands-on paths.
 - the runner-local ordinal namespace and its allocation
 - registry namespace: record kinds, which this task defines
 - `record kind: stream.raw`
-- `record kind: session.terminated`, and the native-exit → outcome mapping
 - API: `GET /api/session/stream` (WebSocket)
 - profile namespace: `fake`, and the config keys that drive it —
   `WINCH_HARNESS_PROFILE`, `WINCH_HARNESS_TRANSCRIPT`, `WINCH_HARNESS_DELAY`,
@@ -110,15 +105,6 @@ two hands-on paths.
 
     $ xdg-open http://127.0.0.1:8080
     → expect: the same lines appearing in the page as they arrive
-
-    # a stop is distinguishable from a crash
-    $ docker compose -f deployments/compose.yml kill -s SIGTERM sandbox
-    → expect: a session.terminated record with outcome "stopped"
-
-    # an injected failure says so
-    $ WINCH_HARNESS_FORCE_FAILURE=1 docker compose -f deployments/compose.yml up -d --force-recreate
-    $ ./bin/winch stream
-    → expect: a session.terminated record with outcome "failed" and the native exit code
 
 ## Verification
 
@@ -137,12 +123,6 @@ two hands-on paths.
       standing scenario rather than by inspection.
 - [ ] A record arriving split across two reads produces exactly one record. Inject by
       feeding the decoder a transcript line in two chunks.
-- [ ] `-force-failure` produces `session.terminated` with outcome `failed` and the
-      native exit code; SIGTERM produces outcome `stopped`; `-early-exit` produces a
-      terminal record rather than a stream that simply stops. All three observable
-      through `winch stream`.
-- [ ] A harness that exits never leaves the page with no terminal record. Kill the
-      process inside the container and watch the record arrive.
 - [ ] `-delay` changes the arrival rate of records and nothing else, so the fake is
       controllable at runtime rather than only replayable (I3).
 - [ ] `deployments/README.md` states what the fake does not prove, naming at least the
@@ -164,8 +144,8 @@ two hands-on paths.
 
 ## Traces to
 
-`docs/roadmap.md` §3 Stage 0, §4 output path; `docs/contracts.md` §8 (*Records are
-ordinal-ordered*, *Reading is snapshot plus stream*, *Harness exit is a record, not a
-state machine*); `docs/architecture.md` §4 *Event pipeline and renderers*;
+`docs/roadmap.md` §3 Stage 0, §4 output path; `docs/contracts.md` §8 (*Recorded history is
+ordinal-ordered*, *Live output precedes history*, *Harness ownership and lifecycle
+reporting are separate*); `docs/architecture.md` §4 *Event pipeline and renderers*;
 `docs/code-structure.md` §3; ADR-0002, ADR-0005; `docs/security.md` §2;
 `docs/state.md` *A code comment cites a fixture that was deleted*.
