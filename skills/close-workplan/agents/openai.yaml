@@ -1,4 +1,0 @@
-interface:
-  display_name: "Close Workplan"
-  short_description: "Close a workplan into a system state report"
-  default_prompt: "Use $close-workplan to close a workplan into a system state report."

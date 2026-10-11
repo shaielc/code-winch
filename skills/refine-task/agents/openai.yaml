@@ -1,4 +1,0 @@
-interface:
-  display_name: "Refine Task"
-  short_description: "Refine a task brief against current code"
-  default_prompt: "Use $refine-task to refine a task brief against current code."

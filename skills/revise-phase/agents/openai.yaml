@@ -1,4 +1,0 @@
-interface:
-  display_name: "Revise Phase"
-  short_description: "Change phase boundaries and ownership"
-  default_prompt: "Use $revise-phase to change phase boundaries and ownership."
