@@ -24,7 +24,8 @@ sandbox attach surface. See **Project status** below.
 
 The sandbox image starts, serves a browser attach page on loopback, and reports
 its effective profile and unenforced controls. It carries `cmd/fake-harness`,
-but does not start it yet. There is no daemon or control plane.
+but does not start it yet. The page echoes messages locally; they disappear on
+reload and never reach a server or harness. There is no daemon or control plane.
 [`docs/state.md`](docs/state.md) is the authoritative account, with a command or
 a `file:line` behind every claim.
 
@@ -34,10 +35,12 @@ serving a page you can type at — deliberately smaller than anything the design
 documents describe, because the previous attempt built downward from the control
 plane and never produced a configuration anybody could start.
 
-[`docs/workplan/`](docs/workplan/README.md) decomposes that first stage into seven
-tasks. `./scripts/list-available-tasks.sh` says which are available; `P0-001`,
-which makes the sandbox start and repairs the gates below, is the only one until
-it lands.
+The current workplan is closed and roadmap Stage 0 remains unfinished.
+`docs/workplan/tasks.json` is a valid empty tracker;
+`bash scripts/list-available-tasks.sh` returns `[]`. There are no active briefs to
+dispatch. The state report preserves the closure evidence, lessons, and gaps.
+An explicitly requested future phase uses `create-phase`, followed by task
+derivation by a separate author; see [operation skills](skills/README.md).
 
 ## Building and testing
 

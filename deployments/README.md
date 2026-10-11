@@ -24,5 +24,21 @@ no host port, so it cannot collide with a running dev sandbox, and it shares a
   `make test-env-down` removes it. `make e2e` does not start or stop anything.
 
 The test environment cannot show that the host's routable address refuses the port,
-because nothing is published there. That check stays manual: see the Demonstration in
-`docs/workplan/phase-0/P0-001-sandbox-serves-attach-page.md`.
+because nothing is published there. That check stays manual against the development
+project: start it, confirm a proxy-disabled loopback request succeeds, then confirm
+a proxy-disabled request to the host's routable IP is refused while loopback remains
+healthy. For example:
+
+```sh
+docker compose -f deployments/compose.yml up --build -d
+curl --noproxy '*' -fsS http://127.0.0.1:8080/healthz
+host_ip=$(hostname -I | awk '{print $1}')
+curl --noproxy '*' -fsS --max-time 2 "http://${host_ip}:8080/healthz"
+# Expect connection refusal (curl exit 7); loopback must still answer.
+curl --noproxy '*' -fsS http://127.0.0.1:8080/healthz
+docker compose -f deployments/compose.yml down
+```
+
+This host-local check does not replace the off-host scan required by LB11.
+[`docs/state.md`](../docs/state.md) records the closure's source evidence and runtime
+verification limits.

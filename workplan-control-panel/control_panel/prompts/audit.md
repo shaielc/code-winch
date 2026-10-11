@@ -1,7 +1,8 @@
 Audit $id: $title.
 
-Read the active-plan index at docs/workplan/README.md, the task brief at
-docs/workplan/$brief, skills/audit-task/SKILL.md, and all applicable AGENTS.md files.
+Read the system record at docs/state.md, the task brief selected from the active
+tracker at docs/workplan/$brief, skills/audit-task/SKILL.md,
+and all applicable AGENTS.md files.
 Audit $id as skills/audit-task/SKILL.md describes, against the implementation
 pull request $pr_url at its head commit
 $head.

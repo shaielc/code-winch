@@ -1,7 +1,8 @@
 Implement $id: $title.
 
-Read the active-plan index at docs/workplan/README.md, the task brief at
-docs/workplan/$brief, skills/implement-task/SKILL.md, and all applicable AGENTS.md files.
+Read the system record at docs/state.md, the task brief selected from the active
+tracker at docs/workplan/$brief, skills/implement-task/SKILL.md,
+and all applicable AGENTS.md files.
 Create a new branch from `$branch`. Implement the task as its brief describes,
 run the required verification, and commit there. Open a pull request whose base
 is `$branch`.

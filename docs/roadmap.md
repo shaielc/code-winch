@@ -4,8 +4,8 @@ This is the order in which Code Winch becomes real. It sits between the design
 set, which describes a finished system, and `docs/workplan/`, which decomposes
 one stage at a time into tasks.
 
-Stage N maps onto workplan phase N, so numbering starts at zero and `P0-001` is
-the first task of the plan derived from this document.
+Stage N maps onto workplan phase N, so phase numbering starts at zero. Task
+IDs follow the retained tracker schema; the current tracker is empty.
 
 ## 1. How this roadmap is ordered
 
@@ -84,11 +84,11 @@ malleable; its current process dialect does not require semantic decoding here.
 Nothing in this stage knows what a run is; the sandbox has a session, and that
 is all.
 
-Stage 0 also carries the repository's floor. The Makefile and both CI workflows
-currently name paths that no longer exist, so the first task truncates them to
-what the stage actually builds and leaves the gates green. That is required
-wiring for a stage whose first invariant is that the system starts and deploys —
-not a cleanup task of its own.
+Stage 0 also carries the repository's floor. The first slice repaired Makefile
+and CI references to removed paths. Every subsequent slice must preserve the
+gates for what it builds; `docs/state.md` records current verification evidence
+and limits. That is required wiring for a stage whose first invariant is that
+the system starts and deploys.
 
 *Deliberately absent:* runs and run lifecycle, the control plane, more than one
 harness, more than one sandbox, authentication beyond a loopback binding,
@@ -225,7 +225,7 @@ belong to `docs/workplan/` and the model in
 document fixes the order and the stage boundaries; the plan derived from it
 decides how a stage is cut into tasks.
 
-[`docs/state.md`](state.md) is the snapshot used to derive the current plan.
-The [phase baseline](workplan/phase-0/README.md#outcome-and-starting-point) records
-subsequent reusable work. Check code at HEAD when either disagrees with a
-current capability claim; this roadmap specifies delivery order, not status.
+[`docs/state.md`](state.md) records the explicitly closed workplan, reusable
+capabilities, verification limits, and remaining gaps. There is no active phase.
+Check code at HEAD when a capability claim disagrees with it; this roadmap
+specifies delivery order, not status. Closure does not advance a roadmap stage.

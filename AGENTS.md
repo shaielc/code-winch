@@ -3,12 +3,12 @@
 Instructions for any agent working in this repository. One unit of work, one
 pull request.
 
-Phase 0 is in flight. The first sandbox/page slice and local composer exist;
-the harness is shipped but is not started by the sandbox yet.
-[`docs/state.md`](docs/state.md) records the starting point of this plan.
-[`docs/workplan/phase-0/README.md`](docs/workplan/phase-0/README.md) records its
-current source-verified baseline and explicit increment boundaries. Check code at HEAD
-before assuming a capability exists; the design set describes a destination.
+The current workplan is closed. The sandbox/page slice and local composer
+exist; the harness is shipped but is not started by the sandbox yet.
+[`docs/state.md`](docs/state.md) records the current source-supported capabilities,
+verification limits, lessons, and unfinished work. The tracker is valid and empty.
+Check code at HEAD before assuming a capability exists; the design set describes
+a destination. Closure does not certify roadmap Stage 0 completion.
 
 An `AGENTS.md` deeper in the tree adds to or narrows these rules for its own
 subtree.
@@ -21,11 +21,12 @@ subtree.
 - **Delivery order** — [`docs/roadmap.md`](docs/roadmap.md). The stages, what
   becomes true in each, what is deliberately absent, and the deferred decisions
   with their triggers.
-- **Implementation plan** — [`docs/workplan/README.md`](docs/workplan/README.md).
-  Phase 0 has a revised increment partition; pending briefs in the earlier
-  seven-task tracker need reconciliation before assignment under that design.
-  It carries the graph, width report, and rule for what a brief may defer.
-  `./scripts/list-available-tasks.sh` computes tracker dependency availability.
+- **Workplan status** — [`docs/state.md`](docs/state.md). There is no active
+  phase or assignable brief. `docs/workplan/tasks.json` is a valid empty tracker
+  and `docs/workplan/tasks.schema.json` retains the format for future plans.
+  `bash scripts/list-available-tasks.sh` returns `[]`. An explicitly requested
+  future phase uses `create-phase`; a separate author derives tasks with
+  `derive-task`. Do not infer completion from the empty tracker.
 - **Design baseline** — `docs/architecture.md`, `docs/code-structure.md`,
   `docs/contracts.md`, `docs/security.md`, and the ADRs in `docs/decisions/`.
   It describes the destination, not the build order — the roadmap is the order,
@@ -86,11 +87,13 @@ No TODO, stub, unimplemented branch, or "handled later" without a named owner.
 That owner is a task ID that exists in `docs/workplan/tasks.json` at the time you
 write it, or a deferred decision with a trigger in `docs/roadmap.md` §6.
 
-The plan in flight covers one roadmap stage, so it has no IDs in later phases to
-own work the roadmap schedules for one. That work is a **non-goal** of your task,
-with the stage cited — not a deferral. `docs/workplan/README.md` §*Scope of this
-plan* states the convention. Acceptance criteria are not satisfied by code that
-defers them.
+When an active plan covers one roadmap stage, it has no IDs in later phases to
+own work the roadmap schedules for one. Such work belongs in **Non-goals**, with
+the stage cited. A brief may defer implementation only to an existing tracker
+ID, or cite a deferred architectural decision with a trigger in roadmap §6.
+Phase-local increment labels and hypothetical later IDs are not owners.
+Acceptance criteria are not satisfied by code that defers them. The closed
+tracker currently provides no task IDs to own new deferrals.
 
 ### Test adversarially where it matters
 
@@ -141,10 +144,9 @@ The first runnable slice is the sandbox image and its loopback-only attach page.
 It states the `container-standard` posture and names network egress as
 unenforced. The fake harness ships in the image but is not started yet.
 
-The next thing built is roadmap Stage 0: one container holding a runner and the
-fake harness, started by hand, serving a page you can type at. That stage also
-repairs the quality gates, because a stage whose first invariant is that the
-system starts and deploys cannot stand on a build that fails. Read
+Roadmap Stage 0 remains unfinished: no runner starts the harness, retains
+output, or delivers server input. Source for the quality gates has been repaired;
+`docs/state.md` records which checks ran and which could not run. Read
 `docs/roadmap.md` §1 before proposing work — the delivery order deliberately
 inverts the layering the design documents are written in, so "the architecture
 says this layer comes first" is not a reason to build it first.
