@@ -178,23 +178,61 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
         before = self.panel.snapshot()
         page = render(before['tracker'], before['state'], '', False)
         self.assertEqual(page.count('data-action="expire"'), 2)
+        # Expiry deletes the branch, so its button asks first; Prepare does not.
+        self.assertEqual(page.count('data-confirm="Expire P0-001? This deletes task/P0-001 on GitHub'), 2)
+        self.assertEqual(page.count('data-confirm='), 2)
         self.assertEqual(self.panel.expire('P0-001'), {'expired': 'P0-001'})
         snapshot = self.panel.snapshot()
         effective = task_state.effective_tracker(snapshot['tracker'], snapshot['state'])
         self.assertEqual(effective['tasks'][0]['status'], 'pending')
-        self.assertEqual(snapshot['state']['tasks']['P0-001']['stages'], before['state']['tasks']['P0-001']['stages'])
+        # Every stage submission is expired with the task, and keeps its conversation.
+        stages = snapshot['state']['tasks']['P0-001']['stages']
+        self.assertEqual({stage: [a['status'] for a in attempts] for stage, attempts in stages.items()},
+                         {'refine': ['expired'], 'implement': ['expired']})
+        self.assertEqual([stages[s][0]['task_url'] for s in ('refine', 'implement')], urls)
         with self.assertRaises(TaskError):
             self.panel.stage('P0-001', 'implement')
         page = render(snapshot['tracker'], snapshot['state'], '', False)
         self.assertNotIn('data-action="expire"', page)
         for url in urls:
-            self.assertEqual(page.count(f'data-state="open" href="{url}"'), 2)
-        # A later sync reclaims the existing branch exactly once, retaining history.
+            self.assertNotIn(f'data-state="open" href="{url}"', page)
+            self.assertEqual(page.count(f'<span class="earlier" hidden><a href="{url}"'), 2)
+        # Expiry deletes the branch upstream and in the panel's clone.
+        seed = self.root / 'seed'
+        self.assertEqual(git(seed, 'ls-remote', '--heads', 'origin', 'task/P0-001'), '')
+        self.assertEqual(git(self.panel.clone, 'branch', '--remotes', '--list', 'origin/task/P0-001'), '')
+        self.assertFalse(snapshot['state']['tasks']['P0-001']['prepared'])
+        # A later sync starts the branch afresh from main, and its stages submit anew.
         self.assertEqual(self.panel.sync()['prepared'], ['P0-001'])
         self.assertEqual(self.commits_ahead(), '1')
-        with patch.object(codex, 'submit') as submit:
-            self.assertTrue(self.panel.stage('P0-001', 'refine')['reused'])
-            submit.assert_not_called()
+        with patch.object(codex, 'submit', return_value='https://chatgpt.com/codex/cloud/tasks/again') as submit:
+            self.assertFalse(self.panel.stage('P0-001', 'refine').get('reused'))
+            submit.assert_called_once()
+
+    def test_expire_replaces_a_rewritten_branch(self):
+        """The branch moved under the panel's tracking ref; expiry must still clear it."""
+        self.panel.sync()
+        worker = self.clone('worker')
+        git(worker, 'checkout', '--quiet', '-b', 'task/P0-001', 'origin/main')
+        (worker / 'unrelated.md').write_text('rewritten\n')
+        git(worker, 'add', '.')
+        git(worker, 'commit', '--quiet', '-m', 'rewrite the branch')
+        git(worker, 'push', '--quiet', '--force', 'origin', 'HEAD:task/P0-001')
+        self.panel.expire('P0-001')
+        self.assertEqual(self.panel.sync()['prepared'], ['P0-001'])
+        self.assertEqual(self.commits_ahead(), '1')
+        self.assertNotIn('unrelated.md', git(self.panel.clone, 'ls-tree', '--name-only',
+                                             'origin/task/P0-001'))
+
+    def test_expire_keeps_the_reservation_when_the_branch_cannot_be_deleted(self):
+        self.panel.sync()
+        with patch.object(repository, 'delete_task_branch', side_effect=OSError('offline')):
+            with self.assertRaises(TaskError) as error:
+                self.panel.expire('P0-001')
+        self.assertEqual(error.exception.status, 502)
+        record = self.panel.snapshot()['state']['tasks']['P0-001']
+        self.assertFalse(record['expired'])
+        self.assertTrue(record['prepared'])
 
     def test_expired_and_prepared_task_is_recoverable_by_request(self):
         """The case a scheduling pass cannot serve: the slot is free but the queue is not."""
@@ -205,7 +243,8 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
         self.assertEqual(self.panel.sync()['prepared'], ['P0-001'])
         self.panel.expire('P0-001')
         record = self.panel.snapshot()['state']['tasks']['P0-001']
-        self.assertTrue(record['expired'] and record['prepared'])
+        self.assertTrue(record['expired'])
+        self.assertFalse(record['prepared'])
         self.assertEqual(self.panel.sync(only='P0-001')['prepared'], ['P0-001'])
         record = self.panel.snapshot()['state']['tasks']['P0-001']
         self.assertFalse(record['expired'])

@@ -298,6 +298,8 @@ Expire releases a local reservation. No expiry cancels a cloud task or removes a
   // Sync, Prepare and Expire all change what the whole page says, so each ends in a reload.
   document.querySelectorAll("[data-action]").forEach(button => {{
     button.onclick = async () => {{
+      // A destructive action names what it destroys and runs only once the operator agrees.
+      if (button.dataset.confirm && !window.confirm(button.dataset.confirm)) return;
       const action = button.dataset.action;
       const endpoint = action === "sync" ? "api/sync" :
         "api/tasks/" + encodeURIComponent(button.dataset.task) + "/" + action;
@@ -625,10 +627,14 @@ STAGES = ("refine", "implement", "audit")
 SERVICES = {"refine": "Codex", "implement": "Codex", "audit": "Claude"}
 
 
-def button(action: str, task_id: str, label: str, hint: str = "", css: str = "") -> str:
+def button(action: str, task_id: str, label: str, hint: str = "", css: str = "",
+           confirm: str = "") -> str:
+    """A whole-task action; one with `confirm` asks the operator before it runs."""
     attributes = f' title="{html.escape(hint)}"' if hint else ""
     if css:
         attributes += f' class="{css}"'
+    if confirm:
+        attributes += f' data-confirm="{html.escape(confirm)}"'
     return (f'<button type="button" data-action="{html.escape(action)}" '
             f'data-task="{html.escape(task_id)}"{attributes}>{label}</button>')
 
@@ -637,7 +643,7 @@ def preparable(entry: dict[str, Any], runnable: set[str]) -> bool:
     """Whether the panel can admit this task now, by request rather than by scheduling pass.
 
     An expired reservation lands here too: the overlay stops applying, so the entry reads at
-    the tracker's status while keeping the branch it already prepared.
+    the tracker's status, and preparing it again recreates the branch expiry deleted.
     """
     if entry["status"] == "completed" or (entry["local"] and entry["prepared"]):
         return False
@@ -671,8 +677,12 @@ def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
                           hint="Refresh main, claim a scheduler slot, and prepare this branch.")
     if entry["local"] and entry["status"] != "completed":
         actions += button("expire", entry["id"], EXPIRE_ICON,
-                          hint="Release this task's scheduler slot. Stage records and the "
-                               "conversations they opened are kept.", css="icon-button")
+                          hint="Release this task's scheduler slot, delete its branch, and "
+                               "expire its stages. The conversations they opened are kept.",
+                          css="icon-button",
+                          confirm=f"Expire {entry['id']}? This deletes task/{entry['id']} on "
+                                  "GitHub, discarding its commits and closing any open pull "
+                                  "request from it, and expires every stage submission.")
     return actions or "—"
 
 

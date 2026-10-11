@@ -262,7 +262,12 @@ class TaskScheduler:
         return task, record
 
     def expire(self, task_id: str):
-        """Release a local reservation, retaining its conversation history."""
+        """Release a reservation, delete its branch, and expire its stage submissions.
+
+        The next preparation starts the task afresh from main rather than reclaiming
+        whatever the expired attempt left on the branch. The submissions are marked rather
+        than deleted, so their conversations stay reachable.
+        """
         with self.locked():
             state = task_state.load_state(self.state_file)
             task = next((t for t in self.tracker()["tasks"] if t["id"] == task_id), None)
@@ -271,7 +276,20 @@ class TaskScheduler:
             record = state["tasks"].get(task_id)
             if not record or task["status"] == "completed" or record.get("status") == "completed":
                 raise TaskError(409, "This task has no active local reservation to expire")
-            record.update(expired=True, owner=None, updated_at=datetime.now(UTC).isoformat())
+            try:
+                repository.delete_task_branch(self.clone, "origin", task_id)
+            except (OSError, subprocess.SubprocessError) as error:
+                raise TaskError(502, f"{task_id} was not expired: its branch could not be deleted. "
+                                + failure_message(error)) from error
+            now = datetime.now(UTC).isoformat()
+            # Every submission ran against the deleted branch, so none stands any more.
+            for attempts in record.get("stages", {}).values():
+                for attempt in attempts:
+                    if attempt["status"] != "expired":
+                        attempt.update(status="expired", updated_at=now)
+            record.pop("pull_request", None)
+            record.pop("pull_request_state", None)
+            record.update(expired=True, prepared=False, owner=None, updated_at=now)
             task_state.write_json(self.state_file, state)
             return {"expired": task_id}
 
