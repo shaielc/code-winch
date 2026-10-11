@@ -1,10 +1,13 @@
 # System state
 
-The current workplan was explicitly closed on 2026-10-11. Its sole phase covered
+The previous workplan was explicitly closed on 2026-10-11. Its sole phase covered
 roadmap Stage 0, which remains unfinished: the sandbox serves a page and local
 composer, but does not start a harness, stream output, or retain an exchange.
 Closure retires the plan; it does not certify its outcome or open the next stage.
-`docs/workplan/tasks.json` is a supported empty tracker and
+The closure left a supported empty tracker; [the active workplan](workplan/README.md)
+now opens Phase 0 for phase planning and issue-resolution intake. This report
+preserves closure evidence, including the empty-tracker checks below; it does
+not describe the new planning graph or claim new product behavior.
 `docs/workplan/tasks.schema.json` remains unchanged. Delivery order and deferred
 architectural decisions remain in [the roadmap](roadmap.md).
 

@@ -3,10 +3,13 @@
 Instructions for any agent working in this repository. One unit of work, one
 pull request.
 
-The current workplan is closed. The sandbox/page slice and local composer
+The previous workplan is closed; Phase 0 now schedules planning and issue
+resolution through [`docs/workplan/README.md`](docs/workplan/README.md).
+The sandbox/page slice and local composer
 exist; the harness is shipped but is not started by the sandbox yet.
 [`docs/state.md`](docs/state.md) records the current source-supported capabilities,
-verification limits, lessons, and unfinished work. The tracker is valid and empty.
+verification limits, lessons, and unfinished work. New planning briefs produce
+artifacts; they do not certify product capabilities.
 Check code at HEAD before assuming a capability exists; the design set describes
 a destination. Closure does not certify roadmap Stage 0 completion.
 
@@ -21,12 +24,13 @@ subtree.
 - **Delivery order** — [`docs/roadmap.md`](docs/roadmap.md). The stages, what
   becomes true in each, what is deliberately absent, and the deferred decisions
   with their triggers.
-- **Workplan status** — [`docs/state.md`](docs/state.md). There is no active
-  phase or assignable brief. `docs/workplan/tasks.json` is a valid empty tracker
-  and `docs/workplan/tasks.schema.json` retains the format for future plans.
-  `bash scripts/list-available-tasks.sh` returns `[]`. An explicitly requested
-  future phase uses `create-phase`; a separate author derives tasks with
-  `derive-task`. Do not infer completion from the empty tracker.
+- **Workplan status** — [`docs/workplan/README.md`](docs/workplan/README.md).
+  Phase 0 owns all future phase planning, specific-brief derivation and issue
+  resolution intake. Its planning tasks use `create-phase` for phase designs
+  and a separate `derive-task` author for specific briefs; implementation starts
+  in Phase 1. Read the tracker and `bash scripts/list-available-tasks.sh` for
+  actual status and availability. The schema is frozen. Retired P0-001 through
+  P0-007 are historical evidence and must not be reused.
 - **Design baseline** — `docs/architecture.md`, `docs/code-structure.md`,
   `docs/contracts.md`, `docs/security.md`, and the ADRs in `docs/decisions/`.
   It describes the destination, not the build order — the roadmap is the order,
@@ -92,8 +96,9 @@ own work the roadmap schedules for one. Such work belongs in **Non-goals**, with
 the stage cited. A brief may defer implementation only to an existing tracker
 ID, or cite a deferred architectural decision with a trigger in roadmap §6.
 Phase-local increment labels and hypothetical later IDs are not owners.
-Acceptance criteria are not satisfied by code that defers them. The closed
-tracker currently provides no task IDs to own new deferrals.
+Acceptance criteria are not satisfied by code that defers them. A Phase 0
+planning task owns its artifact, not implementation of the planned capability;
+it cannot stand in for an implementation deferral owner.
 
 ### Test adversarially where it matters
 

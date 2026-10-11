@@ -6,7 +6,9 @@ one stage at a time into tasks.
 
 Roadmap stages describe product milestones. Workplan Phase 0 contains planning
 tasks; implementation phases start at 1 and cite their roadmap stage explicitly.
-Task IDs follow the retained tracker schema; the current tracker is empty.
+Task IDs follow the retained tracker schema. [Phase 0](workplan/phase-0/README.md)
+now owns planning and issue-resolution intake; its target phases map to the
+stages below without claiming their implementation.
 
 ## 1. How this roadmap is ordered
 
@@ -226,7 +228,8 @@ belong to `docs/workplan/` and the model in
 document fixes the order and the stage boundaries; the plan derived from it
 decides how a stage is cut into tasks.
 
-[`docs/state.md`](state.md) records the explicitly closed workplan, reusable
-capabilities, verification limits, and remaining gaps. There is no active phase.
+[`docs/state.md`](state.md) records the explicitly closed previous workplan,
+reusable capabilities, verification limits, and remaining gaps. The active
+[workplan](workplan/README.md) starts with Phase 0 planning.
 Check code at HEAD when a capability claim disagrees with it; this roadmap
 specifies delivery order, not status. Closure does not advance a roadmap stage.

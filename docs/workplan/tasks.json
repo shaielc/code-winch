@@ -6,5 +6,122 @@
     "blocked",
     "completed"
   ],
-  "tasks": []
+  "tasks": [
+    {
+      "id": "P0-008",
+      "title": "Plan Phase 1: standalone fake sandbox",
+      "phase": 0,
+      "phase_name": "Planning and issue-resolution intake",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-008-plan-standalone-fake-sandbox.md"
+    },
+    {
+      "id": "P0-009",
+      "title": "Plan Phase 2: first real harness",
+      "phase": 0,
+      "phase_name": "Planning and issue-resolution intake",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-009-plan-first-real-harness.md"
+    },
+    {
+      "id": "P0-010",
+      "title": "Plan Phase 3: readable and rejoinable session",
+      "phase": 0,
+      "phase_name": "Planning and issue-resolution intake",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-010-plan-readable-rejoinable-session.md"
+    },
+    {
+      "id": "P0-011",
+      "title": "Plan Phase 4: observe manual sandboxes",
+      "phase": 0,
+      "phase_name": "Planning and issue-resolution intake",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-011-plan-manual-sandbox-observer.md"
+    },
+    {
+      "id": "P0-012",
+      "title": "Plan Phase 5: control-plane run lifecycle",
+      "phase": 0,
+      "phase_name": "Planning and issue-resolution intake",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-012-plan-control-plane-run-lifecycle.md"
+    },
+    {
+      "id": "P0-013",
+      "title": "Plan Phase 6: enforced security",
+      "phase": 0,
+      "phase_name": "Planning and issue-resolution intake",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-013-plan-enforced-shared-deployment-security.md"
+    },
+    {
+      "id": "P0-014",
+      "title": "Plan Phase 7: second provider and workflows",
+      "phase": 0,
+      "phase_name": "Planning and issue-resolution intake",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-014-plan-second-provider-and-workflows.md"
+    },
+    {
+      "id": "P0-015",
+      "title": "Plan composer rejected-submission focus repair",
+      "phase": 0,
+      "phase_name": "Planning and issue-resolution intake",
+      "status": "pending",
+      "depends_on": [
+        "P0-008"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-015-plan-composer-refusal-focus.md"
+    },
+    {
+      "id": "P0-016",
+      "title": "Plan composer validation and keyboard evidence",
+      "phase": 0,
+      "phase_name": "Planning and issue-resolution intake",
+      "status": "pending",
+      "depends_on": [
+        "P0-008"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-016-plan-composer-validation-keyboard-evidence.md"
+    },
+    {
+      "id": "P0-017",
+      "title": "Plan local-message no-ordinal oracle repair",
+      "phase": 0,
+      "phase_name": "Planning and issue-resolution intake",
+      "status": "pending",
+      "depends_on": [
+        "P0-008"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-017-plan-local-message-no-ordinal-oracle.md"
+    }
+  ]
 }

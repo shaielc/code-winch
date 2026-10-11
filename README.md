@@ -35,12 +35,14 @@ serving a page you can type at — deliberately smaller than anything the design
 documents describe, because the previous attempt built downward from the control
 plane and never produced a configuration anybody could start.
 
-The current workplan is closed and roadmap Stage 0 remains unfinished.
-`docs/workplan/tasks.json` is a valid empty tracker;
-`bash scripts/list-available-tasks.sh` returns `[]`. There are no active briefs to
-dispatch. The state report preserves the closure evidence, lessons, and gaps.
-An explicitly requested future phase uses `create-phase`, followed by task
-derivation by a separate author; see [operation skills](skills/README.md).
+The previous workplan is closed and roadmap Stage 0 remains unfinished.
+[The active workplan](docs/workplan/README.md) opens Phase 0 to plan Phases 1–7
+against roadmap Stages 0–6 and route the current composer issues into concrete
+repair briefs. All future planning and issue resolution enter through Phase 0;
+product implementation starts at Phase 1. The tracker and
+`bash scripts/list-available-tasks.sh` report actual status and availability.
+The state report preserves the closure evidence, lessons, and gaps; planning
+completion does not certify product behavior. See [operation skills](skills/README.md).
 
 ## Building and testing
 
