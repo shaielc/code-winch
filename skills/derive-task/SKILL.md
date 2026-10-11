@@ -13,6 +13,10 @@ Derive one task at a time: architecture → phase author → task author → opt
 phase revision by the phase author → next task. Deriving another task does not
 require implementing the previous one first.
 
+For Phase 0, derive a planning brief using the model's planning shape. Name its
+target artifact, assigned phase/task-author operation, and handoff. Deriving
+this planning brief does not itself perform the planning operation it assigns.
+
 ## Select the change
 
 1. Choose the next uncovered part of an increment in the phase's stated order.
@@ -34,6 +38,8 @@ Use the shared anatomy and select a task shape. State required behavior and
 product constraints separately from proposed implementation approaches.
 Provide reachability, concrete write forecasts, owned contract surfaces,
 acceptance criteria, verification, and a credible manual demonstration.
+For a planning shape, use planning outputs and artifact review in place of
+runtime reachability and demonstrations of the target product capability.
 
 Treat the fake as malleable. Change its behavior, protocol, timing, or controls
 to exercise this task; do not broaden product scope to accommodate its current

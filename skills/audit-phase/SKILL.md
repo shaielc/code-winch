@@ -22,8 +22,9 @@ Report findings; change none of the artifacts being judged.
   before its design can be audited.
 - Design: numbered increments add observable properties in a valid order;
   boundaries are decided and excluded concerns have destinations.
-- Task fit: each task belongs to an increment, fits a shape, and keeps its
-  minimum operator path. Independently observable work is not bundled.
+- Task fit: each task belongs to an increment and fits a shape. Planning tasks
+  produce their artifacts and handoffs; implementation tasks keep their minimum
+  operator path. Independently observable work is not bundled.
 - Coverage: responsibilities are accounted for; underived increments and legacy
   briefs awaiting reconciliation are labelled explicitly.
 - Fakes: their current behavior or interface is not a product constraint; they

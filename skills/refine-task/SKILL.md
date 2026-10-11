@@ -11,6 +11,10 @@ and applicable `AGENTS.md` files. The brief owns scope and acceptance; the track
 owns status and dependencies. Use a separate author for each task operation:
 derive, refine, implement, and audit.
 
+For a planning shape, refine the concrete outputs and handoff against current
+design artifacts. Treat target runtime behavior as a prediction; apply the
+model's artifact criteria instead of requiring that behavior to exist now.
+
 ## Orient
 
 1. **Read the brief end to end**, including **Non-goals**. Note its **Shape** —

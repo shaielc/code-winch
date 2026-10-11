@@ -4,8 +4,9 @@ This is the order in which Code Winch becomes real. It sits between the design
 set, which describes a finished system, and `docs/workplan/`, which decomposes
 one stage at a time into tasks.
 
-Stage N maps onto workplan phase N, so phase numbering starts at zero. Task
-IDs follow the retained tracker schema; the current tracker is empty.
+Roadmap stages describe product milestones. Workplan Phase 0 contains planning
+tasks; implementation phases start at 1 and cite their roadmap stage explicitly.
+Task IDs follow the retained tracker schema; the current tracker is empty.
 
 ## 1. How this roadmap is ordered
 

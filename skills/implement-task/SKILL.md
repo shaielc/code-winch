@@ -5,6 +5,11 @@ description: Implement, demonstrate, verify, and open the pull request for one r
 
 # Implement task
 
+For a planning shape, produce the artifacts using its assigned phase/task-author
+skill and the model's planning criteria. Verify outputs and handoff; runtime
+reachability and new-capability demonstrations belong to the target
+implementation task, not this planning task.
+
 Work on one task ID. Read its brief end to end, the phase README, index,
 tracker, design sections under Traces to, [the model](../shared/workplan-model.md),
 and applicable `AGENTS.md` files. The brief owns scope and acceptance; the tracker

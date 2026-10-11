@@ -13,6 +13,11 @@ derive, refine, implement, and audit.
 
 Audit the requested commit independently of its refiner and implementer.
 
+For a planning shape, judge artifact acceptance and handoff using the model's
+planning criteria and the assigned author operation's requirements. Runtime
+reachability and target-capability scenarios are implementation criteria;
+planning completion does not certify the predicted behavior.
+
 ## Orient
 
 1. **Read the brief end to end**, including **Non-goals**. Note its **Shape** —
