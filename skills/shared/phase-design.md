@@ -18,7 +18,7 @@ separate even when an increment needs both as required wiring.
 
 ## Ordered increments
 
-Number increments in delivery order. Put the **number only** in `Order` and a **descriptive title** (not a number or identifier such as `0.1`) in `Increment`:
+Number increments in delivery order. Put the **number only** in `Order` and a **descriptive title** in `Increment`:
 
 | Order | Increment | Observable change | Includes | Excludes | Prerequisites |
 |---|---|---|---|---|---|
