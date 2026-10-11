@@ -29,7 +29,7 @@ stage's hand check.
   is running and its stdin is open. If either is unavailable, a submission is
   refused with `INPUT_UNSUPPORTED` rather than written to a closed pipe. Check
   direct process/channel availability; no terminal lifecycle record is required.
-  `docs/contracts.md` §8: *Harness ownership and lifecycle reporting are separate*.
+  `docs/contracts.md` §8: *Exit observation is separate from run lifecycle*.
 - The reply correlates to the submission: the harness echoes the submission id, and the
   resulting `stream.raw` record keeps it, so a reader can tell which line was answered.
 
@@ -136,5 +136,5 @@ None.
 `docs/roadmap.md` §2 (Stage 0 hand check), §1 rule 4 (*The same submission reaching the
 harness is observable by the harness's reply*), §3 Stage 0, §4 input path, §6 D5;
 `docs/contracts.md` §3, §8 (*Input is accepted or refused, never queued silently*,
-*Harness ownership and lifecycle reporting are separate*); `docs/architecture.md` §4 *Harness
+*Exit observation is separate from run lifecycle*); `docs/architecture.md` §4 *Harness
 adapters*; `docs/code-structure.md` §3; ADR-0003, ADR-0005.

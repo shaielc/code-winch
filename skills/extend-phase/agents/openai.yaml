@@ -1,0 +1,4 @@
+interface:
+  display_name: "Extend Phase"
+  short_description: "Add requirements to an existing phase"
+  default_prompt: "Use $extend-phase to add requirements to an existing phase."

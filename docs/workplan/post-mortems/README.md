@@ -16,7 +16,7 @@ One file per record, named `<date>-<slug>.md`, each stating:
 4. **the plan rule that would have caught it.**
 
 Point 4 is the reason the directory exists. Those rules are the most durable thing a plan
-produces, and `skills/workplan/SKILL.md`'s close procedure restates every one of them in
+produces, and `skills/close-workplan/SKILL.md` restates every one of them in
 `docs/state.md` before this directory is removed — which is the only reason removing it is
 safe.
 

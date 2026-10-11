@@ -1,0 +1,4 @@
+interface:
+  display_name: "Audit Phase"
+  short_description: "Audit phase design and task coverage"
+  default_prompt: "Use $audit-phase to audit phase design and task coverage."

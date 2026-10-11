@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Task"
+  short_description: "Implement and verify one task brief"
+  default_prompt: "Use $implement-task to implement and verify one task brief."

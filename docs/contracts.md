@@ -201,58 +201,40 @@ external effects.
 
 ## 8. Sandbox attach contract
 
-The standalone sandbox's contract grows with the roadmap. Stage 0 establishes
-one session, raw output, retained history, and text input. Stage 1 adds real
-harness semantics and exit reporting; Stage 2 adds structured views and seamless
-resume. The paragraphs below identify those boundaries. They do not require
-each capability in the first increment that starts a harness.
-[ADR-0006](decisions/0006-two-interaction-surfaces.md) states why this surface
-stays independent of a control plane.
+What a standalone sandbox serves for the session inside it. This surface is
+independent of a control plane; [ADR-0006](decisions/0006-two-interaction-surfaces.md)
+explains why it stays narrow. The roadmap and phase design specify when these
+capabilities are introduced.
 
 **Session, not run.** There is one session per sandbox, implied by the sandbox
 itself rather than addressed by an identifier the caller chooses. The surface
 exposes no collection: no listing, no creation, no selection. The run lifecycle
 in §1 does not apply, and the states it names are not reported here.
 
-**Recorded history is ordinal-ordered (Stage 0).** Every retained record carries a
+**Recorded history is ordinal-ordered.** Every retained record carries a
 runner-local ordinal, monotonically increasing and gap-free within the session.
 Consumers order by ordinal, never by timestamp. Records carry no canonical
 `sequence` and no `eventId`; §2 says what the control plane adds.
 
-**Live output precedes history (Stage 0).** A live reader observes raw harness
-output produced while attached. Before history is introduced, attachment makes
-no promise to replay startup output or output produced before the connection.
-With retained history, a caller can fetch records from an ordinal and reload to
-see the earlier exchange. Basic memory bounds belong to the first delivery
-increment; the slow-reader guarantee is a separate Stage 0 hardening increment.
+**Reading.** Live output shows raw harness output. Retained history can be
+fetched from a runner-local ordinal and is ordered by that ordinal. A resumable
+stream uses the last ordinal, a heartbeat, and an explicit caught-up marker;
+on a gap or reconnect the caller refetches. A slow reader never backpressures
+the harness. These are distinct capabilities; introducing live output does not
+imply that history or seamless resume exists.
 
-**Seamless resume is a later reading contract (Stage 2).** Streaming from an
-ordinal, heartbeat, an explicit caught-up marker, and automatic gap recovery
-arrive with no-gap reattachment. The reader resumes from its last ordinal. A
-slow reader is disconnected with a resumable ordinal and never backpressures
-the harness. The control-plane authorization checks in §5 apply when that
-surface exists. These requirements do not turn first live output into replay.
+**Input is accepted or refused, never queued silently.** A submission carries
+an idempotency key scoped to the session. Repeating the key returns the first
+submission's identifier and kind. Delivery checks whether the harness supports
+the input kind and its input channel is available. Refusal uses the applicable
+codes from §3: `INPUT_INVALID`, `INPUT_UNSUPPORTED`, or `INPUT_UNAUTHORIZED`.
+Diagnostics exclude payload content. The surface documents which typed payloads
+and delivery capabilities it supports.
 
-**Input is accepted or refused, never queued silently (Stage 0).** Text input
-carries an idempotency key scoped to the session. A repeated key returns the
-first submission's identifier and kind. Acceptance and harness delivery are
-separate increments: recording a submission is observable before delivery
-exists. Once delivery exists, the runner checks that the child and its input
-channel are available; unavailable input is refused with `INPUT_UNSUPPORTED`.
-Invalid input uses `INPUT_INVALID`, and an authorization refusal uses
-`INPUT_UNAUTHORIZED` where applicable. Diagnostics exclude payload content.
-Declared adapter input modes arrive with a real harness in Stage 1; the richer
-typed payloads in §3 apply as their capabilities are introduced.
-
-**Harness ownership and lifecycle reporting are separate.** Stage 0 owns and
-reaps its child, cleans it up with the sandbox, and refuses delivery when the
-child is unavailable. These guarantees use direct process/channel availability;
-they do not require `session.terminated`, a native-exit outcome taxonomy, or a
-stop API. Stage 1's real-harness increment introduces an explicit exit record
-carrying the native result and its documented interpretation. An intentional
-operator stop and run lifecycle belong to Stage 4, and stop escalation and
-orphan recovery belong to Stage 5. There is no in-sandbox retry or new attempt
-in Stage 0: starting again means starting another sandbox.
+**Exit observation is separate from run lifecycle.** A reported harness exit
+contains the native result and its documented interpretation. It does not imply
+a run state machine, retry, or a new attempt in the same sandbox. Delivery is
+refused when the harness is unavailable whether or not exit reporting exists.
 
 **The surface states its posture.** It reports the sandbox profile in force and
 what that profile does not isolate, so a caller cannot be misled about effective
@@ -264,29 +246,21 @@ array is non-empty; for `container-standard` it includes `network-egress`.
 
 ## 9. Fake runtime profile contract
 
-The fake is a supported way to exercise product behavior without a vendor
-account. Its contract is observable behavior through the product surface and
-the runtime controls needed for the current increment. For example, live output
-needs output that can be observed during attachment, and input delivery needs
-an observable reply. Transcript playback, delay, and failure injection are
-available techniques, not prerequisites for every task or a mandatory protocol.
-Document the controls an increment introduces and what the fake does not prove.
-Existing standalone fixture flags do not all have to become sandbox
-configuration keys when the first product profile is wired.
+The fake is a malleable runtime profile for exercising product behavior without
+a vendor account. Change its behavior, protocol, timing, controls, or process
+implementation to support the capability being built. Update its callers, tests,
+scenarios, and operator documentation together. Its current JSON-lines dialect,
+flags, and signal handling do not constrain the product.
 
-The fake's process protocol is internal development infrastructure. Its current
-JSON-lines dialect, `kind` and `sensitivity` fields, `-run-id` flag, and signal
-handler do not define the sandbox attach contract or the canonical event model.
-The runner owns the product record envelope and maps harness output into it.
-Raw output may be plain text or arbitrary bytes; invalid JSON is not malformed
-raw output. Semantic decoding is introduced when a real harness or structured
-view needs it. Neither a JSON decoder nor pass-through event kinds are required
-by the fake's existing implementation.
+The fake has no separate event model. Product output and input follow this
+sandbox attach contract (§8), and control-plane events follow §2 when that
+surface exists. Runner-side protocol requirements in §4 apply when the remote
+runner protocol is introduced, not to the fake's private process I/O. The
+[architecture's harness adapter](architecture.md#harness-adapters) and
+[adapter construction guidance](code-structure.md#4-adding-a-harness) describe
+its implementation context; the roadmap specifies the delivery stages.
 
-An increment may change the fake's protocol or controls along with its callers,
-scenario fixtures, tests, and operator documentation. Preserve the supported
-behavior; require exact interface compatibility only where a documented
-consumer needs it. Declare affected profile configuration and product surfaces
-in the brief so concurrent tasks can reconcile them. No change to the fake
-executable is made merely by this distinction; the introducing implementation
-chooses and documents the simplest protocol its scenarios need.
+Raw output may be plain text or arbitrary bytes. A JSON decoder, invented event
+kinds, transcript replay, or a catalogue of product configuration keys is not
+required by the fake's existing code. Choose the behavior and controls needed
+to exercise the current capability and document what they do not prove.

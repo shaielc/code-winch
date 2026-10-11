@@ -145,7 +145,7 @@ two hands-on paths.
 ## Traces to
 
 `docs/roadmap.md` §3 Stage 0, §4 output path; `docs/contracts.md` §8 (*Recorded history is
-ordinal-ordered*, *Live output precedes history*, *Harness ownership and lifecycle
+ordinal-ordered*, *Reading*, *Harness ownership and lifecycle
 reporting are separate*); `docs/architecture.md` §4 *Event pipeline and renderers*;
 `docs/code-structure.md` §3; ADR-0002, ADR-0005; `docs/security.md` §2;
 `docs/state.md` *A code comment cites a fixture that was deleted*.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Derive Task"
+  short_description: "Derive one task from a phase increment"
+  default_prompt: "Use $derive-task to derive one task from a phase increment."

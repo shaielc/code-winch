@@ -1,10 +1,10 @@
 # Implementation workplan
 
 **Phase 0's revised partition is specified; task rederivation is incomplete.**
-The [phase design](phase-0/README.md) separates ownership, live output, history,
-input, and output hardening. The tracker still contains the earlier seven-task
+The [phase design](phase-0/README.md) orders live output, history, input, and
+separate reader/size hardening increments. The tracker still contains the earlier seven-task
 graph, with `P0-001` and `P0-004` completed. Its dependency query returns
-`P0-002`; reconcile that legacy brief with the `harness-owned` increment before
+`P0-002`; reconcile that legacy brief with the `output-live` increment before
 assigning it under the revised phase.
 
     $ ./scripts/list-available-tasks.sh
@@ -20,7 +20,9 @@ Derive a plan through `architecture → phase → task → optional phase revisi
 next task`. The phase README specifies increments and boundary decisions before
 briefs are derived. A task may split an increment further; combining increments
 requires revising the phase first. Phase-local labels are not task IDs or
-deferral owners. See [the workplan skill](../../skills/workplan/SKILL.md).
+deferral owners. Phase authors use [create-phase](../../skills/create-phase/SKILL.md) and
+[revise-phase](../../skills/revise-phase/SKILL.md); a different task author uses
+[derive-task](../../skills/derive-task/SKILL.md).
 
 ## Scope of this plan
 
@@ -28,8 +30,7 @@ deferral owners. See [the workplan skill](../../skills/workplan/SKILL.md).
 this one depend on decisions the roadmap deliberately leaves open — which vendor CLI
 Stage 1 integrates (D1), how `winchd` learns a sandbox exists (D6), whether the canonical
 envelope wraps or replaces the sandbox's record shape (D7). Briefs for them would be
-hypotheses. Stage 1 arrives as a new derivation, or in extend mode, when this phase
-closes.
+hypotheses. Stage 1 opens through `create-phase` when this phase closes.
 
 One consequence is worth stating because it bears on I6. A single-stage plan has no task
 IDs in later phases, so nothing in this plan can name one as an owner. The convention:
@@ -110,12 +111,12 @@ slice through one process; width is a property of the stages that add substrates
 Scenario files are one per scenario and CLI commands one per file, so `test/e2e/` and
 `cmd/winch/` do not collide beyond the shared compose helper P0-001 creates.
 
-**Contract-collision set: empty.** P0-004 declares no server surface at all. P0-002
-*defines* the record-kind namespace; P0-005 and P0-007 each only *add* a kind to it, which
-is appending to a registry rather than redefining it. P0-006's input-frame encoding does
-not touch P0-007's diagnostic kind or stream-disconnect semantics. Two concurrently
-available tasks sharing a contract surface would be a defect to fix before the phase
-opens, not a cost to report.
+**Known contract collision in the legacy briefs:** P0-006 emits delivery-failure
+diagnostic records while P0-007 defines the diagnostic kind and payload. Their
+concurrent scopes overlap even though P0-006 omits that surface from its
+declaration. During rederivation, assign this contract one owner and narrow the
+other task or add a justified contract edge. Resolve it before assigning those
+briefs; the legacy graph does not yet encode that correction.
 
 ### Phase exit
 

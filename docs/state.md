@@ -1,7 +1,7 @@
 # System state
 
-What exists at HEAD, what went wrong getting here, and what has no working code
-behind it. This replaced the plan that was stripped from `docs/workplan/`, and
+Historical snapshot used to derive Phase 0: what existed, what went wrong, and
+what had no working code. This replaced the plan stripped from `docs/workplan/`, and
 [`docs/roadmap.md`](roadmap.md) is the order the gaps below get closed in.
 
 A plan is now in flight again: [`docs/workplan/`](workplan/README.md) decomposes
@@ -10,9 +10,11 @@ not updated by it — the gaps below are gaps until code closes them, whatever a
 brief claims it will do. Where this file and a brief disagree about what exists,
 check the repository.
 
-The product does not run. There is no daemon, no sandbox, no browser
-application, and no way to start a harness through anything. What survives is
-the design set, one test fixture, and the tooling that dispatches work.
+At the time of this snapshot the product did not run: there was no daemon,
+sandbox, browser application, or way to start a harness. The design set, one
+test fixture, and dispatch tooling survived. The current phase README records
+the sandbox/page and composer subsequently built; verify current code before
+reusing any capability claim from this snapshot.
 
 ## What was done
 
@@ -43,10 +45,11 @@ dispatches refine/implement/audit stages to cloud agents. 44 tests pass:
     → Ran 44 tests ... OK
 
 **The planning skills.** `skills/shared/workplan-model.md` defines the four
-properties, seven invariants, four task shapes, and the frozen tracker schema;
-`skills/workplan/SKILL.md` and `skills/task/SKILL.md` apply it at plan and task
-level. These were rewritten after the last plan failed and have not yet been
-used to derive a plan.
+properties, seven invariants, four task shapes, and the frozen tracker schema.
+At the time of this report, the combined `workplan` and `task` skills applied
+it at plan and task level. They had been rewritten after the last plan failed
+and had not yet been used to derive a plan. The current operations are listed
+in `skills/README.md`.
 
 **The task-completion scripts.** `scripts/list-available-tasks.sh` computes
 availability from the tracker, and `scripts/stamp_task_completion.py` stamps
@@ -152,13 +155,14 @@ roadmap stages are not blocked. Recorded because the claim was acted on: a
 reader trusting it would have changed a frozen file for no reason.
 
 **The close procedure's own empty-tracker example is invalid.**
-`skills/workplan/SKILL.md:221` gives the closed state as
+The historical `workplan` skill at line 221 gave the closed state as
 `{"schema_version": 1, "tasks": []}`, which the schema rejects for missing
 `status_values`. A close following it literally would produce a tracker that
 fails validation — and therefore fails every pull request, since
 `.github/workflows/task-status-gate.yml` reads it on each one. (An earlier
 revision of this file cited `skills/shared/workplan-model.md:221`, which is a
-different sentence; the defect is in `skills/workplan/SKILL.md`.)
+different sentence; the defect was in the historical `workplan` skill.) The
+current close operation is `skills/close-workplan/SKILL.md`.
 
 **A code comment cites a fixture that was deleted.**
 `cmd/fake-harness/main.go:29` says `streamPayload` matches

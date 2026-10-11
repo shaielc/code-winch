@@ -30,13 +30,11 @@ subtree.
   `docs/contracts.md`, `docs/security.md`, and the ADRs in `docs/decisions/`.
   It describes the destination, not the build order — the roadmap is the order,
   and it deliberately inverts the layering these documents are written in.
-- **How to run a task** — `skills/task/SKILL.md`. How to orient in an active
-  brief, what its shape must demonstrate, and how to judge whether it is
-  complete. It expands on the rules below.
-- **Planning rules** — `skills/workplan/SKILL.md`. Read it when deriving the next
-  plan from the design set and `docs/state.md`, or when changing a plan in
-  flight. Create the phase's explicit increment partition first, then derive
-  one task at a time, revising the phase when derivation changes a boundary.
+- **Operation skills** — [`skills/README.md`](skills/README.md). Phase authors
+  use `create-phase`, `extend-phase`, `revise-phase`, or `audit-phase`. A separate
+  task author uses `derive-task`. Dispatched tasks use `refine-task`,
+  `implement-task`, and `audit-task`, with a different author for each operation.
+  Explicit plan closure uses `close-workplan`.
 
 ## Rules that bind every task
 
@@ -62,17 +60,11 @@ finished, however well it is tested.
 
 ### Fakes are a shipped configuration
 
-In-memory and fake implementations are a supported way to run this product, not
-test-only doubles. Keep them working and controllable for their current behavior.
-Introduce controls such as transcripts, latency, or failure with the concerns
-they exercise; malformed native output matters when decoding exists. When you add one,
-state in its documentation what it does not prove.
-
-Their supported behavior and controllability must survive changes. Their
-invented protocols, flags, and signal behavior may change with their consumers,
-scenarios, and documentation unless explicit compatibility is required. The
-product contract determines what the fake exercises; the fake does not dictate
-the product's record model. See `docs/contracts.md` §9.
+In-memory and fake implementations are supported ways to run this product.
+They are malleable: change their behavior and implementation to exercise the
+capability being built, updating callers, tests, and documentation together.
+Their current protocol and controls do not constrain product design.
+State what the fake does not prove. See `docs/contracts.md` §9.
 
 ### Prove behavior, not only contracts
 

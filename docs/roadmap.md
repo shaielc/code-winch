@@ -79,8 +79,10 @@ back, to remembering both.
 
 The wrapper is the runner, living inside the sandbox — see
 [ADR-0005](decisions/0005-sandbox-resident-runner.md). It owns the harness
-process, the codec, and a private ordered record store. Nothing in this stage
-knows what a run is; the sandbox has a session, and that is all.
+process, raw output delivery, and a private ordered record store. The fake is
+malleable; its current process dialect does not require semantic decoding here.
+Nothing in this stage knows what a run is; the sandbox has a session, and that
+is all.
 
 Stage 0 also carries the repository's floor. The Makefile and both CI workflows
 currently name paths that no longer exist, so the first task truncates them to
@@ -211,7 +213,7 @@ the owner of a deferral; a question with no trigger is not an entry here.
 | D2 | Whether the sandbox surface and the product app share one web workspace or are two | There is only one surface before Stage 3, so the question has no content yet | Stage 3's product surface needs its first component that the sandbox surface already has |
 | D3 | What substrate the sandbox's private store uses, and whether it outlives one session | A single-session ordered record is satisfied by the simplest thing that persists | The sandbox must present history from a session that has already ended |
 | D4 | Whether the attach surface and the runner protocol are one protocol or two | Before Stage 3 there is no runner protocol to unify with | Stage 3 defines registration and the control plane's first command |
-| D5 | Whether harness I/O needs a PTY or pipes suffice | The fake harness speaks JSON lines on pipes and needs no terminal | The first real harness requires terminal semantics — resize, raw mode, or TTY detection |
+| D5 | Whether harness I/O needs a PTY or pipes suffice | Stage 0 raw I/O needs no terminal; the fake can change to exercise it | The first real harness requires terminal semantics — resize, raw mode, or TTY detection |
 | D6 | How `winchd` learns a sandbox exists — registration, scan, or supervision | All three are reasonable, and nothing before Stage 3 distinguishes them | Stage 3 opens |
 | D7 | Whether the canonical envelope replaces the sandbox's record shape or wraps it | The sandbox emits runner-local ordinals by design; the envelope is the control plane's contract | The control plane first persists records a sandbox produced |
 
@@ -223,5 +225,7 @@ belong to `docs/workplan/` and the model in
 document fixes the order and the stage boundaries; the plan derived from it
 decides how a stage is cut into tasks.
 
-[`docs/state.md`](state.md) records what actually exists at HEAD. Where it and
-this roadmap disagree about whether something is built, `state.md` is right.
+[`docs/state.md`](state.md) is the snapshot used to derive the current plan.
+The [phase baseline](workplan/phase-0/README.md#outcome-and-starting-point) records
+subsequent reusable work. Check code at HEAD when either disagrees with a
+current capability claim; this roadmap specifies delivery order, not status.

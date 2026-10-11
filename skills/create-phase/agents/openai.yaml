@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Phase"
+  short_description: "Design a phase with ordered increments"
+  default_prompt: "Use $create-phase to design a phase with ordered increments."

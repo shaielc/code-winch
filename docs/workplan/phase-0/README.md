@@ -2,7 +2,7 @@
 
 This phase specifies the increment partition used to derive its tasks. The
 partition replaces the earlier seven-brief decomposition; the
-[derivation record](#task-derivation-record) identifies completed work and
+[task coverage](#task-coverage) identifies completed work and
 pending legacy briefs to reconcile. The [tracker](../tasks.json) still records
 those existing task IDs and statuses; it has not been rewritten by this design.
 
@@ -25,71 +25,63 @@ for this phase design. `docs/state.md` is the earlier derivation's snapshot.
 
 ## Concern boundaries
 
-| Concern | Destination and selected boundary |
+| Concern | Destination |
 |---|---|
-| Runnable sandbox and local interaction | Reuse `sandbox-page` and `input-local`; no repeated foundational task |
-| Child ownership and safe cleanup | `harness-owned`; status makes ownership observable before output delivery |
-| Raw live output | `output-live`; new output during attachment, without replay or semantic decoding |
-| Retained output and input history | `history` and `input-recorded`; persistence is a new observable property |
-| Harness input delivery | `input-delivered`; acceptance alone does not imply delivery |
-| Slow readers and oversized output | `output-bounded`; hardening has its own observation |
-| Exit records and outcome interpretation | Roadmap Stage 1, with the first real harness; excluded from Phase 0 |
-| Structured decoding and no-gap reconnect | Roadmap Stages 1 and 2 respectively; invented fake JSON does not pull them forward |
-| Intentional run stop, retries, escalation, orphan recovery | Roadmap Stages 4 and 5; minimum child cleanup remains in `harness-owned` |
+| Sandbox page and posture | Reuse `sandbox-page` |
+| Local composer feedback | Reuse `input-local` |
+| Raw live output | `output-live` |
+| Harness launch | Required wiring for `output-live` |
+| Child cleanup with sandbox shutdown | Required wiring for `output-live` |
+| Retained output history | `history` |
+| Submission acceptance/refusal | `input-recorded` |
+| Retained submission history | `input-recorded` |
+| Harness input delivery | `input-delivered` |
+| Slow-reader isolation | `reader-isolation` |
+| Output-size limits | `output-limits` |
+| Native exit reporting | Roadmap Stage 1 |
+| Structured harness decoding | Roadmap Stage 1 |
+| Structured views | Roadmap Stage 2 |
+| Seamless reconnect | Roadmap Stage 2 |
+| Intentional run stop | Roadmap Stage 4 |
+| Retries | Roadmap Stage 4 |
+| Stop escalation | Roadmap Stage 5 |
+| Orphan recovery | Roadmap Stage 5 |
 
-## Increments
+## Ordered increments
 
-| Increment | Observable change and included responsibility | Prerequisites | Boundary: excludes |
-|---|---|---|---|
-| `sandbox-page` | A startable sandbox serves its page and posture; operator status answers | Existing deployment inputs | Harness launch and all I/O |
-| `input-local` | Typing produces local page feedback | `sandbox-page` | Server submission and delivery |
-| `harness-owned` | Sandbox status and page show that an actual child is running; launch, reap, and clean it up | `sandbox-page` | Live output, record envelope, detailed exit reporting, stop controls |
-| `output-live` | Page and operator stream show raw output produced while attached | `harness-owned` | Startup replay, persistence, structured events, JSON-line parsing |
-| `history` | Reload and operator history show previously collected output in ordinal order | `output-live` | Seamless reconnect, multiple views, ended-session history |
-| `input-recorded` | Page and operator submission receive acceptance/refusal; accepted text is recorded and survives reload | `input-local`, `history` | Writing to the harness, typed modes beyond text |
-| `input-delivered` | Accepted text reaches the child and its reply arrives through the existing output path; unavailable input is refused | `input-recorded`, `output-live` | Lifecycle records, recovery, invented semantic reply formats |
-| `output-bounded` | A stalled reader or oversized output cannot stop healthy output or exhaust memory; failure is visible | `history` | Native structured-payload parsing, security features assigned to Stage 5 |
+| Order | Increment | Observable change | Includes | Excludes | Prerequisites |
+|---|---|---|---|---|---|
+| 1 | `sandbox-page` | A startable sandbox serves its page and posture; operator status answers | Sandbox entrypoint and deployment | Harness I/O | Existing deployment inputs |
+| 2 | `input-local` | Typing produces local page feedback | Local composer | Server submission | `sandbox-page` |
+| 3 | `output-live` | Page and operator stream show newly produced raw output | Fake launch and output delivery; minimum shutdown cleanup and memory bounds | Startup replay, history, structured decoding, exit reporting | `sandbox-page` |
+| 4 | `history` | Reload and operator history show earlier output in ordinal order | Retained output history | Seamless reconnect, multiple views, ended-session history | `output-live` |
+| 5 | `input-recorded` | A submission is accepted or refused; accepted text survives reload | Server acceptance and retained input | Harness delivery, input modes beyond text | `input-local`, `history` |
+| 6 | `input-delivered` | Submitted text reaches the child and its reply arrives in the output view | Input delivery and refusal when unavailable | Lifecycle records, recovery, semantic reply formats | `input-recorded`, `output-live` |
+| 7 | `reader-isolation` | A stalled reader cannot stop healthy readers | Slow-reader disconnection and visible failure | Additional output-size guarantees | `output-live` |
+| 8 | `output-limits` | Oversized output is visibly limited without exhausting memory | Output-size enforcement | Structured-payload parsing, Stage 5 security | `output-live` |
 
-These boundaries are decisions. Ownership and live output are separate
-increments because the existing status path can prove ownership by itself.
-Live output and persistence are separate because seeing new bytes and retaining
-them across reloads are different observations. Acceptance and delivery are
-separate because recording a submission and seeing a harness reply are
-different observations. Keep minimum operator reachability and safe resource
-bounds with each increment; additional guarantees do not become prerequisite
-features just to make its demonstration easier.
+`input-local` and `output-live` are independent after `sandbox-page`.
+`reader-isolation` and `output-limits` can be derived after live output without
+waiting for history or input.
 
-The fake profile must provide output observable while the live reader is
-attached, and a reply when input delivery is introduced. Its implementation may
-change to meet those behaviors. This phase does not select a transcript,
-startup timing trick, event dialect, stream transport, or terminal outcome map.
-Task derivation selects the smallest implementation and credible observation
-for the decided behavior.
+## Task coverage
 
-## Task derivation record
-
-| Increment | Existing coverage / next derivation action |
+| Increment | Coverage |
 |---|---|
 | `sandbox-page` | Reuse completed P0-001 |
 | `input-local` | Reuse completed P0-004 |
-| `harness-owned` | Not yet derived separately; rederive pending P0-002 around ownership/status |
-| `output-live` | Not yet derived separately; derive the output increment after ownership, allocating a new ID |
-| `history` | Reconcile pending P0-003 with the output task and this durability boundary |
-| `input-recorded` | Reconcile pending P0-005 with its prerequisite-produced history contract |
-| `input-delivered` | Reconcile pending P0-006 with direct child availability and raw reply observation |
-| `output-bounded` | Reconcile pending P0-007 with raw-byte delivery; remove invented-JSON malformed-record requirements |
+| `output-live` | Next: rederive pending P0-002 for live raw output |
+| `history` | Pending P0-003 needs reconciliation |
+| `input-recorded` | Pending P0-005 needs reconciliation |
+| `input-delivered` | Pending P0-006 needs reconciliation |
+| `reader-isolation` | Pending P0-007 covers a combined legacy hardening scope; needs rederivation |
+| `output-limits` | Not yet derived separately |
 
-Derive `harness-owned` next, then continue increment by increment. Each may
-split further into smaller useful tasks; combining increments requires an
-explicit phase revision first. Preserve completed IDs and allocate new IDs
-from the plan-wide counter. Reconcile affected briefs, dependency edges, index,
-and collision report before assigning those tasks under this partition.
-Legacy graph availability is not evidence that a brief fits the new design.
+The tracker and index still describe the legacy graph. Pending briefs require
+rederivation before assignment under this partition.
 
 ## Phase exit
 
-A person starts the sandbox, sees the child running, observes fresh output,
-submits text, sees its reply, and reloads to see the exchange retained in order.
-Healthy readers continue when another stalls, and output memory stays bounded.
-Exact demonstration commands and test fixtures belong in the derived tasks.
-Exit-record and stop demonstrations are not part of this phase's acceptance.
+A person starts the sandbox, sees fresh output, submits text, sees its reply,
+and reloads to see the exchange retained in order. A stalled reader cannot stop
+healthy readers, and oversized output is limited without exhausting memory.

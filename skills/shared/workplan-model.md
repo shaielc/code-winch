@@ -48,8 +48,9 @@ An existing plan's conventions win: match its ID scheme, directory layout, and
 brief structure rather than the illustrative ones here.
 
 Phase design fixes the phase's increments and boundaries before task briefs
-are derived. Each increment may become several smaller tasks. The derivation
-procedure and phase artifact format belong to `skills/workplan/SKILL.md`.
+are derived. Each increment may become several smaller tasks. The artifact
+format is in `skills/shared/phase-design.md`. Phase authors decide boundaries;
+a separate task author derives briefs with `skills/derive-task/SKILL.md`.
 
 ## The seven invariants
 
@@ -86,27 +87,12 @@ Fakes and in-memory implementations are a **supported way to run the product**,
 not test-only doubles. They are documented, exercised end to end in CI, and
 runnable by hand at any commit in the plan's history.
 
-Controllable means a person can drive its current behavior. Useful controls as
-capabilities arrive include:
+Make the fake easy to drive and change for the behavior a task needs to exercise.
+Its current behavior, protocol, controls, and implementation are malleable;
+they are not constraints on product design. Update affected callers, tests,
+and documentation when changing it.
 
-- scripted transcripts or scenario files selected at runtime;
-- injectable latency, failure, malformed native-protocol output where decoding
-  exists, and early exit;
-- deterministic seeding when determinism is wanted, and the ability to turn it
-  off when exploration is wanted.
-
-Introduce each product control with the concern it exercises and preserve
-existing consumers. This catalogue describes the profile across the plan; it
-does not require one increment to implement every associated product guarantee.
-
-A fake has real drawbacks — it is not the provider, the database, or the
-kernel — and the brief that introduces it says what it does not prove. Stating
-those limits is what makes the profile safe to rely on for everything else.
-
-Preserve supported behavior rather than freezing an invented interface. Change
-fake protocols and controls with their consumers, scenarios, and documentation
-when useful; exact compatibility needs a documented consumer. The fake does not
-define the product's record model. `docs/contracts.md` §9 states that boundary.
+State what the fake does not prove in the documentation for the capability.
 
 ### I4 — Substrate swaps prove parity against a standing scenario suite
 
@@ -315,7 +301,7 @@ implementation will want hardening, restructuring, or better tests, that work
 belongs in the task that writes the implementation. Planning a revision ahead of
 time is planning to do the work twice.
 
-Revision tasks are added in extend mode, after the fact, and the brief says what
+Revision tasks are derived after the discovery, and the brief says what
 was found. The edge holds only when the dependent names the implementation or
 test surfaces the prerequisite produced and its objective is specifically to
 revise those surfaces.
@@ -421,7 +407,7 @@ One sentence, stated as an observable change to the running system.
 ## Scope
 
 - Bullets. What this task builds. Written as a prediction when the plan is
-  created. The refinement in `skills/task/SKILL.md` makes them concrete
+  created. The refinement in `skills/refine-task/SKILL.md` makes them concrete
   implementation instructions against the code before implementation starts.
 
 ## Non-goals

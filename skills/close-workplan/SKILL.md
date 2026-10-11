@@ -1,8 +1,14 @@
-# Closing a workplan
+---
+name: close-workplan
+description: Close an implementation workplan into docs/state.md and a supported empty tracker. Use only when explicitly asked to end a plan and preserve the system record and lessons.
+---
 
-Read this when running Close mode.
+# Close workplan
 
-## Close procedure
+Read applicable `AGENTS.md` files and [the model](../shared/workplan-model.md).
+Run this operation only for an explicit request to end the plan.
+
+## Procedure
 
 Close ends a plan. It reads what happened, writes the record to `docs/state.md`,
 and strips `docs/workplan/` back to an empty tracker. It writes no briefs: the
@@ -51,8 +57,8 @@ decision to end the plan runs this.
      reporting no available tasks. Validate it before committing the close; an
      example that omits a required key is how this went wrong once already.
 
-   The empty tracker is the closed state, not a stub to fill in. Create mode
-   writes the next plan's tasks into it.
+   The empty tracker is the closed state, not a stub to fill in. `create-phase`
+   designs the next phase; a separate `derive-task` author writes its tasks.
 8. **Sanitize the references.** See below.
 
 ### Sanitizing the references

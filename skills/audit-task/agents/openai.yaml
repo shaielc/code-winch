@@ -1,0 +1,4 @@
+interface:
+  display_name: "Audit Task"
+  short_description: "Audit one task against its accepted brief"
+  default_prompt: "Use $audit-task to audit one task against its accepted brief."
