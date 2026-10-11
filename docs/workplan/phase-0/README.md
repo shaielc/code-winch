@@ -43,15 +43,15 @@ The stable legacy references `0.1`–`0.7` below identify these unchanged planni
 
 | Increment | Phase design | Specific-brief coverage |
 |---|---|---|
-| 0.1 (order 1) | [P0-001](P0-001-plan-phase-1-sandbox-exchange.md) assigns phase-1 design; **not yet authored** | **Not yet derived** |
-| 0.2 (order 2) | [P0-002](P0-002-plan-phase-2-first-real-vendor.md) assigns phase-2 design; **not yet authored** | **Not yet derived** |
-| 0.3 (order 3) | [P0-003](P0-003-plan-phase-3-structured-views-resume.md) assigns phase-3 design; **not yet authored** | **Not yet derived** |
-| 0.4 (order 4) | [P0-004](P0-004-plan-phase-4-observe-sandboxes.md) assigns phase-4 design; **not yet authored** | **Not yet derived** |
-| 0.5 (order 5) | [P0-005](P0-005-plan-phase-5-run-lifecycle.md) assigns phase-5 design; **not yet authored** | **Not yet derived** |
-| 0.6 (order 6) | [P0-006](P0-006-plan-phase-6-enforce-isolation.md) assigns phase-6 design; **not yet authored** | **Not yet derived** |
-| 0.7 (order 7) | [P0-007](P0-007-plan-phase-7-second-adapter-workflows.md) assigns phase-7 design; **not yet authored** | **Not yet derived** |
+| 0.1 (order 1) | [P0-001](P0-001-plan-phase-1-sandbox-exchange.md) assigns design plus tracked follow-up for phase-1 design; **not yet authored** | **Not yet derived** |
+| 0.2 (order 2) | [P0-002](P0-002-plan-phase-2-first-real-vendor.md) assigns design plus tracked follow-up for phase-2 design; **not yet authored** | **Not yet derived** |
+| 0.3 (order 3) | [P0-003](P0-003-plan-phase-3-structured-views-resume.md) assigns design plus tracked follow-up for phase-3 design; **not yet authored** | **Not yet derived** |
+| 0.4 (order 4) | [P0-004](P0-004-plan-phase-4-observe-sandboxes.md) assigns design plus tracked follow-up for phase-4 design; **not yet authored** | **Not yet derived** |
+| 0.5 (order 5) | [P0-005](P0-005-plan-phase-5-run-lifecycle.md) assigns design plus tracked follow-up for phase-5 design; **not yet authored** | **Not yet derived** |
+| 0.6 (order 6) | [P0-006](P0-006-plan-phase-6-enforce-isolation.md) assigns design plus tracked follow-up for phase-6 design; **not yet authored** | **Not yet derived** |
+| 0.7 (order 7) | [P0-007](P0-007-plan-phase-7-second-adapter-workflows.md) assigns design plus tracked follow-up for phase-7 design; **not yet authored** | **Not yet derived** |
 
-Next handoff: dispatch the available phase-design planning briefs to a separate refiner and then a phase author. Their completion requires reviewed designs, not implementation. Once each design is decided, a different task author must derive the specific-brief planning coverage one task at a time through Phase 0. This is **partial derivation**: all seven phase-design assignments are covered; the specific-brief portion of every increment remains uncovered. No implementation phase is authored or completed by deriving these briefs.
+Next handoff: dispatch the available phase-design planning briefs to a separate refiner and then a phase author. Their completion requires reviewed designs **and at least one complete tracked follow-up planning brief**, independently derived after each design is decided. A different task author uses `derive-task` to assign derivation of the next uncovered implementation increment; the phase author cannot author its own follow-up. Reconcile the actual follow-up brief, tracker/index/coverage records and semantic dependency on its producing phase-design task before that task can finish. Allocate no follow-up or implementation placeholder IDs now. Each follow-up must arrange the next concrete tracked handoff when actionable coverage remains, one brief at a time through Phase 0; recompute the actual graph after every addition. This is **partial derivation**: all seven phase-design assignments are covered; the specific-brief portion of every increment remains uncovered. No implementation phase is authored or completed by deriving these briefs.
 
 The actual dependency graph and concurrent write warnings are recorded in the workplan index. The task author has updated coverage only; the seven planning boundaries and Phase 0 exit condition are unchanged.
 
