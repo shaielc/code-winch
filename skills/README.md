@@ -21,10 +21,25 @@ skills/
 
 | Skill | Audience | Use it when |
 |---|---|---|
-| [`workplan`](workplan/SKILL.md) | planning agent | Creating, extending, updating, or auditing the plan in `docs/workplan/`, or closing it into `docs/state.md` |
-| [`task`](task/SKILL.md) | task agent — refiner, implementer, or auditor, never two for one task | Refining one task's brief before implementation, or implementing, finishing, reviewing, or auditing that task |
-| [`propagate`](propagate/SKILL.md) | task agent or maintainer carrying an agreed downstream handoff | Optionally carrying a task discovery into an already-planned downstream brief after human disposition |
-| [`reflect`](reflect/SKILL.md) | task agent or maintainer improving development practices | Optionally applying evidence-based improvements to instructions, skills, tools, environment, or verification |
+| [`create-phase`](create-phase/SKILL.md) | phase author | Opening a phase with ordered increments and explicit boundaries |
+| [`extend-phase`](extend-phase/SKILL.md) | phase author | Adding coverage to an existing phase |
+| [`revise-phase`](revise-phase/SKILL.md) | phase author | Changing increment boundaries or order |
+| [`audit-phase`](audit-phase/SKILL.md) | independent phase auditor | Judging phase design, task coverage, graph, and completion |
+| [`derive-task`](derive-task/SKILL.md) | task author, separate from phase author | Deriving one brief or rederiving a pending brief and its graph records |
+| [`refine-task`](refine-task/SKILL.md) | task refiner | Making a derived brief concrete against dispatch-time code |
+| [`implement-task`](implement-task/SKILL.md) | task implementer | Building, verifying, and opening the task PR |
+| [`audit-task`](audit-task/SKILL.md) | independent task auditor | Judging the implementation against its accepted brief |
+| [`task-implement-merge`](task-implement-merge/SKILL.md) | implementation merge operator | Checking the current audit, obtaining finding verdicts, and merging implementation into the task branch |
+| [`close-phase`](close-phase/SKILL.md) | phase closer | Explicitly ending a phase and preserving its system record |
+| [`propagate-task`](propagate-task/SKILL.md) | task agent or maintainer | Routing audit findings to tasks/issues and opening a new-branch propagation PR into the task branch |
+| [`reflect-task`](reflect-task/SKILL.md) | task agent or maintainer | Finding flaws in the development methodology and improving its planning, handoffs, and decisions |
+
+Use different authors for phase design and task derivation. Derivation,
+refinement, implementation, and audit of a task are separate assignments.
+The flow is architecture → phase → task → optional phase revision → next task;
+dispatched task delivery is refine → implement → audit → task-implement-merge.
+That merge goes into the task integration branch; its PR to the default branch
+remains a separate operation.
 
 Audience matters. Say who a skill is for when you add one: an agent should be
 able to tell from the table whether a skill is addressed to it before loading
@@ -37,7 +52,10 @@ what it needs and does not restate it.
 
 | Document | Defines |
 |---|---|
-| [`shared/workplan-model.md`](shared/workplan-model.md) | The workplan's layout, its seven invariants, the four task shapes, dependency-edge reasons, write sets and contract surfaces, brief anatomy, and the frozen tracker schema |
+| [`shared/workplan-model.md`](shared/workplan-model.md) | Shared terms, artifact layout, Phase 0 planning tasks, seven runtime invariants, planning and implementation task shapes, dependency-edge reasons, write sets and contract surfaces, brief anatomy, and the frozen tracker schema |
+
+The [phase format](shared/phase-design.md) is shared by the phase design
+operations. Procedure lives in each operation skill; the model holds definitions.
 
 ## Getting an agent to use them
 
@@ -45,9 +63,9 @@ what it needs and does not restate it.
 
 Point at the path:
 
-> Follow `skills/workplan/SKILL.md` and audit the plan for coverage gaps.
+> Follow `skills/audit-phase/SKILL.md` and audit Phase 0 for coverage gaps.
 
-> Follow `skills/task/SKILL.md` and implement `<task ID>`.
+> Follow `skills/implement-task/SKILL.md` and implement `<task ID>`.
 
 This always works and needs nothing configured. It is the fallback when an
 agent has no skill mechanism, or when you want a skill used once without wiring
@@ -55,15 +73,19 @@ it in permanently.
 
 ### Dispatched task agents
 
-Each stage of a dispatched task has its own prompt.
-`scripts/task-refine-prompt.md` instructs the agent to refine its task's brief:
-read the brief, `skills/task/SKILL.md`, and all applicable `AGENTS.md` files,
-then commit the refined brief to the task's branch before any implementation.
-Implementation starts from the refined brief, under
-`scripts/task-implementation-prompt.md`. `scripts/task-audit-prompt.md` has
-Claude audit the implementation pull request and post the report as a review on
-it. The root `AGENTS.md` points here too, so an agent that lands in the
-repository by any other route finds the same instructions.
+The control panel's bundled prompts in
+`workplan-control-panel/control_panel/prompts/` point each dispatched stage at
+its own skill: `refine.md` uses `refine-task`, `implement.md` uses
+`implement-task`, and `audit.md` uses `audit-task`. The refiner commits only the
+brief before implementation; the implementer builds the accepted brief; the
+auditor posts its report on the implementation PR. The root `AGENTS.md` routes
+agents to the same operations.
+
+`task-implement-merge` handles the audited implementation PR explicitly; it is
+not a new automatically dispatched control-panel stage. `propagate-task`
+reconstructs the branch stack and submits follow-up changes through a separate
+PR into the task branch. `reflect-task` examines the development method rather
+than deciding findings or merging changes.
 
 Keep that wiring narrow. A dispatched agent is pointed at the skill addressed to
 it, not at every skill in this directory.
@@ -76,12 +98,13 @@ from the target.
 
 ```sh
 mkdir -p .claude/skills
-ln -s ../../skills/workplan .claude/skills/workplan
-ln -s ../../skills/task .claude/skills/task
+ln -s ../../skills/create-phase .claude/skills/create-phase
+ln -s ../../skills/derive-task .claude/skills/derive-task
+ln -s ../../skills/implement-task .claude/skills/implement-task
 echo '.claude/' >> .gitignore
 ```
 
-They are then invocable as `/workplan` and `/task`, and Claude loads one on its
+They are then invocable by their directory names, and Claude loads one on its
 own when the work matches its description. Edits to `SKILL.md` are picked up
 live through the link; creating `.claude/skills/` for the first time needs one
 restart before the directory is watched.

@@ -4,8 +4,9 @@ This is the order in which Code Winch becomes real. It sits between the design
 set, which describes a finished system, and `docs/workplan/`, which decomposes
 one stage at a time into tasks.
 
-Stage N maps onto workplan phase N, so numbering starts at zero and `P0-001` is
-the first task of the plan derived from this document.
+Roadmap stages describe product milestones. Workplan Phase 0 contains planning
+tasks; implementation phases start at 1 and cite their roadmap stage explicitly.
+Task IDs follow the retained tracker schema; the current tracker is empty.
 
 ## 1. How this roadmap is ordered
 
@@ -79,14 +80,16 @@ back, to remembering both.
 
 The wrapper is the runner, living inside the sandbox — see
 [ADR-0005](decisions/0005-sandbox-resident-runner.md). It owns the harness
-process, the codec, and a private ordered record store. Nothing in this stage
-knows what a run is; the sandbox has a session, and that is all.
+process, raw output delivery, and a private ordered record store. The fake is
+malleable; its current process dialect does not require semantic decoding here.
+Nothing in this stage knows what a run is; the sandbox has a session, and that
+is all.
 
-Stage 0 also carries the repository's floor. The Makefile and both CI workflows
-currently name paths that no longer exist, so the first task truncates them to
-what the stage actually builds and leaves the gates green. That is required
-wiring for a stage whose first invariant is that the system starts and deploys —
-not a cleanup task of its own.
+Stage 0 also carries the repository's floor. The first slice repaired Makefile
+and CI references to removed paths. Every subsequent slice must preserve the
+gates for what it builds; `docs/state.md` records current verification evidence
+and limits. That is required wiring for a stage whose first invariant is that
+the system starts and deploys.
 
 *Deliberately absent:* runs and run lifecycle, the control plane, more than one
 harness, more than one sandbox, authentication beyond a loopback binding,
@@ -104,6 +107,13 @@ A real CLI is what forces the harness adapter to be a seam rather than a
 function — capability descriptors, launch construction, native-to-canonical
 decoding, and whatever login the vendor requires. It may also force terminal
 semantics the fake never needed; that is deferred decision D5.
+
+This stage also introduces explicit harness-exit reporting: a native exit
+result and its harness-specific interpretation become visible through the
+attach surface. Stage 0 needs child ownership, cleanup, and input-availability
+checks, but no terminal-record taxonomy or operator stop capability. Stage 4
+owns intentional run stop and its lifecycle; Stage 5 owns escalation and orphan
+recovery.
 
 *Deliberately absent:* a second vendor. One real adapter proves the seam; two is
 Stage 6's job, and building both here would be designing the abstraction before
@@ -204,7 +214,7 @@ the owner of a deferral; a question with no trigger is not an entry here.
 | D2 | Whether the sandbox surface and the product app share one web workspace or are two | There is only one surface before Stage 3, so the question has no content yet | Stage 3's product surface needs its first component that the sandbox surface already has |
 | D3 | What substrate the sandbox's private store uses, and whether it outlives one session | A single-session ordered record is satisfied by the simplest thing that persists | The sandbox must present history from a session that has already ended |
 | D4 | Whether the attach surface and the runner protocol are one protocol or two | Before Stage 3 there is no runner protocol to unify with | Stage 3 defines registration and the control plane's first command |
-| D5 | Whether harness I/O needs a PTY or pipes suffice | The fake harness speaks JSON lines on pipes and needs no terminal | The first real harness requires terminal semantics — resize, raw mode, or TTY detection |
+| D5 | Whether harness I/O needs a PTY or pipes suffice | Stage 0 raw I/O needs no terminal; the fake can change to exercise it | The first real harness requires terminal semantics — resize, raw mode, or TTY detection |
 | D6 | How `winchd` learns a sandbox exists — registration, scan, or supervision | All three are reasonable, and nothing before Stage 3 distinguishes them | Stage 3 opens |
 | D7 | Whether the canonical envelope replaces the sandbox's record shape or wraps it | The sandbox emits runner-local ordinals by design; the envelope is the control plane's contract | The control plane first persists records a sandbox produced |
 
@@ -216,5 +226,7 @@ belong to `docs/workplan/` and the model in
 document fixes the order and the stage boundaries; the plan derived from it
 decides how a stage is cut into tasks.
 
-[`docs/state.md`](state.md) records what actually exists at HEAD. Where it and
-this roadmap disagree about whether something is built, `state.md` is right.
+[`docs/state.md`](state.md) records the explicitly closed workplan, reusable
+capabilities, verification limits, and remaining gaps. There is no active phase.
+Check code at HEAD when a capability claim disagrees with it; this roadmap
+specifies delivery order, not status. Closure does not advance a roadmap stage.

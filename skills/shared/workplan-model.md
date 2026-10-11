@@ -1,8 +1,8 @@
 # The workplan model
 
-`docs/workplan/` converts a design baseline into implementation-sized tasks that
-an autonomous agent or a contributor can pick up one at a time, each in its own
-pull request.
+`docs/workplan/` converts a design baseline into planning and implementation
+tasks that an autonomous agent or a contributor can pick up one at a time,
+each in its own pull request.
 
 This document defines the terms that plan is written in: its layout, the
 invariants that hold across it, the shapes a task takes, the anatomy of a brief,
@@ -13,13 +13,16 @@ any individual task are both checked against.
 
 A good workplan holds four properties at once.
 
-**It always describes a running system.** At every point in the plan's history
-there is a configuration that starts, deploys, and can be driven by hand. Tasks
-make that system more real; they do not accumulate parts to be assembled later.
+**Implementation always leaves a running system.** From the first implementation
+task there is a configuration that starts, deploys, and can be driven by hand.
+Planning distinguishes existing capabilities from future prerequisites;
+implementation makes the system more real without accumulating unwired parts.
 
-**Every task changes observable behavior.** The change may be small — the same
-scenario passing against a real database rather than an in-memory one — but it
-is visible from outside the code, and the brief says how to see it.
+**Every task has an observable result.** Planning tasks produce reviewed phase
+designs or task briefs. Implementation tasks change running behavior, which
+may be small — the same scenario passing against a real database rather than
+an in-memory one — but it is visible from outside the code, and the brief says
+how to see it.
 
 **It is wide.** Many tasks are available at once, so several contributors or
 dispatch workers proceed without waiting on each other. Width is a design
@@ -37,14 +40,49 @@ still produce a system nobody can start.
 | Path | Purpose |
 |---|---|
 | `docs/workplan/README.md` | Narrative index, per-phase dependency tables, phase exit rule, how to use the plan |
+| `docs/workplan/phase-N/README.md` | Phase design: starting point, explicit increments, boundary decisions, and phase exit |
 | `docs/workplan/phase-N/<id>-<slug>.md` | One brief per task |
 | `docs/workplan/tasks.json` | Machine-readable tracker — status, ownership, dependencies |
 | `docs/workplan/tasks.schema.json` | Schema for the tracker |
 | `docs/workplan/post-mortems/` | Records of plan failures — defects whose root cause is a seam between briefs rather than an implementation |
-| `docs/state.md` | Written when a plan closes: what was done, what went wrong, what is not implemented. Outlives the plan, which the close strips back to an empty tracker |
+| `docs/workplan/propagations/` | Audit finding ledgers linking task-branch PR stacks, human dispositions, and follow-up tasks or issues |
+| `docs/state.md` | Preserved when a phase closes: what was done, what went wrong, what is not implemented. Closing the last phase leaves a supported empty tracker |
 
 An existing plan's conventions win: match its ID scheme, directory layout, and
 brief structure rather than the illustrative ones here.
+
+Phase design fixes the phase's increments and boundaries before task briefs
+are derived. Each increment may become several smaller tasks. The artifact
+format is in `skills/shared/phase-design.md`. Phase authors decide boundaries;
+a separate task author derives briefs with `skills/derive-task/SKILL.md`.
+
+## Phase 0 — planning tasks
+
+Phase 0 is reserved for planning tasks. They produce concrete phase designs or
+specific task briefs; product implementation starts in Phase 1. Roadmap stage
+numbers describe product milestones and need not equal workplan phase numbers.
+A new workplan starts with the Phase 0 artifact, whose increments schedule
+those planning outputs. Planning a specific brief depends on its target phase's
+decided artifact, not on implementation of that phase.
+
+Illustrative planning titles and their outputs:
+
+| Title | Output |
+|---|---|
+| Plan phase-1: single sandbox | The phase artifact with ordered increments and explicit boundaries |
+| Plan P0-001: sandbox UI-only input | A specific brief for the UI-only input increment |
+| Plan P0-002: Send UI input to harness | A specific brief for the input-delivery increment |
+
+The examples allocate no IDs or live owners. In `Plan <ID>`, the title names
+the target brief; the planning task has its own tracker ID. Use an existing
+target's real ID, or name the increment until its brief is derived. Preserve
+existing IDs when moving tasks; new implementation tasks belong to Phase 1 or
+later under the usual allocation rules.
+
+Phase authors use the phase skills; a different author derives each specific
+brief. Completing a planning task proves its artifact is ready for that handoff,
+not that the capability it describes exists. Planning tasks preserve existing
+runtime behavior without having to implement their target capabilities.
 
 ## The seven invariants
 
@@ -56,47 +94,45 @@ A plan derived over code that already exists inherits whatever state these are
 in. Where one does not hold, restoring it is a task in the new plan, not a
 precondition the plan is entitled to assume.
 
-### I1 — The system runs from the first task
+### I1 — The system runs from the first implementation task
 
 A composition root exists and produces a startable process before any domain
-code is written. No task may leave the system unrunnable. The first task's
-demonstration is something like `compose up` serving a health endpoint; it does
-almost nothing, but it runs, and every later task keeps it running.
+code is written. No task may leave an existing system unrunnable. The first
+implementation task's demonstration is something like `compose up` serving a
+health endpoint; it does almost nothing, but it runs, and every later task keeps
+it running.
 
 The consequence for task ordering is the whole point: a task can no longer
 *add a part to something not yet assembled*. It either wires a new seam into a
 system that already starts, or swaps an implementation behind a seam that is
 already wired.
 
-### I2 — The system deploys from the first task
+### I2 — The system deploys from the first implementation task
 
 Container definition, compose or equivalent, and configuration loading exist
 before domain code. Deployment is an invariant, never a task. Migrations run at
 startup from the moment there is a database. Deployment appearing as its own
-task in a draft is the signal to fold that content into the first task instead.
+task in a draft is the signal to fold that content into the first implementation
+task instead.
 
 ### I3 — The fake configuration is a first-class, controllable runtime profile
 
 Fakes and in-memory implementations are a **supported way to run the product**,
 not test-only doubles. They are documented, exercised end to end in CI, and
-runnable by hand at any commit in the plan's history.
+runnable by hand at any commit in the plan's implementation history.
 
-Controllable means a person can drive the fake, not just replay it:
+Make the fake easy to drive and change for the behavior a task needs to exercise.
+Its current behavior, protocol, controls, and implementation are malleable;
+they are not constraints on product design. Update affected callers, tests,
+and documentation when changing it.
 
-- scripted transcripts or scenario files selected at runtime;
-- injectable latency, failure, malformed output, and early exit;
-- deterministic seeding when determinism is wanted, and the ability to turn it
-  off when exploration is wanted.
-
-A fake has real drawbacks — it is not the provider, the database, or the
-kernel — and the brief that introduces it says what it does not prove. Stating
-those limits is what makes the profile safe to rely on for everything else.
+State what the fake does not prove in the documentation for the capability.
 
 ### I4 — Substrate swaps prove parity against a standing scenario suite
 
-One end-to-end scenario suite is written in the first phase against the
-all-fake profile, driving the system through its real entrypoint. Every task
-that makes a substrate real re-runs that same suite against its substrate.
+One end-to-end scenario suite is written in the first implementation phase
+against the all-fake profile, driving the system through its real entrypoint.
+Every task that makes a substrate real re-runs that same suite against its substrate.
 
 ```
 scenario: create → start → stream → input → stop
@@ -118,9 +154,9 @@ observed.
 
 ### I5 — Every operator-visible capability is immediately reachable by hand
 
-An operator/debug CLI is built in the first phase and kept working through every
-phase. It is the guaranteed way to drive the system by hand, independent of API
-churn and of whatever state the product UI is in.
+An operator/debug CLI is built in the first implementation phase and kept
+working through every phase. It is the guaranteed way to drive the system by
+hand, independent of API churn and of whatever state the product UI is in.
 
 The CLI is not a follow-up integration layer. When a task introduces an
 operator-visible capability, that same task adds the minimal command needed to
@@ -149,6 +185,10 @@ brief cites it.
 
 The test is that a reader can always answer "when does this get finished?" with
 an ID rather than a shrug.
+
+Audit follow-ups accepted through an explicit human disposition may be tracked
+as issues under `propagate-task`. That does not make an issue a task ID for a
+brief's completion deferral or clear a Blocking finding.
 
 ### I7 — The plan stays wide
 
@@ -181,7 +221,15 @@ Layer-ordered work is correct and the plan preserves it. The constraint is not
 *what order layers come in* — it is that the seam reaches a running system in
 the same task that introduces it.
 
-Every task is one of four shapes, stated in the brief header.
+State the task's shape in its brief header.
+
+**Planning** — produces a phase design or derived task brief, with the matching
+index, coverage, and tracker records. Demonstration: review the named artifact,
+its boundaries, references, and handoff; use `audit-phase` for phase designs.
+Acceptance concerns the artifact, not implementation of its predicted behavior.
+Use the assigned phase or task-author skill to produce it.
+
+Every implementation task is one of four shapes:
 
 **Seam** — introduces a port or boundary and leaves a complete vertical slice
 through the running system: the boundary, the implementation the current runtime
@@ -204,9 +252,9 @@ the maintained operator surface.
 attack or failure is attempted and visibly refused. Security-sensitive work
 requires negative tests, not happy paths.
 
-Every task fits one of the four. A unit of work that fits none of them produces
-code no runtime configuration reaches; merge it into the task that first reaches
-it, even at the cost of a larger task. Small tasks are what keep a plan legible
+Every implementation task fits one of the four. A unit of work that fits none
+of them produces code no runtime configuration reaches; merge it into the task
+that first reaches it, even at the cost of a larger task. Small tasks keep a plan legible
 and that value survives the merge — reported progress on unreachable code does
 not.
 
@@ -299,7 +347,7 @@ implementation will want hardening, restructuring, or better tests, that work
 belongs in the task that writes the implementation. Planning a revision ahead of
 time is planning to do the work twice.
 
-Revision tasks are added in extend mode, after the fact, and the brief says what
+Revision tasks are derived after the discovery, and the brief says what
 was found. The edge holds only when the dependent names the implementation or
 test surfaces the prerequisite produced and its objective is specifically to
 revise those surfaces.
@@ -391,6 +439,12 @@ boilerplate: it belongs in `README.md` once. Identical "architectural context"
 and "deliverables" sections across a whole plan are a reliable sign that
 up-front depth was padding.
 
+For a planning brief, use `Shape: planning`, state the artifact as the objective,
+and replace **Runtime reachability** with **Planning outputs and handoff**.
+Demonstration and verification check the produced artifacts and their graph;
+runtime behavior described by the target brief remains a prediction. The
+runtime template below applies to implementation tasks.
+
 ```markdown
 # <ID>: <Title>
 
@@ -405,7 +459,7 @@ One sentence, stated as an observable change to the running system.
 ## Scope
 
 - Bullets. What this task builds. Written as a prediction when the plan is
-  created. The refinement in `skills/task/SKILL.md` makes them concrete
+  created. The refinement in `skills/refine-task/SKILL.md` makes them concrete
   implementation instructions against the code before implementation starts.
 
 ## Non-goals

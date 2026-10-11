@@ -1,7 +1,7 @@
 // Command fake-harness is a deterministic stand-in for a coding-agent CLI. It
-// speaks the newline-delimited JSON dialect that the fake harness adapter
-// encodes and decodes, so a run can be driven end to end without a vendor
-// account. It is a development and test fixture, not a production harness.
+// speaks a private newline-delimited JSON dialect and can be driven directly
+// without a vendor account. The sandbox ships this fixture but does not start
+// it; no fake adapter or integrated product profile exists yet.
 package main
 
 import (
@@ -18,24 +18,24 @@ import (
 	"time"
 )
 
-// record mirrors the fake harness codec's wire format. The codec rejects
-// unknown fields, so this struct must stay a subset of its own.
+// record defines this fixture's output dialect. It is not the product session
+// record contract; consumers and protocol may change with the fake profile.
 type record struct {
 	Kind        string `json:"kind"`
 	Payload     any    `json:"payload"`
 	Sensitivity string `json:"sensitivity,omitempty"`
 }
 
-// streamPayload matches schemas/events/v1/fixtures/raw-stream.json. Text is
-// carried as utf-8 rather than base64 so the terminal projection can render it
-// without decoding.
+// streamPayload carries fixture output as UTF-8 text rather than base64.
+// Its output is exercised by main_test.go; no product record golden fixture
+// or terminal projection is implemented yet.
 type streamPayload struct {
 	Stream   string `json:"stream"`
 	Encoding string `json:"encoding"`
 	Data     string `json:"data"`
 }
 
-// command is one line encoded by the fake harness codec's Encode.
+// command is a fixture input line; its validated ID is not returned in replies.
 type command struct {
 	ID   string `json:"id"`
 	Text string `json:"text"`
@@ -168,8 +168,8 @@ func split(text string) (string, string) {
 	return field, strings.TrimSpace(rest)
 }
 
-// parse accepts the codec's JSON command and also bare text, so the binary
-// stays usable when a human is attached directly to its PTY.
+// parse accepts JSON commands and bare text so the binary can also be driven
+// directly through standard input; this fixture does not implement a PTY.
 func parse(line []byte) (string, bool) {
 	trimmed := strings.TrimRight(string(line), "\r")
 	if !strings.HasPrefix(strings.TrimSpace(trimmed), "{") {

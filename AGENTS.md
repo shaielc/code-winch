@@ -3,10 +3,12 @@
 Instructions for any agent working in this repository. One unit of work, one
 pull request.
 
-No implementation plan is in flight, and the product does not run.
-[`docs/state.md`](docs/state.md) is the authoritative account of what exists and
-what does not; read it before assuming a capability exists, because the design
-set describes a destination and almost none of it is built.
+The current workplan is closed. The sandbox/page slice and local composer
+exist; the harness is shipped but is not started by the sandbox yet.
+[`docs/state.md`](docs/state.md) records the current source-supported capabilities,
+verification limits, lessons, and unfinished work. The tracker is valid and empty.
+Check code at HEAD before assuming a capability exists; the design set describes
+a destination. Closure does not certify roadmap Stage 0 completion.
 
 An `AGENTS.md` deeper in the tree adds to or narrows these rules for its own
 subtree.
@@ -19,20 +21,24 @@ subtree.
 - **Delivery order** — [`docs/roadmap.md`](docs/roadmap.md). The stages, what
   becomes true in each, what is deliberately absent, and the deferred decisions
   with their triggers.
-- **Implementation plan** — [`docs/workplan/README.md`](docs/workplan/README.md).
-  Phase 0 is open: seven tasks decomposing roadmap Stage 0. It carries the
-  dependency graph, the width report, and the rule for what a brief may defer.
-  `./scripts/list-available-tasks.sh` says which tasks you can pick up now.
+- **Workplan status** — [`docs/state.md`](docs/state.md). There is no active
+  phase or assignable brief. `docs/workplan/tasks.json` is a valid empty tracker
+  and `docs/workplan/tasks.schema.json` retains the format for future plans.
+  `bash scripts/list-available-tasks.sh` returns `[]`. An explicitly requested
+  future phase uses `create-phase`; a separate author derives tasks with
+  `derive-task`. Do not infer completion from the empty tracker.
 - **Design baseline** — `docs/architecture.md`, `docs/code-structure.md`,
   `docs/contracts.md`, `docs/security.md`, and the ADRs in `docs/decisions/`.
   It describes the destination, not the build order — the roadmap is the order,
   and it deliberately inverts the layering these documents are written in.
-- **How to run a task** — `skills/task/SKILL.md`. How to orient in an active
-  brief, what its shape must demonstrate, and how to judge whether it is
-  complete. It expands on the rules below.
-- **Planning rules** — `skills/workplan/SKILL.md`. Read it when deriving the next
-  plan from the design set and `docs/state.md`, or when changing a plan in
-  flight.
+- **Operation skills** — [`skills/README.md`](skills/README.md). Phase authors
+  use `create-phase`, `extend-phase`, `revise-phase`, or `audit-phase`. A separate
+  task author uses `derive-task`. Dispatched tasks use `refine-task`,
+  `implement-task`, and `audit-task`, with a different author for each operation.
+  `task-implement-merge` merges audited implementation into its task branch after
+  finding verdicts. `propagate-task` routes follow-ups through a separate PR to
+  that branch; `reflect-task` examines the development methodology.
+  Explicit phase closure uses `close-phase`; ending a whole plan closes all its phases.
 
 ## Rules that bind every task
 
@@ -58,10 +64,11 @@ finished, however well it is tested.
 
 ### Fakes are a shipped configuration
 
-In-memory and fake implementations are a supported way to run this product, not
-test-only doubles. Keep them working and keep them controllable — scripted
-transcripts, injectable latency, failure, malformed output. When you add one,
-state in its documentation what it does not prove.
+In-memory and fake implementations are supported ways to run this product.
+They are malleable: change their behavior and implementation to exercise the
+capability being built, updating callers, tests, and documentation together.
+Their current protocol and controls do not constrain product design.
+State what the fake does not prove. See `docs/contracts.md` §9.
 
 ### Prove behavior, not only contracts
 
@@ -80,11 +87,13 @@ No TODO, stub, unimplemented branch, or "handled later" without a named owner.
 That owner is a task ID that exists in `docs/workplan/tasks.json` at the time you
 write it, or a deferred decision with a trigger in `docs/roadmap.md` §6.
 
-The plan in flight covers one roadmap stage, so it has no IDs in later phases to
-own work the roadmap schedules for one. That work is a **non-goal** of your task,
-with the stage cited — not a deferral. `docs/workplan/README.md` §*Scope of this
-plan* states the convention. Acceptance criteria are not satisfied by code that
-defers them.
+When an active plan covers one roadmap stage, it has no IDs in later phases to
+own work the roadmap schedules for one. Such work belongs in **Non-goals**, with
+the stage cited. A brief may defer implementation only to an existing tracker
+ID, or cite a deferred architectural decision with a trigger in roadmap §6.
+Phase-local increment labels and hypothetical later IDs are not owners.
+Acceptance criteria are not satisfied by code that defers them. The closed
+tracker currently provides no task IDs to own new deferrals.
 
 ### Test adversarially where it matters
 
@@ -135,10 +144,9 @@ The first runnable slice is the sandbox image and its loopback-only attach page.
 It states the `container-standard` posture and names network egress as
 unenforced. The fake harness ships in the image but is not started yet.
 
-The next thing built is roadmap Stage 0: one container holding a runner and the
-fake harness, started by hand, serving a page you can type at. That stage also
-repairs the quality gates, because a stage whose first invariant is that the
-system starts and deploys cannot stand on a build that fails. Read
+Roadmap Stage 0 remains unfinished: no runner starts the harness, retains
+output, or delivers server input. Source for the quality gates has been repaired;
+`docs/state.md` records which checks ran and which could not run. Read
 `docs/roadmap.md` §1 before proposing work — the delivery order deliberately
 inverts the layering the design documents are written in, so "the architecture
 says this layer comes first" is not a reason to build it first.

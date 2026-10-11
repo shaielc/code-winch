@@ -51,8 +51,9 @@ host that executes agent-authored code.
 ## Consequences
 
 Losing the scheduler state volume now costs at most a few duplicate dispatches
-instead of the entire completion history. `tasks.json` means what the workplan
-README says it means, and status changes carry review history in git.
+instead of the entire completion history. `tasks.json` is the completion
+authority described above; after closure, [the state report](../state.md) preserves
+the retired plan's evidence. Status changes carry review history in git.
 
 Concurrent completions of non-adjacent tasks auto-merge, since task entries sit
 about ten lines apart and outside git's default merge context; adjacent task IDs

@@ -201,41 +201,40 @@ external effects.
 
 ## 8. Sandbox attach contract
 
-What a sandbox serves over its own surface, for the one session inside it. This
-is the only contract a standalone sandbox has, and it holds whether or not a
-control plane is deployed. [ADR-0006](decisions/0006-two-interaction-surfaces.md)
-states why it stays narrow.
+What a standalone sandbox serves for the session inside it. This surface is
+independent of a control plane; [ADR-0006](decisions/0006-two-interaction-surfaces.md)
+explains why it stays narrow. The roadmap and phase design specify when these
+capabilities are introduced.
 
 **Session, not run.** There is one session per sandbox, implied by the sandbox
 itself rather than addressed by an identifier the caller chooses. The surface
 exposes no collection: no listing, no creation, no selection. The run lifecycle
 in §1 does not apply, and the states it names are not reported here.
 
-**Records are ordinal-ordered.** Every record the runner collects carries a
+**Recorded history is ordinal-ordered.** Every retained record carries a
 runner-local ordinal, monotonically increasing and gap-free within the session.
 Consumers order by ordinal, never by timestamp. Records carry no canonical
 `sequence` and no `eventId`; §2 says what the control plane adds.
 
-**Reading is snapshot plus stream.** A caller fetches records from an ordinal and
-opens a stream from an ordinal, the same shape as §5 and without the
-authorization reattachment a long-lived control-plane stream needs. The stream
-emits a heartbeat and an explicit caught-up marker. On a gap or a reconnect, the
-caller refetches from its last ordinal. A slow reader is disconnected with its
-last ordinal and never backpressures the harness.
+**Reading.** Live output shows raw harness output. Retained history can be
+fetched from a runner-local ordinal and is ordered by that ordinal. A resumable
+stream uses the last ordinal, a heartbeat, and an explicit caught-up marker;
+on a gap or reconnect the caller refetches. A slow reader never backpressures
+the harness. These are distinct capabilities; introducing live output does not
+imply that history or seamless resume exists.
 
-**Input is accepted or refused, never queued silently.** A submission carries an
-idempotency key scoped to the session and one typed payload, from the same set
-§3 defines. The runner checks the harness adapter's declared input modes and
-whether the harness is currently input-capable. A repeated key returns the first
-submission's identifier and kind. Refusal uses the §3 codes that have meaning
-without a run — `INPUT_INVALID`, `INPUT_UNSUPPORTED`, `INPUT_UNAUTHORIZED` — and
-diagnostics name the ordinal and the input kind but never payload content.
+**Input is accepted or refused, never queued silently.** A submission carries
+an idempotency key scoped to the session. Repeating the key returns the first
+submission's identifier and kind. Delivery checks whether the harness supports
+the input kind and its input channel is available. Refusal uses the applicable
+codes from §3: `INPUT_INVALID`, `INPUT_UNSUPPORTED`, or `INPUT_UNAUTHORIZED`.
+Diagnostics exclude payload content. The surface documents which typed payloads
+and delivery capabilities it supports.
 
-**Harness exit is a record, not a state machine.** When the harness exits, the
-runner emits a terminal record carrying the native exit and its mapped outcome,
-and the session accepts no further input. There is no retry and no new attempt:
-restarting means starting another sandbox, which is what makes the run aggregate
-the control plane's job rather than the runner's.
+**Exit observation is separate from run lifecycle.** A reported harness exit
+contains the native result and its documented interpretation. It does not imply
+a run state machine, retry, or a new attempt in the same sandbox. Delivery is
+refused when the harness is unavailable whether or not exit reporting exists.
 
 **The surface states its posture.** It reports the sandbox profile in force and
 what that profile does not isolate, so a caller cannot be misled about effective
@@ -244,3 +243,24 @@ The standalone surface exposes `GET /healthz` as
 `{"service":"winch-sandbox","status":"ok"}` and `GET /api/session` as
 `{"profile": string, "unenforcedControls": string[]}`. The unenforced-controls
 array is non-empty; for `container-standard` it includes `network-egress`.
+
+## 9. Fake runtime profile contract
+
+The fake is a malleable runtime profile for exercising product behavior without
+a vendor account. Change its behavior, protocol, timing, controls, or process
+implementation to support the capability being built. Update its callers, tests,
+scenarios, and operator documentation together. Its current JSON-lines dialect,
+flags, and signal handling do not constrain the product.
+
+The fake has no separate event model. Product output and input follow this
+sandbox attach contract (§8), and control-plane events follow §2 when that
+surface exists. Runner-side protocol requirements in §4 apply when the remote
+runner protocol is introduced, not to the fake's private process I/O. The
+[architecture's harness adapter](architecture.md#harness-adapters) and
+[adapter construction guidance](code-structure.md#4-adding-a-harness) describe
+its implementation context; the roadmap specifies the delivery stages.
+
+Raw output may be plain text or arbitrary bytes. A JSON decoder, invented event
+kinds, transcript replay, or a catalogue of product configuration keys is not
+required by the fake's existing code. Choose the behavior and controls needed
+to exercise the current capability and document what they do not prove.
