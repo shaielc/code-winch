@@ -137,4 +137,4 @@ finding.
 Give acceptance results, classified findings, audit state, and outstanding
 merge-readiness conditions separately. Include observed commands or source
 references. Make no implementation, brief, tracker, or phase edits as part of
-this verdict. Optional propagation or reflection is a separate operation.
+this verdict. Optional `propagate-task` or `reflect-task` work is a separate operation.

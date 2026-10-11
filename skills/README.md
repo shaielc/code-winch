@@ -30,8 +30,8 @@ skills/
 | [`implement-task`](implement-task/SKILL.md) | task implementer | Building, verifying, and opening the task PR |
 | [`audit-task`](audit-task/SKILL.md) | independent task auditor | Judging the implementation against its accepted brief |
 | [`close-workplan`](close-workplan/SKILL.md) | plan closer | Explicitly ending a plan and preserving its system record |
-| [`propagate`](propagate/SKILL.md) | task agent or maintainer | Carrying an agreed discovery into an existing downstream brief |
-| [`reflect`](reflect/SKILL.md) | task agent or maintainer | Improving the development process from task evidence |
+| [`propagate-task`](propagate-task/SKILL.md) | task agent or maintainer | Carrying an agreed discovery into an existing downstream brief |
+| [`reflect-task`](reflect-task/SKILL.md) | task agent or maintainer | Improving the development process from task evidence |
 
 Use different authors for phase design and task derivation. Derivation,
 refinement, implementation, and audit of a task are separate assignments.

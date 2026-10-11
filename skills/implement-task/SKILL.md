@@ -125,8 +125,8 @@ not settle.
 
 ## Optional handoffs
 
-Use `skills/propagate/SKILL.md` for an agreed discovery affecting an existing
-downstream task, and `skills/reflect/SKILL.md` for a reusable process improvement.
+Use `skills/propagate-task/SKILL.md` for an agreed discovery affecting an existing
+downstream task, and `skills/reflect-task/SKILL.md` for a reusable process improvement.
 These are optional operations, not delivery gates.
 
 ## Done

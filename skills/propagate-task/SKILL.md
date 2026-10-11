@@ -1,9 +1,9 @@
 ---
-name: propagate
+name: propagate-task
 description: Optionally carry a concrete discovery from one task into an already-planned downstream task without redesigning the plan.
 ---
 
-# Propagate
+# Propagate task
 
 Use this optional side operation when completing or auditing a task reveals a
 fact or constraint that materially changes or clarifies work already planned

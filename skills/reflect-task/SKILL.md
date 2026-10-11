@@ -1,9 +1,9 @@
 ---
-name: reflect
+name: reflect-task
 description: Optionally improve task-development instructions, skills, tools, environment, and verification using evidence from completed work.
 ---
 
-# Reflect
+# Reflect task
 
 Use this optional side operation when a task reveals a repeatable source of
 error, wasted effort, or ambiguity in the development system itself. Reflect
