@@ -2,98 +2,158 @@
 
 ## Outcome and starting point
 
-At phase exit, an operator can start the loopback-only sandbox container by
-hand, watch its sandbox-owned fake harness, submit a line from the attach page,
-see the fake's reply, and reload the page without losing the ordered exchange.
-Harness output and input remain bounded under malformed output, an unavailable
-child, or a slow reader. This completes roadmap Stage 0; it does not introduce a
-run, control plane, real vendor, or seamless reconnect.
+At phase exit an operator can start the loopback-only sandbox by hand, observe
+its fake child state and live raw output on the attach page, submit text and see
+subsequent fake-produced output, then reload the ordered session exchange.
+Input availability and failure are represented truthfully; output and input are
+bounded, and a slow live reader cannot backpressure the child. This completes
+roadmap Stage 0, not a generic real-vendor adapter or seamless reconnect.
 
-The repository already has a deployable sandbox image, loopback-published
-attach server, posture and health endpoints, static attach page, status CLI,
-and a browser-local composer. The image contains `fake-harness`, but
-`cmd/winch-sandbox/main.go` constructs only the attach server; the server has no
-stream, records, or input route, and the composer only appends component state.
-There is no runner or session store. The standing end-to-end scenario checks
-startup, posture, page, and status, not an exchange. `docs/state.md` records
-that the Go, web, container, browser, and scenario runtime evidence remains
-limited by unavailable tools in the closure environment; these source facts do
-not prove that the deployed slice runs at this commit.
+The repository already serves a loopback attach page and health/posture routes,
+has a status-only CLI and browser-local composer, and ships a fake binary in the
+image. The sandbox composition root does not launch that binary; the page has
+no live child stream, session history or real input delivery. These are source
+observations rather than a demonstrated live deployment at this commit; see
+[the recorded limits](../../state.md).
 
-Sources: [roadmap Stage 0 and its two paths](../../roadmap.md), [current system
-state](../../state.md), [sandbox attach and fake contracts](../../contracts.md),
+Sources: [Stage 0 roadmap](../../roadmap.md), [current state](../../state.md),
+[sandbox attach and fake contracts](../../contracts.md),
 [ADR-0005](../../decisions/0005-sandbox-resident-runner.md),
-[ADR-0006](../../decisions/0006-two-interaction-surfaces.md), and the
+[ADR-0006](../../decisions/0006-two-interaction-surfaces.md),
 [workplan model](../../../skills/shared/workplan-model.md).
+
+## Derivation principle
+
+Order increments by progressively enabling the experience on the **existing
+attach page**, not by backend layer. A truthful shallow state (for example
+`Unknown`) is a legitimate observable step before a sandbox-reported state
+(`Down`) and then actual child state (`Running` / `Exited`). An increment
+includes the minimum composition, supported fake-profile and maintained
+operator path required for its manual observation; it does not silently claim
+the deeper behavior of a later increment. Manual demonstration is distinct
+from automated standing-scenario verification.
+
+Numbers give a preferred derivation order, **not** dependency edges between
+neighbors. The prerequisites column names actual consumed behavior; independent
+input and output branches may proceed concurrently. The process can pipeline
+implementation of already-derived work with serial, separately authored
+planning handoffs. Shallow, truthful UI states are not prohibited because the
+backend does not yet exist.
 
 ## Concern boundaries
 
 | Concern | Owner |
 |---|---|
-| Sandbox-owned fake child, raw live output, minimum cleanup, and maintained hand/operator path | Increment 1 — Owned live harness output |
-| Runner-local record identity, gap-free ordinal allocation, and append-before-publication semantics shared by Stage 0 records | Increment 1 defines the session record seam; later record-producing increments consume it |
-| One private session persistence implementation and its retained ordinal-ordered history | Increment 2 — Retained output on reload; every later durable record consumes it |
-| Persisted typed input, idempotency, validation, and refusal before delivery exists | Increment 3 — Recorded input and refusal; it consumes increment 2's session persistence rather than defining a second store |
-| Bounded input delivery to an available child and correlation with the fake's reply | Increment 4 — Delivered input and reply |
-| Excessive or malformed harness output, resynchronization, and content-safe diagnostics | Increment 5 — Bounded malformed output |
-| Per-reader buffering, slow-reader isolation, disconnect/drop observation, and bounded publication | Increment 6 — Isolated live readers |
-| Existing startup, posture, page, status, loopback deployment, and repository gates | Every increment preserves them; increment 1 grows the fake-profile scenario and each later increment extends it for new behavior |
-| Real-vendor selection, adapter seam, terminal semantics, and native exit interpretation | Roadmap Stage 1 / workplan Phase 2; D1 and D5 retain their triggers |
-| Structured projections, caught-up/heartbeat protocol, reconnect gap repair, and gap-free resume | Roadmap Stage 2 / workplan Phase 3 |
-| Runs, canonical sequence numbers, intentional stop, retry, and lifecycle | Roadmap Stage 4 / workplan Phase 5 |
-| Stop escalation, orphan recovery, credentials, and enforced isolation or egress | Roadmap Stage 5 / workplan Phase 6 |
+| Attach-page child state and actual child ownership | Increments 1–3; increment 3 owns launch and minimum cleanup |
+| Raw live-output presentation and transport | Increments 4–6; 5 first reaches child bytes, 6 makes delivery incremental |
+| Submission presentation, sandbox receipt, child write and fake exchange | Increments 7–12; no provider-independent reply semantics |
+| Runner-local record identity and a single session record order | Increment 13 first defines output ordinals; 14 extends the same boundary to input |
+| One private retained session store, reload and history/live join | Increment 15 owns persistence, 16–18 consume it |
+| Fake-specific input capability, channel status and refusal | Increments 19–25; unavailable/unsupported behavior is not prerequisite for first live output |
+| Output bounds, malformed output and reader isolation | Increments 26–30; basic safety and existing gates remain inherited at every step |
+| Existing startup, posture, status, loopback deploy and maintained operator checks | Preserved by every increment; new operator-visible behavior gets its minimum maintained hand path in the same task |
+| Real vendor adapter, PTY/native exit interpretation | Roadmap Stage 1 / Phase 2 (D1, D5) |
+| Structured projections and seamless resume | Roadmap Stage 2 / Phase 3 |
+| Runs/control plane, lifecycle, enforced security and workflows | Roadmap Stages 3–6 / Phases 4–7 |
 
-The fake is a shipped, malleable profile. Its current JSON-lines input, flags,
-scanner limit, malformed-line exit, and lack of reply correlation do not decide
-the product protocol or the controls used to demonstrate these increments.
+Stage 0 treats the fake as a shipped, malleable runtime profile. Current
+JSON-lines dialect, reply behavior and flags do not establish universal
+real-harness input readiness, message correlation, response completion, PTY
+semantics or vendor decoding. Raw process observations and fake-specific
+behavior must be described as such.
 
 ## Ordered increments
 
-| Order | Increment | Observable change | Includes | Excludes | Prerequisites |
+| Order | Increment | Observable change / manual demonstration | Includes | Excludes | Prerequisites |
 |---|---|---|---|---|---|
-| 1 | Owned live harness output | Starting the sandbox also starts the fake; its raw output appears live on the existing attach page and remains drivable by the minimum operator path | Sandbox-resident child ownership and reaping; raw incremental output; runner-local record identity and ordinal allocation; append-before-publication seam; bounded basic child cleanup; composition/image wiring; fake-profile scenario growth while retaining startup/posture/status | Durable reload, input, semantic decoding, native-exit interpretation, intentional stop, retries, PTY behavior | Existing sandbox page, container, fake binary, loopback posture, and gates |
-| 2 | Retained output on reload | Output already observed live is present in ordinal order after a page reload in the same sandbox session | The single private session persistence implementation; output history from an ordinal; reload/bootstrap in the page and operator path; persistence/deployment wiring; continuity of the existing live-output scenario | Continuity after the session ends, seamless reconnect, heartbeat/caught-up signaling, gap repair, structured views, cross-session retention | Increment 1's record seam and emitted output; may proceed independently of increments 5 and 6 |
-| 3 | Recorded input and refusal | Submitting in the existing composer produces a stable accepted input record that survives reload, while invalid, unsupported, duplicate, or currently unavailable submissions return the defined result rather than a browser-only echo or silent queue | Typed bounded request; session-scoped idempotency; validation and content-free diagnostics; input records appended through increment 2's session persistence with runner-local ordinals; page and minimum operator path; fake-profile scenario coverage | A second input-specific store, writing to child stdin, harness reply, authentication/authorization, retry, raw terminal input, run-command semantics | Increments 1 and 2; the input path consumes the already-owned session persistence contract |
-| 4 | Delivered input and reply | An accepted composer submission reaches the running fake within a bound and the correlated fake reply appears through the live output path | Accepted-before-delivery ordering; child input ownership; capability/channel availability check; bounded write; correlation; accepted-but-undelivered diagnostic; refusal after child unavailability; page-to-fake-to-page scenario | Queuing for later, real-vendor semantics, intentional stop/restart, run lifecycle | Increments 1 and 3; increment 2 is inherited through increment 3, and its history path also supports the phase-exit reload observation |
-| 5 | Bounded malformed output | Oversized or malformed fake output cannot grow a record without bound or prevent later valid output from being observed; the operator sees a content-safe diagnostic | Explicit output/record bounds; incremental decoding and resynchronization; preservation or classification at the raw Stage 0 depth; adversarial fake controls and scenario | Vendor semantic decoding, terminal interpretation, renderer sanitization, native-exit meaning | Increment 1; independent of retained history and the input path except for shared record-contract ownership |
-| 6 | Isolated live readers | A stalled attach client neither blocks harness reads nor delays another reader, and bounded overflow has an observable content-free outcome with the last retained ordinal needed to refetch history | Per-reader bounded delivery; slow-reader disconnect/drop behavior; harness-read isolation; adversarial multi-reader scenario | Stage 2 seamless resume, heartbeat/caught-up protocol, automatic gap repair, control-plane fan-out | Increment 1 for live publication. Increment 2 supplies the history path used after a drop but is not required to establish non-backpressure |
-
-Increments 2, 5, and 6 are deliberate branches after the live record seam, not
-a serial chain. Increment 2 alone owns session persistence; increment 3 follows
-it because durable input consumes that shared store and ordinal contract.
-Increment 4 joins the live-output and recorded-input paths. Output hardening and
-reader isolation remain independent of persistence except where increment 6's
-post-drop operator recovery uses increment 2's history path. Shared files alone
-are collision warnings, not extra dependency reasons.
+| 1 | Child status presentation | The attach page shows an honest `Unknown` child state | A status region and unknown state in the existing page | Child spawning or inferred readiness | Existing attach page |
+| 2 | Sandbox-backed child status | The page reports `Down` for a sandbox that has no child, rather than a browser constant | Sandbox-owned status observation and UI transport; maintainable hand observation | Child startup, output transport | 1; existing attach server |
+| 3 | Actual child status | The page changes to `Running` for the owned fake and `Exited` when it ends | Child spawn/ownership, basic cleanup and supervision, status wiring and observable fake controls | Output processing, delivery, vendor-native exit interpretation | 2; shipped fake binary and deployable sandbox |
+| 4 | Harness output area | The page identifies the harness-output area with a truthful empty state | Presentation and empty-state behavior in the existing attach page | Generating or streaming output | Existing attach page; independent of 1–3 |
+| 5 | First live child output | Raw output emitted by the owned fake appears in the page | Child byte reading, minimum live transport and browser display, maintained operator observation | Durable replay, input, semantic decoding, full malformed-output hardening | 3 and 4 |
+| 6 | Incremental output | The first emitted piece appears before the second is emitted | Incremental transport/rendering, delayed controllable fake demonstration | History replay, content interpretation, advanced fan-out guarantees | 5 |
+| 7 | Draft versus submitted | The existing composer distinguishes unsent text from locally submitted text without claiming delivery | Only missing truthful composer-state presentation | Backend receipt, child delivery, input history | Existing browser-local composer; independent of output |
+| 8 | Sandbox receipt | A composer submission obtains a sandbox-origin receipt distinct from local UI acknowledgment | Minimum browser-to-sandbox request/result, maintained operator path | Claiming child processing, durable input, idempotency policy | 7; existing attach server |
+| 9 | Child input write | A submitted line is written to the fake's supported input channel and the UI reports the write result | Minimum child-stdin ownership/write path and truthful result; fake can be adapted | Semantic readiness, durable record, native vendor modes, exactly-once delivery | 3 and 8; independent of 5–6 |
+| 10 | Output following input | Submitting from the page causes subsequent fake-produced bytes to appear on the output surface | Supported fake exchange profile and composed page-to-child-to-output path | Universal prompt/reply correlation or response completion | 5 and 9 |
+| 11 | Composer delivery feedback | The composer visibly distinguishes local submission, sandbox receipt and write outcome | Presentation of real result already produced by delivery path | Harness semantic acknowledgment or input capability negotiation | 8 and 9 |
+| 12 | Combined exchange presentation | The page shows several submitted inputs and resulting raw fake output in a readable sequence | Existing browser exchange presentation integration | Guaranteed semantic correlation, retained history | 10 and 11 |
+| 13 | Observable output ordering | Multiple output records have stable runner-local consecutive ordinals visible by the maintained observation path | Minimum single-session record ordering and append-before-publication semantics | Durable store, canonical run sequence, structured projections | 5; may progress independently of input |
+| 14 | Shared input/output ordering | Inputs and child output use one runner-local ordinal order | One session record boundary consumed by input and output; observable interleaving | A second input store, canonical run events | 9 and 13 |
+| 15 | Retained submitted input | A submitted input reappears when the page reloads within the same session | One private session persistence implementation and history/bootstrap for input | Cross-session retention, exact live/history join guarantees | 8 and 14 |
+| 16 | Retained child output | Previously emitted child output reappears after reload | Persisted raw output through the same private session store; output history reader | Alternative output store, structured views | 13 and 15; persistence owner is 15 |
+| 17 | Ordered reload exchange | Reload restores interleaved input/output in the same runner-local order | Shared history presentation and ordinal ordering across input/output | Seamless reconnect or automatic gap repair | 14, 15 and 16 |
+| 18 | Live/history continuity | New output arriving during history load appears without duplicated visible records | Bounded bootstrap/live handoff over existing records | Heartbeat/caught-up protocol and Stage 2 gap-free resume | 6, 16 and 17 |
+| 19 | Input availability presentation | The page has an independently identifiable `Unknown` input-availability state | Truthful presentation distinct from child-running status | Pretending semantic readiness is known | Existing attach page; may be derived independently and later |
+| 20 | Fake input capability report | The UI reports which input kind the active fake profile declares supported | Fake-specific capability description through the harness boundary | General real-vendor capability semantics, readiness guarantee | 3 and 19 |
+| 21 | Observed channel availability | The displayed availability changes with the fake's observable transport/channel state | Harness-specific channel observation and reporting; unknown when not knowable | Claim that writable means the harness understands input | 9 and 20 |
+| 22 | Unavailable-input refusal | Input submitted to a known unavailable channel is refused, not silently queued | Truthful refusal and no silent acceptance after a known channel failure | Full adapter-specific readiness inference, retries | 9 and 21 |
+| 23 | Invalid or unsupported input refusal | Malformed requests and unsupported fake input kinds receive distinct defined results | Validation and fake-declared kind checks with content-safe diagnostics | Provider-independent input modes or vendor policies | 8 and 20 |
+| 24 | Idempotent submission | Repeating the same session-scoped key gives the original logical submission | Stable input identity, duplicate lookup in shared record path | Cross-run idempotency or delivery exactly once | 15 and 23 |
+| 25 | Interrupted-delivery observation | Failure between receipt and child write has a truthful undelivered result | Accepted-versus-written distinction, bounded write/failure reporting | Queue for later, run retry lifecycle | 9 and 11 |
+| 26 | Excessive-output bound | An oversized fake output does not grow a published record without bound | Explicit raw output/record bound and observable content-safe outcome | Vendor decoding and terminal interpretation | 5 |
+| 27 | Malformed-output recovery | An adversarial framing/output condition does not conceal later valid bytes | Resynchronization for chosen raw transport boundary and safe diagnostics | Treating arbitrary CLI bytes as invalid JSON or semantic error | 6 and 26 |
+| 28 | Slow-reader isolation | Stalling one live reader does not block child reads or another reader | Per-reader bounded publication and fake multi-reader observation | Automatic history recovery | 6 |
+| 29 | Reader overflow outcome | A saturated reader receives a bounded, observable drop or disconnect outcome | Reader-buffer bounds, drop/disconnect signal without content leakage | Automatic resume, heartbeat protocol | 28 |
+| 30 | Manual refetch after overflow | An operator can fetch missing retained records from the last retained ordinal after a drop | Explicit history refetch using existing private session history | Seamless reconnect and automatic gap repair | 16 and 29 |
 
 ## Task coverage
 
 | Order | Increment | Coverage |
 |---|---|---|
-| 1 | Owned live harness output | [P0-008](../phase-0/P0-008-plan-owned-live-harness-output.md) assigns independent derivation; implementation brief **not yet derived** |
-| 2 | Retained output on reload | **Not yet derived** |
-| 3 | Recorded input and refusal | **Not yet derived** |
-| 4 | Delivered input and reply | **Not yet derived** |
-| 5 | Bounded malformed output | **Not yet derived** |
-| 6 | Isolated live readers | **Not yet derived** |
+| 1 | Child status presentation | [P0-008](../phase-0/P0-008-plan-owned-live-harness-output.md) assigns independent derivation; implementation brief **not yet derived** |
+| 2 | Sandbox-backed child status | **Not yet derived** |
+| 3 | Actual child status | **Not yet derived** |
+| 4 | Harness output area | **Not yet derived** |
+| 5 | First live child output | **Not yet derived** |
+| 6 | Incremental output | **Not yet derived** |
+| 7 | Draft versus submitted | **Not yet derived** |
+| 8 | Sandbox receipt | **Not yet derived** |
+| 9 | Child input write | **Not yet derived** |
+| 10 | Output following input | **Not yet derived** |
+| 11 | Composer delivery feedback | **Not yet derived** |
+| 12 | Combined exchange presentation | **Not yet derived** |
+| 13 | Observable output ordering | **Not yet derived** |
+| 14 | Shared input/output ordering | **Not yet derived** |
+| 15 | Retained submitted input | **Not yet derived** |
+| 16 | Retained child output | **Not yet derived** |
+| 17 | Ordered reload exchange | **Not yet derived** |
+| 18 | Live/history continuity | **Not yet derived** |
+| 19 | Input availability presentation | **Not yet derived** |
+| 20 | Fake input capability report | **Not yet derived** |
+| 21 | Observed channel availability | **Not yet derived** |
+| 22 | Unavailable-input refusal | **Not yet derived** |
+| 23 | Invalid or unsupported input refusal | **Not yet derived** |
+| 24 | Idempotent submission | **Not yet derived** |
+| 25 | Interrupted-delivery observation | **Not yet derived** |
+| 26 | Excessive-output bound | **Not yet derived** |
+| 27 | Malformed-output recovery | **Not yet derived** |
+| 28 | Slow-reader isolation | **Not yet derived** |
+| 29 | Reader overflow outcome | **Not yet derived** |
+| 30 | Manual refetch after overflow | **Not yet derived** |
 
-Coverage records brief derivation, not implementation or completion. P0-008 is the complete Phase 0 planning handoff for a different task author to
-derive the first increment's implementation brief; no implementation ID is
-reserved yet. Subsequent uncovered increments receive separately authored
-handoffs one at a time through Phase 0.
+Coverage records brief derivation, not implementation. P0-008 is the only
+currently tracked Phase 1-specific planning handoff and targets increment 1;
+no implementation ID is reserved. Remaining increments receive independently
+authored concrete Phase 0 handoffs **one at a time** as planning proceeds.
+The increment labels are not substitutes for task IDs or owners of completion
+deferrals. An implementation brief must include its own inherited safety and
+operability obligations; later increments never excuse a broken current slice.
 
 ## Phase exit
 
-With the fake profile, start the sandbox by hand, observe live harness output in
-the attach page, submit input, observe the correlated reply, reload, and observe
-the same gap-free runner-local ordinal history. Show invalid, duplicate,
-unsupported, and unavailable-child input outcomes without silent
-queueing; excessive and malformed output remains bounded and later valid output
-is observable; a deliberately stalled reader does not delay the harness or a
-second reader and receives the documented bounded-delivery outcome. The
-startup/posture/status path and repository gates remain green.
+With the shipped fake profile, manually start the loopback-only sandbox and
+observe the child status, raw output arriving incrementally, submissions,
+child-write outcomes and later fake-produced output on the attach page. Reload
+and observe the same session's gap-free runner-local ordinal history. Show
+validation, duplicate-key, unsupported and unavailable-input results without
+silently queuing; cause excessive or malformed output and still observe
+subsequent valid output; stall one reader without stalling harness reads or a
+second reader, observe bounded overflow, and refetch retained history manually.
 
-This exit proves a single manually started, loopback-only sandbox session and a
-malleable fake. It does not prove a real vendor, terminal semantics, structured
-views, seamless resume, multiple sandboxes, run lifecycle, or shared-deployment
-security.
+The demonstration establishes only fake-specific input behavior and a single
+manually started sandbox session. It does not establish universal real-harness
+readiness, semantic prompt/reply correlation, native exit interpretation,
+structured views, automatic resume, run lifecycle or shared-deployment
+security. Preserve repository gates and existing health, posture, page and
+status behavior across every implementation increment.
