@@ -56,6 +56,10 @@ backend does not yet exist.
 | Structured projections and seamless resume | Roadmap Stage 2 / Phase 3 |
 | Runs/control plane, lifecycle, enforced security and workflows | Roadmap Stages 3–6 / Phases 4–7 |
 
+Ordinals describe the order in which the runner **records** observations, not an
+unknown harness's internal order or semantic message boundaries. Inputs and
+outputs observed through different channels have no inferred causal relation.
+
 Stage 0 treats the fake as a shipped, malleable runtime profile. Increments 10–17 describe operator-visible exchange and history guarantees, not a fake-specific data model or protocol. The fake only supplies a controllable demonstration profile. Current
 JSON-lines dialect, reply behavior and flags do not establish universal
 real-harness input readiness, message correlation, response completion, PTY
@@ -78,11 +82,11 @@ behavior must be described as such.
 | 10 | Output after submission | After submitting text, a person can observe new harness output in the existing output area | End-to-end interaction through the current supported fake profile, with no inferred semantic reply contract | Universal input/reply correlation, response completion and vendor interpretation | 5 and 9 |
 | 11 | Honest submission outcome | The composer distinguishes locally displayed input from sandbox receipt and a reported channel-write result | User-visible outcome presentation from the already reachable submission path | Claims of harness comprehension or acceptance | 8 and 9 |
 | 12 | Readable exchange | A person can distinguish submitted text and later output while continuing to interact on the same page | Combined presentation of existing input and output observations | Attributing a particular output to a particular input; retained history | 10 and 11 |
-| 13 | Ordered output observations | Several output arrivals are displayed and retrieved in the same order even when timestamps are equal | Runner-local record identities/ordinals as the means of preserving observable order; append before publication | Persisted history, canonical run events, semantic decoding | 5; independent of input |
-| 14 | Ordered mixed exchange | An operator observes successive submissions and output arrivals in one consistent session order | Extend the shared session record sequence to input without another store | Semantic input/reply correlation and canonical run events | 9 and 13 |
+| 13 | Runner-observed output order | The operator can inspect consecutive raw output observations in the order the runner received them | Runner-local ordinal allocation on observed output chunks and publication in that order | Claims about harness emission order, semantic message boundaries, timestamps as ordering keys, or retained history | 5; independent of input |
+| 14 | Runner-recorded exchange order | Submitted input receipts and observed output are shown in the order the runner recorded them | Extend the single runner-local ordinal allocation to input receipts and observed output | Causal ordering inside the harness, prompt/reply matching and canonical run events | 8 and 13 |
 | 15 | Submission survives reload | A person reloads the page and still sees their earlier submitted text | The single private session persistence implementation, plus the minimum reload path | Cross-session retention, seamless rejoin | 8 and 14 |
 | 16 | Output survives reload | A person reloads the page and still sees earlier harness output | Consume the same private history path for output; no second persistence implementation | Semantic output projections, cross-session retention | 13 and 15 |
-| 17 | Exchange order survives reload | After interleaving submissions and output, reloading shows the same sequence in the same order | Reuse the existing session ordering and retained history in the conversation view | Automatic reconnect or gap repair | 14, 15 and 16 |
+| 17 | Recorded order survives reload | After submitting input and observing output, reloading reproduces the runner-recorded order | Reuse stored runner-local ordinals for input receipts and raw output observations | Claims about child-internal ordering, automatic reconnect or gap repair | 14, 15 and 16 |
 | 18 | Live/history continuity | New output arriving during history load appears without duplicated visible records | Bounded bootstrap/live handoff over existing records | Heartbeat/caught-up protocol and Stage 2 gap-free resume | 6, 16 and 17 |
 | 19 | Input availability presentation | The page has an independently identifiable `Unknown` input-availability state | Truthful presentation distinct from child-running status | Pretending semantic readiness is known | Existing attach page; may be derived independently and later |
 | 20 | Fake input capability report | The UI reports which input kind the active fake profile declares supported | Fake-specific capability description through the harness boundary | General real-vendor capability semantics, readiness guarantee | 3 and 19 |
