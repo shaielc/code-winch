@@ -34,7 +34,9 @@ repeat occurrence strengthens the evidence but is not a prerequisite.
 
 1. Reconstruct the sequence: expectations, responsibilities, handoffs, decisions,
    changes, review findings, and their dispositions. Link the actual records;
-   check existing follow-ups before claiming something was dropped.
+   check existing follow-ups before claiming something was dropped. Inspect the
+   current instructions and artifacts to distinguish feedback already incorporated
+   from unresolved gaps before recommending another amendment.
 2. Describe an observed cost or failure and the development practice that
    plausibly caused it. Separate evidence from inference and consider competing
    explanations. A bad outcome alone does not prove a bad methodology.
@@ -42,7 +44,11 @@ repeat occurrence strengthens the evidence but is not a prerequisite.
    how that change would have altered the observed sequence.
 4. Propose or make the smallest reusable amendment in the relevant instructions
    or workflow. Include a way to assess whether it improves the next comparable
-   task and any added cost. Avoid adding a mandatory ceremony without a reason.
+   task and any added cost. Keep reusable procedure in skills and task-specific
+   outcomes and constraints in briefs. For phase-decomposition changes, assess
+   substantial repartitioning at the first independent audit and downstream
+   artifact rewrites on the next comparable task, rather than increment count.
+   Avoid adding a mandatory ceremony without a reason.
 5. Report the observation, process cause, exact change, expected effect, and
    remaining uncertainty. If no methodology problem is supported, say so and
    leave the process unchanged.

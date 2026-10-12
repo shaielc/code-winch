@@ -12,7 +12,7 @@
       "title": "Plan phase-1: sandbox exchange",
       "phase": 0,
       "phase_name": "Plan the implementation phases",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [],
       "owner": null,
       "blocked_reason": null,
@@ -92,7 +92,19 @@
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-007-plan-phase-7-second-adapter-workflows.md"
+    },
+    {
+      "id": "P0-008",
+      "title": "Plan Phase 1 increment 1: child status presentation",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [
+        "P0-001"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-008-plan-owned-live-harness-output.md"
     }
   ]
 }
-
