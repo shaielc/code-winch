@@ -32,8 +32,12 @@ Report findings; change none of the artifacts being judged.
 - Coverage: responsibilities are accounted for; underived increments and legacy
   briefs awaiting reconciliation are labelled explicitly.
 - Fakes: their current behavior or interface is not a product constraint; they
-  can change to exercise the selected increments. Product guarantees,
-  fake-specific demonstrations, and unknown harness semantics are distinguished.
+  can change to exercise the selected increments.
+- Demonstration scope: distinguish abstract, generalized constraints from
+  demonstrations tied to a particular implementation or instance. Check that
+  the demonstrated behavior supports the claimed constraints and that limits
+  are explicit; instance-specific behavior alone does not establish a general
+  guarantee.
 - Graph: references resolve, dependencies have legitimate reasons, no cycles
   exist, and contract collisions have an owner and edge. Report concurrent
   write collisions separately. Challenge edges based only on preferred order

@@ -38,7 +38,9 @@ An explicit request to design a named implementation phase selects that target.
 4. Decide each increment's prerequisites, responsibility, and excluded concerns.
    Do not leave candidate scopes for the task author to resolve. Derive edges
    from consumed behavior or contracts, not adjacent increment numbers. Separate
-   product guarantees, fake-specific demonstrations, and unknown harness semantics.
+   abstract, generalized constraints from demonstrations tied to a particular
+   implementation or instance. State the limits of what each demonstration
+   establishes; do not infer general guarantees from instance-specific behavior.
 5. Check inherited invariants. Put required repairs in the partition, with
    run/deploy repairs first. A capability not yet introduced does not require
    building its eventual guarantees in the first increment.
