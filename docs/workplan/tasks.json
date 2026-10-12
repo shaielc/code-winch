@@ -12,7 +12,7 @@
       "title": "Plan phase-1: sandbox exchange",
       "phase": 0,
       "phase_name": "Plan the implementation phases",
-      "status": "pending",
+      "status": "in_progress",
       "depends_on": [],
       "owner": null,
       "blocked_reason": null,
@@ -95,4 +95,3 @@
     }
   ]
 }
-
