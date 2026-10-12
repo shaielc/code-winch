@@ -21,18 +21,25 @@ Report findings; change none of the artifacts being judged.
   an explicit owner and a valid order. A future phase need not be implemented
   before its design can be audited.
 - Design: numbered increments add observable properties in a valid order;
-  boundaries are decided and excluded concerns have destinations.
+  boundaries are decided and excluded concerns have destinations. Independently
+  challenge the partition from the shipped interaction surface: identify smaller
+  useful outcomes hidden in a bundled increment and assess the author's reason
+  for combining them. Check that technical components or implementation choices
+  have not become product requirements. Do not judge quality by increment count.
 - Task fit: each task belongs to an increment and fits a shape. Planning tasks
   produce their artifacts and handoffs; implementation tasks keep their minimum
   operator path. Independently observable work is not bundled.
 - Coverage: responsibilities are accounted for; underived increments and legacy
   briefs awaiting reconciliation are labelled explicitly.
 - Fakes: their current behavior or interface is not a product constraint; they
-  can change to exercise the selected increments.
+  can change to exercise the selected increments. Product guarantees,
+  fake-specific demonstrations, and unknown harness semantics are distinguished.
 - Graph: references resolve, dependencies have legitimate reasons, no cycles
   exist, and contract collisions have an owner and edge. Report concurrent
-  write collisions separately.
-- Records: briefs, tracker, mappings, index, and collision report agree.
+  write collisions separately. Challenge edges based only on preferred order
+  or technical layering; identify the behavior or contract actually consumed.
+- Records: briefs, tracker, mappings, index, and collision report agree,
+  including titles, coverage targets, and dependency semantics after repartitioning.
 - Completion claims, when made: criteria, reachability, demonstrations, and
   invariants hold at the audited commit. Unimplemented planned work is not a
   false completion claim merely because its phase was designed in advance.

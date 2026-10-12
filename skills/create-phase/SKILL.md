@@ -29,14 +29,25 @@ An explicit request to design a named implementation phase selects that target.
    can do at exit, and what remains outside the phase.
 3. Partition the outcome into ordered increments. Each adds one observable
    property at its own depth, including its required wiring and minimum operator
-   path. Split independently observable concerns.
+   path. Split independently observable concerns. Begin from the shipped
+   interaction surface and progressively deepen what a person can observe.
+   Challenge every boundary for a smaller useful outcome, including truthful
+   presentation before authoritative backend behavior. When combining such
+   outcomes, state why separation would not produce a useful increment;
+   increment count is not a target.
 4. Decide each increment's prerequisites, responsibility, and excluded concerns.
-   Do not leave candidate scopes for the task author to resolve.
+   Do not leave candidate scopes for the task author to resolve. Derive edges
+   from consumed behavior or contracts, not adjacent increment numbers. Separate
+   product guarantees, fake-specific demonstrations, and unknown harness semantics.
 5. Check inherited invariants. Put required repairs in the partition, with
    run/deploy repairs first. A capability not yet introduced does not require
    building its eventual guarantees in the first increment.
 6. Write the phase and update the index. Mark task coverage as not yet derived.
    Identify the next increment for handoff without allocating IDs or briefs.
+   After repartitioning, reconcile existing tracker and brief titles, coverage,
+   mappings, and dependency reasons with the decided boundaries, preserving IDs
+   and statuses. Keep reusable procedure in skills and task-specific outcomes
+   and constraints in artifacts.
 
 Challenge upstream scope rather than accepting a bundled objective as its own
 justification. Correct a contract or roadmap that contradicts the selected
