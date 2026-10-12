@@ -43,7 +43,7 @@ The stable legacy references `0.1`–`0.7` below identify these unchanged planni
 
 | Increment | Phase design | Specific-brief coverage |
 |---|---|---|
-| 0.1 (order 1) | [P0-001](P0-001-plan-phase-1-sandbox-exchange.md) assigns the authored and independently audited [Phase 1 sandbox-exchange design](../phase-1/README.md) plus a tracked follow-up | [P0-008](P0-008-plan-owned-live-harness-output.md) assigns independent derivation of Phase 1 increment 1, Owned live harness output; the implementation brief is **not yet derived** |
+| 0.1 (order 1) | [P0-001](P0-001-plan-phase-1-sandbox-exchange.md) assigns the authored and independently audited [Phase 1 sandbox-exchange design](../phase-1/README.md) plus a tracked follow-up | [P0-008](P0-008-plan-owned-live-harness-output.md) assigns independent derivation of Phase 1 increment 1, Child status presentation; the implementation brief is **not yet derived** |
 | 0.2 (order 2) | [P0-002](P0-002-plan-phase-2-first-real-vendor.md) assigns design plus tracked follow-up for phase-2 design; **not yet authored** | **Not yet derived** |
 | 0.3 (order 3) | [P0-003](P0-003-plan-phase-3-structured-views-resume.md) assigns design plus tracked follow-up for phase-3 design; **not yet authored** | **Not yet derived** |
 | 0.4 (order 4) | [P0-004](P0-004-plan-phase-4-observe-sandboxes.md) assigns design plus tracked follow-up for phase-4 design; **not yet authored** | **Not yet derived** |
