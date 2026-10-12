@@ -1,8 +1,7 @@
-name: code-winch-test
 services:
   sandbox:
     ports: !reset []
-    networks: [test-network]
+    networks: [test-network, proxy]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
       interval: 1s
@@ -14,3 +13,6 @@ services:
       WINCH_E2E_URL: http://sandbox:8080
 networks:
   test-network: {}
+  proxy:
+    external: true
+    name: code-winch-proxy

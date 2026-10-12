@@ -2,17 +2,23 @@ GO ?= go
 GOLANGCI_LINT ?= golangci-lint
 BUILD_DIR ?= bin
 COMPOSE ?= docker compose -f deployments/compose.yml
-COMPOSE_TEST ?= $(COMPOSE) -f deployments/compose.test.yml
+BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null)
+TEST_PROJECT ?= $(shell printf '%s' '$(or $(BRANCH),code-winch-test)' | tr 'A-Z' 'a-z' | tr -c 'a-z0-9_-' '-')
+COMPOSE_TEST ?= $(COMPOSE) -f deployments/compose.test.yml -p $(TEST_PROJECT)
+COMPOSE_PROXY ?= docker compose -f deployments/compose.proxy.yml $(if $(wildcard deployments/compose.proxy.override.yml),-f deployments/compose.proxy.override.yml)
+PROXY_PORT ?= 8090
+export PROXY_PORT
+WINCH_E2E_URL ?= http://127.0.0.1:$(PROXY_PORT)/$(TEST_PROJECT)/sandbox
 GO_PACKAGES := ./cmd/... ./internal/... ./test/contract/...
 # e2e needs a running test-env, so it is vetted and linted here but only run by
-# `make e2e` and `make test-cycle`. It runs in the toolchain, never on the host.
+# `make e2e`, `make docker-e2e`, and `make test-cycle`.
 CHECKED_PACKAGES := $(GO_PACKAGES) ./test/e2e/...
 E2E_TEST := go test -count=1 -timeout=10m ./test/e2e/...
 # The web gate runs in a node container because the Go toolchain image has no
 # node. Order mirrors .github/workflows/web.yml.
 WEB_TEST := npm ci --no-audit --no-fund && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build
 
-.PHONY: all build check e2e format format-check lint run test test-cycle test-env test-env-down toolchain-image vet web-build web-test
+.PHONY: all build check docker-e2e e2e format format-check lint proxy proxy-down run test test-cycle test-env test-env-down toolchain-image vet web-build web-test
 all: check
 
 format:
@@ -37,16 +43,23 @@ web-build:
 check: format-check vet lint test build
 
 e2e:
+	WINCH_E2E_URL=$(WINCH_E2E_URL) $(E2E_TEST)
+docker-e2e:
 	$(COMPOSE_TEST) --profile test run --rm toolchain $(E2E_TEST)
 web-test:
 	$(COMPOSE_TEST) --profile test run --rm web sh -c '$(WEB_TEST)'
 toolchain-image:
 	$(COMPOSE_TEST) --profile test build toolchain
-test-env:
+proxy:
+	$(COMPOSE_PROXY) up -d --wait
+	@$(COMPOSE_PROXY) config | grep -q 'host_ip: 127.0.0.1' || { echo "proxy is not published on 127.0.0.1 only" >&2; exit 1; }
+proxy-down:
+	$(COMPOSE_PROXY) down --remove-orphans
+test-env: proxy
 	$(COMPOSE_TEST) up --build -d --wait sandbox
 	@test "$$($(COMPOSE_TEST) exec -T sandbox id -u)" != 0 || { echo "sandbox runs as root" >&2; exit 1; }
 	@$(COMPOSE) config | grep -q 'host_ip: 127.0.0.1' || { echo "sandbox is not published on 127.0.0.1 only" >&2; exit 1; }
 test-env-down:
 	$(COMPOSE_TEST) --profile test down --remove-orphans
 test-cycle: toolchain-image
-	@status=0; $(MAKE) test-env && $(COMPOSE_TEST) --profile test run --rm toolchain sh -c 'make format-check vet test build && $(E2E_TEST)' || status=$$?; $(MAKE) test-env-down; exit $$status
+	@status=0; $(MAKE) test-env && $(COMPOSE_TEST) --profile test run --rm toolchain sh -c 'make format-check vet test build e2e' || status=$$?; $(MAKE) test-env-down; exit $$status

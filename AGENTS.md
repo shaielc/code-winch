@@ -123,8 +123,9 @@ make test-cycle                                             # Docker-only path: 
 build. It is a host target needing Go and golangci-lint. `make test-cycle` is the
 Docker path: it starts the isolated `code-winch-test` environment, runs the gates and
 the composed-image e2e scenarios in the `toolchain`, and tears it down. It does not
-cover lint, so say which gates you ran. `make e2e` alone only runs the scenarios
-against an environment already started by `make test-env`.
+cover lint, so say which gates you ran. `make e2e` (host Go, through the local proxy)
+and `make docker-e2e` (toolchain) only run the scenarios against an environment
+already started by `make test-env`, which is named after the current branch.
 
 Then run everything your brief lists under **Verification**. That is the minimum
 evidence expected in the pull request, not a ceiling.
