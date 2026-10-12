@@ -20,32 +20,16 @@ demonstration is to start the existing sandbox, open the attach page, and see
 user-visible increment; do not invent child spawning, a new backend status
 endpoint, or a fake `Running` assertion to make it look more complete.
 
-The derived brief must inspect HEAD, name concrete files and contracts,
-preserve the existing startup/health/posture/page/status and loopback deployment,
-ensure the page change is reachable in a deployed configuration, and provide
-the minimum maintained operator path appropriate for observing the result.
-State exact manual actions and expected observations separately from
-automated tests, negative checks and repository gates. Choose the required
-implementation shape, write set, and contract ownership from the actual source.
-Allocate the next real plan-wide implementation ID only when creating the
-complete brief. This planning task does not implement the UI.
+Derive the single smallest observable increment at the decided boundary; leave
+implementation details, evidence and acceptance checks to `derive-task`.
+Allocate the implementation ID only with the complete brief.
 
 ## Required constraints
 
-P0-001's reviewed Phase 1 artifact owns the partition; this task author must
-not revise its increments. Route a defective boundary to a separate phase
-author through `skills/revise-phase/SKILL.md` before continuing. The current
-sandbox already serves the static attach page and has a browser-local composer;
-the fake binary is shipped but is not started by the sandbox. Recheck these
-claims at dispatch.
-
-The `Unknown` state means the page has not established child status; it is not
-a claim that the child is running or accepting input. Increment 2 owns
-sandbox-backed `Down`, increment 3 owns actual child spawning/status, and
-later increments own output and input behavior. No unsupported or speculative
-implementation task IDs may be reserved. If a new completion deferral is
-necessary, derive its real owner first or return the scope issue through
-Phase 0. Shared planning file edits are collision warnings, not ordering edges.
+Keep the `Unknown` presentation truthful: it does not imply child execution or
+input readiness. Increment 2 introduces sandbox-backed status and increment 3
+introduces child execution. If source inspection invalidates this boundary,
+return it to the phase author rather than silently broadening the task.
 
 ## Non-goals
 
@@ -65,8 +49,12 @@ and get separate Phase 0 planning handoffs.
   `docs/workplan/phase-0/README.md`, `docs/workplan/phase-1/README.md`,
   tracker dependencies and coverage, graph metrics, and write/contract collisions.
 - Hand the finished implementation brief to a separate refiner using
-  `skills/refine-task/SKILL.md`. Continue the Phase 0 handoff chain for the
-  next uncovered increment without reserving future IDs.
+  `skills/refine-task/SKILL.md`.
+- **Create the next concrete Phase 0 planning task** for increment 2,
+  Sandbox-backed child status, with its own independently authored brief and
+  tracker/index/coverage entries. This is an actual planning-task creation,
+  not just a recommendation or an untracked handoff; do not allocate an
+  implementation ID for increment 2.
 
 ## Write set
 
@@ -74,8 +62,9 @@ Forecast for the assigned operation:
 `docs/workplan/phase-1/<allocated-ID>-child-status-presentation.md`,
 `docs/workplan/tasks.json` (one new entry; statuses unchanged),
 `docs/workplan/README.md`, `docs/workplan/phase-0/README.md`,
-`docs/workplan/phase-1/README.md`. The placeholder is replaced with the
-allocated ID by the separate task author.
+`docs/workplan/phase-1/README.md`, plus the new concrete Phase 0
+planning brief and its tracker entry for the next increment. No later
+implementation IDs are reserved.
 
 ## Contract surfaces
 
