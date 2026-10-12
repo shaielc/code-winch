@@ -13,6 +13,7 @@ runner/.env
 # Deployment-specific compose overrides
 runner/compose.override.yml
 deployments/compose.override.yml
+deployments/compose.proxy.override.yml
 deployments/.env
 
 # Local skill-discovery links; the skills themselves live in skills/

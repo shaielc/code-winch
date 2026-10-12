@@ -17,6 +17,9 @@ func TestSandboxStarts(t *testing.T) {
 	if page.status != http.StatusOK || !strings.HasPrefix(page.contentType, "text/html") || !strings.Contains(page.body, "Sandbox attach") {
 		t.Fatalf("page: %d %q %q", page.status, page.contentType, page.body)
 	}
+	if !strings.Contains(page.body, `src="./assets/`) {
+		t.Fatalf("page does not load its script relative to its base: %q", page.body)
+	}
 
 	command := exec.Command("go", "run", "./cmd/winch", "status", "--url", base)
 	command.Dir = "../.."

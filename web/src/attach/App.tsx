@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { Composer } from "./Composer";
+import { sandboxURL } from "./paths";
 import { Posture, type SessionPosture } from "./Posture";
 export function App() {
   const [posture, setPosture] = useState<SessionPosture>();
   const [error, setError] = useState(false);
   const [localMessages, setLocalMessages] = useState<string[]>([]);
   useEffect(() => {
-    fetch("/api/session")
+    fetch(sandboxURL("api/session"))
       .then((response) => {
         if (!response.ok) throw new Error("request failed");
         return response.json() as Promise<SessionPosture>;

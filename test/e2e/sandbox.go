@@ -18,7 +18,7 @@ func sandboxURL(t *testing.T) string {
 	t.Helper()
 	url := os.Getenv("WINCH_E2E_URL")
 	if url == "" {
-		t.Fatal("WINCH_E2E_URL is not set: run `make e2e` or `make test-cycle` so the test runs in the toolchain on the test network")
+		t.Fatal("WINCH_E2E_URL is not set: run `make e2e` (through the proxy), `make docker-e2e` (in the toolchain), or `make test-cycle`")
 	}
 	return url
 }
