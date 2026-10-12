@@ -36,9 +36,9 @@ return it to the phase author rather than silently broadening the task.
 No Phase 1 product implementation in this planning task; the derived increment
 itself adds no child supervisor, live-output transport, input delivery,
 persistence, harness-specific availability, vendor semantics, or broad
-restructuring. Do not derive subsequent increments or implementation briefs
-as part of this task. Other increments retain their not-yet-derived coverage
-and get separate Phase 0 planning handoffs.
+restructuring. Do not derive a second Phase 1 implementation brief in this task. The next
+Phase 0 planning brief must be authored separately and registered; later Phase 1
+implementation briefs retain their not-yet-derived coverage.
 
 ## Planning outputs and handoff
 
@@ -98,8 +98,9 @@ Record any gates not run or unavailable.
       adversarial/automated verification and inherited invariants are explicit.
 - [ ] Tracker, index, Phase 0/1 coverage, graph and collision warnings agree;
       preexisting status values are unchanged.
-- [ ] The brief goes to a separate refiner and the next handoff remains
-      independently assigned without speculative IDs.
+- [ ] The implementation brief goes to a separate refiner, and a separately
+      authored concrete Phase 0 planning brief for increment 2 exists in the
+      tracker and coverage records without speculative implementation IDs.
 
 ## Deferrals
 
