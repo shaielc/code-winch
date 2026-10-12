@@ -1,0 +1,8 @@
+services:
+  sandbox:
+    ports: !reset []
+    networks: [default, proxy]
+networks:
+  proxy:
+    external: true
+    name: code-winch-proxy

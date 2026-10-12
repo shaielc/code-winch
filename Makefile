@@ -5,8 +5,9 @@ COMPOSE ?= docker compose -f deployments/compose.yml
 BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null)
 TEST_PROJECT ?= $(shell printf '%s' '$(or $(BRANCH),code-winch-test)' | tr 'A-Z' 'a-z' | tr -c 'a-z0-9_-' '-')
 COMPOSE_TEST ?= $(COMPOSE) -f deployments/compose.test.yml -p $(TEST_PROJECT)
+COMPOSE_MAIN ?= $(COMPOSE) -f deployments/compose.main.yml
 COMPOSE_PROXY ?= docker compose -f deployments/compose.proxy.yml $(if $(wildcard deployments/compose.proxy.override.yml),-f deployments/compose.proxy.override.yml)
-PROXY_PORT ?= 8090
+PROXY_PORT ?= 7090
 export PROXY_PORT
 WINCH_E2E_URL ?= http://127.0.0.1:$(PROXY_PORT)/$(TEST_PROJECT)/sandbox
 GO_PACKAGES := ./cmd/... ./internal/... ./test/contract/...
@@ -18,7 +19,7 @@ E2E_TEST := go test -count=1 -timeout=10m ./test/e2e/...
 # node. Order mirrors .github/workflows/web.yml.
 WEB_TEST := npm ci --no-audit --no-fund && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build
 
-.PHONY: all build check docker-e2e e2e format format-check lint proxy proxy-down run test test-cycle test-env test-env-down toolchain-image vet web-build web-test
+.PHONY: all build check docker-e2e e2e format format-check lint main-down main-up proxy proxy-down run test test-cycle test-env test-env-down toolchain-image vet web-build web-test
 all: check
 
 format:
@@ -55,6 +56,10 @@ proxy:
 	@$(COMPOSE_PROXY) config | grep -q 'host_ip: 127.0.0.1' || { echo "proxy is not published on 127.0.0.1 only" >&2; exit 1; }
 proxy-down:
 	$(COMPOSE_PROXY) down --remove-orphans
+main-up: proxy
+	$(COMPOSE_MAIN) up --build -d --wait sandbox
+main-down:
+	$(COMPOSE_MAIN) down --remove-orphans
 test-env: proxy
 	$(COMPOSE_TEST) up --build -d --wait sandbox
 	@test "$$($(COMPOSE_TEST) exec -T sandbox id -u)" != 0 || { echo "sandbox runs as root" >&2; exit 1; }
