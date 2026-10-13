@@ -45,7 +45,6 @@ still produce a system nobody can start.
 | `docs/workplan/tasks.json` | Machine-readable tracker — status, ownership, dependencies |
 | `docs/workplan/tasks.schema.json` | Schema for the tracker |
 | `docs/workplan/post-mortems/` | Records of plan failures — defects whose root cause is a seam between briefs rather than an implementation |
-| `docs/workplan/propagations/` | Audit finding ledgers linking task-branch PR stacks, human dispositions, and follow-up tasks or issues |
 | `docs/state.md` | Preserved when a phase closes: what was done, what went wrong, what is not implemented. Closing the last phase leaves a supported empty tracker |
 
 An existing plan's conventions win: match its ID scheme, directory layout, and
@@ -443,7 +442,11 @@ For a planning brief, use `Shape: planning`, state the artifact as the objective
 and replace **Runtime reachability** with **Planning outputs and handoff**.
 Demonstration and verification check the produced artifacts and their graph;
 runtime behavior described by the target brief remains a prediction. The
-runtime template below applies to implementation tasks.
+handoff names the next operation; it is not an output. Do not make a later
+operation — refinement, dispatch, another author's work — a step or acceptance
+criterion of the planning task: the workflow already orders those, and nothing
+in the planning task's diff can show them. The runtime template below applies
+to implementation tasks.
 
 ```markdown
 # <ID>: <Title>

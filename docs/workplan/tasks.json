@@ -98,13 +98,37 @@
       "title": "Plan Phase 1 increment 1: child status presentation",
       "phase": 0,
       "phase_name": "Plan the implementation phases",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         "P0-001"
       ],
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-008-plan-owned-live-harness-output.md"
+    },
+    {
+      "id": "P1-009",
+      "title": "Present unknown child status",
+      "phase": 1,
+      "phase_name": "Sandbox exchange",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/P1-009-child-status-presentation.md"
+    },
+    {
+      "id": "P0-010",
+      "title": "Plan Phase 1 increment 2: sandbox-backed child status",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [
+        "P0-008"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-010-plan-sandbox-backed-child-status.md"
     }
   ]
 }

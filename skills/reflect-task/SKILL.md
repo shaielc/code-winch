@@ -52,6 +52,9 @@ repeat occurrence strengthens the evidence but is not a prerequisite.
 5. Report the observation, process cause, exact change, expected effect, and
    remaining uncertainty. If no methodology problem is supported, say so and
    leave the process unchanged.
+6. Commit amendments on their own branch and open a PR into the task branch.
+   Do not push to the task branch directly or add commits to the branch of a
+   PR that is already merged.
 
 ## Boundary
 

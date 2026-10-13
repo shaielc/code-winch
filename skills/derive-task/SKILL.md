@@ -16,6 +16,8 @@ require implementing the previous one first.
 For Phase 0, derive a planning brief using the model's planning shape. Name its
 target artifact, assigned phase/task-author operation, and handoff. Deriving
 this planning brief does not itself perform the planning operation it assigns.
+Every acceptance criterion must be checkable from the task's own artifacts;
+name the next operation in the handoff, not as a criterion.
 
 ## Select the change
 
