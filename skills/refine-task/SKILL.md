@@ -76,14 +76,8 @@ Then make the brief concrete, in the sections it already has:
 Refine toward what the design set and the code at HEAD require, never toward an
 implementation that already exists.
 
-The artifact changes only the brief. Commit it on its own branch and merge it
-into the task branch through its own PR before any implementation.
-Implementation starts from it.
-
-Every later change to the task branch — a re-refinement, a review fix, a
-propagation, a process amendment — gets its own branch and its own PR into the
-task branch. Do not push to the task branch directly, and do not add commits to
-the branch of a PR that is already merged.
+The artifact changes only the brief, and is committed to the task's branch
+before any implementation. Implementation starts from it.
 
 Treat the fake as malleable. Change proposed fixture behavior rather than
 expanding product scope to fit its current flags, protocol, or startup timing.
@@ -91,6 +85,6 @@ Label predicted results for new code separately from observations at HEAD.
 
 ## Done
 
-Change only this brief, merge it into the task branch through its own PR before
-implementation, and hand it to a different implementer. Preserve tracker statuses. Report unresolved
+Change only this brief, commit it on the task branch before implementation, and
+hand it to a different implementer. Preserve tracker statuses. Report unresolved
 phase boundaries or missing prerequisite behavior rather than absorbing them.
