@@ -25,7 +25,7 @@ There are no imports from the repository's `scripts/` or tests directories.
 On a merge into main, the runner posts to `/api/events/merge`. The panel pulls
 its dedicated main checkout, reads `docs/workplan/tasks.json`, and selects pending
 tasks whose dependencies are completed. It creates `task/<ID>` with an opening
-in-progress commit, up to three active tasks by default (`--max-concurrent`).
+in-progress commit, with no practical limit on active tasks by default (`--max-concurrent`, 1000).
 Sync returns HTTP 202 with a job ID; the UI and runner poll its status.
 This keeps Git operations from holding a proxy connection open. Preparation
 failures name the task and operation, and retries reuse prepared branches. The main tracker remains authoritative for completion.

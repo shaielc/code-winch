@@ -132,6 +132,8 @@ PAGE = r"""<!doctype html>
   button.icon-button .icon {{ opacity: .85; }}
   button.icon-button:hover {{ background: #dc262622; }}
   button.icon-button:hover .icon {{ opacity: 1; }}
+  button.icon-button.rebase {{ color: #2563eb; }}
+  button.icon-button.rebase:hover {{ background: #2563eb22; }}
   .pr-icon {{ display: inline-flex; padding: .25rem; border-radius: 6px; color: inherit;
     text-decoration: none; }}
   .pr-icon:not([data-state="blocked"]) {{ cursor: pointer; }}
@@ -629,6 +631,14 @@ EXPIRE_ICON = (
     'stroke-linecap="round"/></svg>'
 )
 
+# A branch whose tip moves onto a new base, for rebasing a task's branch onto main.
+REBASE_ICON = (
+    '<svg class="icon" viewBox="0 0 24 24" role="img" aria-label="Rebase">'
+    '<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/>'
+    '<circle cx="18" cy="5" r="2"/><path d="M6 7v10M18 7c0 6-6 5-10 11"/></g></svg>'
+)
+
 STAGES = ("refine", "implement", "audit")
 # Who runs each stage, named where an uncertain submission must be checked by hand.
 SERVICES = {"refine": "Codex", "implement": "Codex", "audit": "Claude"}
@@ -683,9 +693,10 @@ def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
         actions += button("prepare", entry["id"], "Prepare",
                           hint="Refresh main, claim a scheduler slot, and prepare this branch.")
     if entry["local"] and entry["prepared"] and entry["status"] != "completed":
-        actions += button("rebase", entry["id"], "Rebase",
+        actions += button("rebase", entry["id"], REBASE_ICON,
                           hint="Rebase this task's branch onto main, and its open implementation "
                                "pull requests onto the result.",
+                          css="icon-button rebase",
                           confirm=f"Rebase task/{entry['id']} onto main? This force-pushes the "
                                   "task branch and the head branch of every open pull request "
                                   "into it. Nothing is pushed if any of them conflicts.")
