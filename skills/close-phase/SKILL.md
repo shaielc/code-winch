@@ -26,8 +26,8 @@ not authorize closure.
 2. **Read every post-mortem.** Each one names a plan rule that would have caught
    its defect, and those rules are the most valuable thing the plan produced.
    They must be restated in the report, because `post-mortems/` is about to go.
-   Read propagation ledgers too; carry unresolved accepted findings and their
-   task/issue destinations into the state report before removing those ledgers.
+   Read the propagation ledger comments on its task PRs too; carry unresolved
+   accepted findings and their task/issue destinations into the state report.
 3. **Read the code that exists**, not the briefs' account of it. What runs, what
    is registered in the composition root, what the standing suite actually
    covers, what a person can reach by hand.
@@ -39,7 +39,7 @@ not authorize closure.
 6. **Write `docs/state.md`.** See below.
 7. **Retire the phase in the same commit** that adds the report. Remove its
    briefs and directory, task records, index entries, and related post-mortems
-   and propagation ledgers after carrying their evidence into the report.
+   after carrying their evidence into the report.
    Preserve other phases and their graph. Before removing a task referenced by
    a remaining phase, verify the prerequisite at HEAD and replace the reference
    with its evidenced baseline. An unmet prerequisite needs a phase-author

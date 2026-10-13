@@ -45,7 +45,6 @@ still produce a system nobody can start.
 | `docs/workplan/tasks.json` | Machine-readable tracker — status, ownership, dependencies |
 | `docs/workplan/tasks.schema.json` | Schema for the tracker |
 | `docs/workplan/post-mortems/` | Records of plan failures — defects whose root cause is a seam between briefs rather than an implementation |
-| `docs/workplan/propagations/` | Audit finding ledgers linking task-branch PR stacks, human dispositions, and follow-up tasks or issues |
 | `docs/state.md` | Preserved when a phase closes: what was done, what went wrong, what is not implemented. Closing the last phase leaves a supported empty tracker |
 
 An existing plan's conventions win: match its ID scheme, directory layout, and

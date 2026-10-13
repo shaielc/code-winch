@@ -51,41 +51,44 @@ follow-up; it does not invent a task ID or satisfy the source task's completion.
 For hardening, create an issue rather than extending a task by default. A
 Harden finding a person has rejected as invalid gets no issue; record the
 rejection link in the routing report.
-Keep issue-only follow-ups in the ledger and PR discussion, not as invented
+Keep issue-only follow-ups in the ledger comment, not as invented
 task owners in brief Deferrals tables or implementation TODOs.
 
 Before creating an issue, check whether this exact audit finding was already
 propagated. Reuse its recorded issue on reruns; do not duplicate it. This check
 is not permission to skip a new hardening finding because a task looks related.
 
+## Record the routing
+
+Post the ledger as one comment on the source task PR (task branch → default
+branch): each finding with its source link, classification, verdict, and task
+or issue destination, plus the reconstructed stack. On reruns, edit that
+comment rather than adding another.
+
 ## Open the propagation PR
 
-Open a propagation PR only when a brief changes. When every finding routes to
-an issue or was rejected, post the routing — each finding, its destination or
-rejection, and the reconstructed stack — as one comment on the source
-implementation PR and stop; there is nothing for a PR to review.
+Open a propagation PR only when a brief changes; issue-only routing ends with
+the ledger comment.
 
 1. Refresh the source task branch and create a **new propagation branch from its
    current head**. Keep unmerged implementation changes separate; read them at
    their PR head rather than pulling them into the propagation branch.
-2. Commit only propagation changes: affected briefs and a finding ledger. Store
-   the ledger at `docs/workplan/propagations/<source-task>/<source-PR>-<audit>.md`,
-   matching existing conventions. Record each finding's task or issue, verdict,
-   source link, and the reconstructed stack.
+2. Commit only the affected brief changes.
 3. Push the new branch and open a PR **into the source task branch**, not into
    the repository's default branch or a downstream task branch. Include the
    source task marker required by repository automation and links to its
-   implementation, audit, decisions, destinations, and issues. Other task IDs
-   belong in the ledger if the PR body allows only one task marker.
-4. Verify the PR's actual head/base and diff, and report its URL with the routing
-   ledger. Leave tracker statuses alone. Do not merge the propagation PR or the
+   implementation, audit, decisions, destinations, issues, and the ledger
+   comment. Other task IDs belong in the ledger if the PR body allows only one
+   task marker.
+4. Verify the PR's actual head/base and diff, and report its URL with the
+   ledger comment. Leave tracker statuses alone. Do not merge the propagation PR or the
    task branch as part of this operation.
 
 ## Done
 
 Every Defect and Deferrable finding has a checked existing-task destination or
-an issue; every hardening finding not rejected by a person has an issue. Brief
-changes travel in a new-branch propagation PR into the source task branch with
-the ledger; issue-only routing is one comment on the source implementation PR.
+an issue; every hardening finding not rejected by a person has an issue. The
+ledger is one comment on the source task PR; brief changes travel in a
+new-branch propagation PR into the source task branch.
 Unresolved verdicts and blockers remain visible; no finding was silently
 reclassified or treated as fixed merely because it was tracked.
