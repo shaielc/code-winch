@@ -30,7 +30,7 @@ whether it may be deferred or accepted. Missing verdicts belong to
 | Blocking | Report the source implementation's merge blocker; propagation does not clear it |
 | Deferrable | Check for an appropriate existing task; otherwise open an issue |
 | Defect | Check for an appropriate existing task; otherwise open an issue |
-| Harden / hardening | Open an issue for each finding |
+| Harden / hardening | Open an issue for each finding a person has not rejected |
 
 Check task suitability against its objective, non-goals, phase, contract ownership,
 status, and prerequisite behavior. A nearby filename or similar title is not
@@ -48,7 +48,9 @@ When no suitable task exists, open an issue describing the finding, impact,
 expected result, source evidence, original classification, human verdict (or
 that it remains unresolved), and any later planning trigger. An issue tracks the
 follow-up; it does not invent a task ID or satisfy the source task's completion.
-For hardening, create an issue rather than extending a task by default.
+For hardening, create an issue rather than extending a task by default. A
+Harden finding a person has rejected as invalid gets no issue; record the
+rejection link in the routing report.
 Keep issue-only follow-ups in the ledger and PR discussion, not as invented
 task owners in brief Deferrals tables or implementation TODOs.
 
@@ -58,14 +60,18 @@ is not permission to skip a new hardening finding because a task looks related.
 
 ## Open the propagation PR
 
+Open a propagation PR only when a brief changes. When every finding routes to
+an issue or was rejected, post the routing — each finding, its destination or
+rejection, and the reconstructed stack — as one comment on the source
+implementation PR and stop; there is nothing for a PR to review.
+
 1. Refresh the source task branch and create a **new propagation branch from its
    current head**. Keep unmerged implementation changes separate; read them at
    their PR head rather than pulling them into the propagation branch.
 2. Commit only propagation changes: affected briefs and a finding ledger. Store
    the ledger at `docs/workplan/propagations/<source-task>/<source-PR>-<audit>.md`,
    matching existing conventions. Record each finding's task or issue, verdict,
-   source link, and the reconstructed stack. The ledger provides a reviewable
-   change even when every finding routes to an issue.
+   source link, and the reconstructed stack.
 3. Push the new branch and open a PR **into the source task branch**, not into
    the repository's default branch or a downstream task branch. Include the
    source task marker required by repository automation and links to its
@@ -78,7 +84,8 @@ is not permission to skip a new hardening finding because a task looks related.
 ## Done
 
 Every Defect and Deferrable finding has a checked existing-task destination or
-an issue; every hardening finding has an issue. A new-branch propagation PR
-into the source task branch carries the ledger and any agreed brief changes.
+an issue; every hardening finding not rejected by a person has an issue. Brief
+changes travel in a new-branch propagation PR into the source task branch with
+the ledger; issue-only routing is one comment on the source implementation PR.
 Unresolved verdicts and blockers remain visible; no finding was silently
 reclassified or treated as fixed merely because it was tracked.

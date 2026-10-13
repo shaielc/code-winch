@@ -18,6 +18,11 @@ planning criteria and the assigned author operation's requirements. Runtime
 reachability and target-capability scenarios are implementation criteria;
 planning completion does not certify the predicted behavior.
 
+Before recording any finding, Harden included, check whether the model, the
+skills, or `AGENTS.md` already settle the concern, and cite the rule if they do.
+A criterion about an event outside the task — a later dispatch, another author's
+operation — is a plan defect in the brief, not a finding against the work.
+
 ## Orient
 
 1. **Read the brief end to end**, including **Non-goals**. Note its **Shape** —
