@@ -129,6 +129,19 @@
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-010-plan-sandbox-backed-child-status.md"
+    },
+    {
+      "id": "P0-011",
+      "title": "Plan Phase 2 increment 1: selectable harness profiles",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [
+        "P0-002"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-011-plan-selectable-harness-profiles.md"
     }
   ]
 }
