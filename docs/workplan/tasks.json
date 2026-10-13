@@ -122,7 +122,7 @@
       "title": "Plan Phase 1 increment 2: sandbox-backed child status",
       "phase": 0,
       "phase_name": "Plan the implementation phases",
-      "status": "pending",
+      "status": "in_progress",
       "depends_on": [
         "P0-008"
       ],
