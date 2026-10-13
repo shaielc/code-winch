@@ -29,13 +29,19 @@ and audit lineage. This operation merges only that implementation PR.
 
 ## Obtain finding verdicts
 
-For **each Deferrable finding** and **each Defect finding**, summarize the
-observed problem, effect, audit evidence, and the decision needed. Use the
+For **each Deferrable, Defect, and Harden finding**, summarize the observed
+problem, effect, audit evidence, and the decision needed. Use the
 available question tool (`request_user_input` when exposed) to ask for a verdict.
 Give every finding its own question; batch only up to the tool's question limit.
 
-- Deferrable: **Handle before merge** or **Defer to a task/issue**.
-- Defect: **Fix before merge** or **Accept and track**.
+- Deferrable: **Handle before merge**, **Defer to a task/issue**, or **Reject**.
+- Defect: **Fix before merge**, **Accept and track**, or **Reject**.
+- Harden: **Track as issue** or **Reject**.
+
+**Reject** means the finding is invalid: the person disputes it, or the model,
+skills, or `AGENTS.md` already settle it. Record the person's reason. A rejected
+finding needs no action before merge and gets no follow-up; the audit record
+keeps it unchanged.
 
 Show concrete scope/impact in the option descriptions. The tool is for product
 tradeoffs; invocation of this skill already authorizes the merge once its
@@ -56,14 +62,13 @@ appropriate existing task or open an issue and produce its propagation PR.
 Link that concrete destination before treating the disposition as recorded.
 An issue does not clear a Blocking finding or fulfill missing task scope.
 
-Harden findings do not require a human verdict and do not block this merge.
-`propagate-task` opens their follow-up issues when propagation is performed;
-keeping hardening separate does not silently discard it.
+Harden findings never block this merge, but each needs a verdict before
+propagation. `propagate-task` opens issues only for those tracked.
 
 ## Merge
 
-1. Confirm every Defect and Deferrable has a recorded verdict and its required
-   action is satisfied. Report audit state separately from merge readiness.
+1. Confirm every Defect, Deferrable, and Harden finding has a recorded verdict
+   and every required pre-merge action is satisfied. Report audit state separately from merge readiness.
 2. Refresh the PR head, task branch, audit, decisions, and required checks.
    Require the repository's merge checks and branch rules to pass. New head
    commits require a new current audit; task-base changes require rechecking
@@ -75,13 +80,12 @@ keeping hardening separate does not silently discard it.
    branch into the default branch.
 4. Verify GitHub reports the PR merged and the task branch contains the merge
    result. Report the PR, merge commit, audit, and verdict/destination links.
-   Include hardening issue links or the findings still awaiting propagation;
-   pending hardening does not become a merge blocker.
+   Include the verdict record and the findings awaiting propagation.
    Leave tracker statuses unchanged.
 
 ## Done
 
-The audited implementation PR is merged into its task branch with all required
-human verdicts and actions recorded. Otherwise report precisely why it remains
+The audited implementation PR is merged into its task branch with a recorded
+verdict for every finding and all required actions done. Otherwise report precisely why it remains
 unmerged: missing/stale audit, Blocking findings, unresolved dispositions,
 incomplete required fixes, or failed repository merge checks.

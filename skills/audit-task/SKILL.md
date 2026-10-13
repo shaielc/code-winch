@@ -117,9 +117,10 @@ conflating whether an acceptance criterion held with its classification.
 **Audit state is not merge readiness.** Not Complete means Blocking findings
 must be resolved before merge. Input Required means the audit cannot decide
 how to handle a Defect or Deferrable finding; a person must record a disposition
-for each before merge. They may fix a Defect now or accept and track it, and
-may handle Deferrable work now or assign a destination and owner. Harden requires
-no human verdict or pre-merge fix; `propagate-task` tracks its follow-up issue.
+for each before merge. They may fix a Defect now or accept and track it, may
+handle Deferrable work now or assign a destination and owner, and may reject
+either as invalid. Harden requires no pre-merge fix; a person tracks or rejects
+it in `task-implement-merge` before `propagate-task` opens its issue.
 
 After the human dispositions are recorded, a pull request may be merge-ready
 even if its original audit state is Input Required. Keep that audit state and
