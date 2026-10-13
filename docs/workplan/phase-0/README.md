@@ -43,7 +43,7 @@ The stable legacy references `0.1`–`0.7` below identify these unchanged planni
 
 | Increment | Phase design | Specific-brief coverage |
 |---|---|---|
-| 0.1 (order 1) | [P0-001](P0-001-plan-phase-1-sandbox-exchange.md) assigns the authored and independently audited [Phase 1 sandbox-exchange design](../phase-1/README.md) plus a tracked follow-up | [P0-008](P0-008-plan-owned-live-harness-output.md) assigns independent derivation of Phase 1 increment 1, Child status presentation; the implementation brief is **not yet derived** |
+| 0.1 (order 1) | [P0-001](P0-001-plan-phase-1-sandbox-exchange.md) assigns the authored and independently audited [Phase 1 sandbox-exchange design](../phase-1/README.md) plus a tracked follow-up | [P0-008](P0-008-plan-owned-live-harness-output.md) independently derived [P1-009](../phase-1/P1-009-child-status-presentation.md) for increment 1; [P0-010](P0-010-plan-sandbox-backed-child-status.md) assigns independent derivation of increment 2 without reserving its implementation ID |
 | 0.2 (order 2) | [P0-002](P0-002-plan-phase-2-first-real-vendor.md) assigns design plus tracked follow-up for phase-2 design; **not yet authored** | **Not yet derived** |
 | 0.3 (order 3) | [P0-003](P0-003-plan-phase-3-structured-views-resume.md) assigns design plus tracked follow-up for phase-3 design; **not yet authored** | **Not yet derived** |
 | 0.4 (order 4) | [P0-004](P0-004-plan-phase-4-observe-sandboxes.md) assigns design plus tracked follow-up for phase-4 design; **not yet authored** | **Not yet derived** |
@@ -51,7 +51,11 @@ The stable legacy references `0.1`–`0.7` below identify these unchanged planni
 | 0.6 (order 6) | [P0-006](P0-006-plan-phase-6-enforce-isolation.md) assigns design plus tracked follow-up for phase-6 design; **not yet authored** | **Not yet derived** |
 | 0.7 (order 7) | [P0-007](P0-007-plan-phase-7-second-adapter-workflows.md) assigns design plus tracked follow-up for phase-7 design; **not yet authored** | **Not yet derived** |
 
-Coverage remains partial: P0-008 assigns derivation of the first Phase 1 implementation brief. That implementation brief and all later Phase 1 implementation briefs are not yet derived. The other phase designs and specific-brief coverage likewise remain pending.
+Coverage remains partial: P1-009 is the first derived Phase 1 implementation
+brief and awaits separate refinement and implementation. P0-010 is the concrete
+planning handoff for the second brief; that brief and all later Phase 1 briefs
+are not yet derived. The other phase designs and specific-brief coverage likewise
+remain pending.
 
 The actual dependency graph and concurrent write warnings are recorded in the workplan index. The task author has updated coverage only; the seven planning boundaries and Phase 0 exit condition are unchanged.
 
