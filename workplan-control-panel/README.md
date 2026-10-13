@@ -52,6 +52,15 @@ released — and claims that one task. **Expire** releases the local reservation
 keeping those links, and the row's **⋯** menu expires a single stage record instead.
 Neither cancels a cloud task.
 
+**Rebase** brings a prepared task branch up to date with main. It replays `task/<ID>`
+onto `origin/main`, then replays each open implementation PR's own commits onto the
+rewritten task branch, so those PRs keep a clean diff. Every branch is rebuilt in a
+temporary worktree first; a conflict in any of them pushes nothing and answers 409.
+The rewritten branches go up in one atomic push, each leased on the tip just fetched,
+so a branch that moved meanwhile rejects the whole push. PRs from forks are refused,
+because the panel cannot push to them. A branch that already contains main is left
+alone. The new tip reopens every stage, like any other push to the branch.
+
 API clients use `Authorization: Bearer <PANEL_TOKEN>`; POST bodies must be JSON
 objects. In the UI, enter the token and **Sign in** to remember this browser for
 seven days. The browser stores a signed `HttpOnly; Secure; SameSite=Strict`
@@ -77,6 +86,7 @@ protect the entire site behind a reverse proxy.
 | POST | `/api/tasks/<ID>/implement` | `{}`; submit implementation |
 | POST | `/api/tasks/<ID>/expire` | `{}`; release the local reservation, retaining conversation links |
 | POST | `/api/tasks/<ID>/prepare` | `{}`; admit one named task; returns 202 and a sync job ID |
+| POST | `/api/tasks/<ID>/rebase` | `{}`; rebase the task branch onto main and its open PRs onto that; returns `rebased`, `head`, `propagated` |
 | POST | `/api/tasks/<ID>/refine\|implement\|audit/expire` | `{}`; retire that stage's current submission so it can be sent again |
 | POST | `/api/tasks/<ID>/audit` | Optional `{"pr_number": 123}`; start a Claude session for that PR's head and return its `task_url` |
 

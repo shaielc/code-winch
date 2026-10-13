@@ -98,6 +98,83 @@ class TaskBranchTests(GitRepositoryFixture, unittest.TestCase):
         )
 
 
+class RebaseTests(GitRepositoryFixture, unittest.TestCase):
+    PULL = {"number": 7, "url": "https://example/pr/7", "headRefName": "impl"}
+
+    def setUp(self):
+        super().setUp()
+        self.panel = self.clone("panel")
+        repository.ensure_task_branch(self.panel, "origin", "main", "P0-001")
+        repository.push_opening_commit(self.panel, "origin", "P0-001")
+        self.other = self.clone("other")
+
+    def commit(self, ref: str, name: str, text: str = "change\n") -> str:
+        """Commit one file on top of origin's `ref` and push it there."""
+        git(self.other, "fetch", "--quiet", "origin")
+        git(self.other, "checkout", "--quiet", "--detach", f"origin/{ref}")
+        (self.other / name).write_text(text)
+        git(self.other, "add", name)
+        git(self.other, "commit", "--quiet", "-m", name)
+        git(self.other, "push", "--quiet", "--force", "origin", f"HEAD:refs/heads/{ref}")
+        return git(self.other, "rev-parse", "HEAD")
+
+    def origin_refs(self) -> str:
+        return git(self.origin, "for-each-ref")
+
+    def test_the_task_branch_and_its_pull_request_move_onto_main(self):
+        git(self.origin, "branch", "impl", "task/P0-001")
+        self.commit("impl", "feature.txt")
+        main = self.commit("main", "upstream.txt")
+        result = repository.rebase_task_branch(self.panel, "origin", "P0-001", [self.PULL])
+        self.assertEqual(git(self.origin, "rev-parse", "task/P0-001^"), main)
+        self.assertEqual(result["head"], git(self.origin, "rev-parse", "task/P0-001"))
+        self.assertIn("in progress", git(self.origin, "log", "-1", "--format=%s", "task/P0-001"))
+        # The pull request keeps only its own commit, now on the rewritten task branch.
+        self.assertEqual(git(self.origin, "rev-parse", "impl^"), result["head"])
+        self.assertEqual(result["propagated"], [
+            {"number": 7, "url": "https://example/pr/7",
+             "head": git(self.origin, "rev-parse", "impl")}])
+        # Later fetches of the branch, which are not forced, still fast-forward.
+        self.assertEqual(repository.task_head(self.panel, "P0-001"), result["head"])
+        self.assertEqual(len(git(self.panel, "worktree", "list").splitlines()), 1)
+
+    def test_a_branch_that_already_contains_main_is_left_alone(self):
+        before = self.origin_refs()
+        with patch.object(repository, "github_run", wraps=repository.github_run) as runner:
+            self.assertIsNone(repository.rebase_task_branch(self.panel, "origin", "P0-001", []))
+        self.assertEqual(pushes(runner), [])
+        self.assertEqual(self.origin_refs(), before)
+
+    def test_a_conflict_in_any_branch_pushes_nothing(self):
+        git(self.origin, "branch", "impl", "task/P0-001")
+        self.commit("impl", "shared.txt", "theirs\n")
+        self.commit("main", "shared.txt", "ours\n")
+        before = self.origin_refs()
+        with self.assertRaises(repository.RebaseConflict) as refused:
+            repository.rebase_task_branch(self.panel, "origin", "P0-001", [self.PULL])
+        self.assertIn("impl", str(refused.exception))
+        self.assertEqual(self.origin_refs(), before)
+        self.assertEqual(len(git(self.panel, "worktree", "list").splitlines()), 1)
+
+    def test_a_branch_that_moves_before_the_push_rejects_the_whole_push(self):
+        git(self.origin, "branch", "impl", "task/P0-001")
+        self.commit("main", "upstream.txt")
+        real_run = repository.github_run
+        moved = {}
+
+        def racing(*command, cwd, capture=True):
+            if command[:2] == ("git", "push"):
+                moved["impl"] = self.commit("impl", "late.txt")
+            return real_run(*command, cwd=cwd, capture=capture)
+
+        task = git(self.origin, "rev-parse", "task/P0-001")
+        with patch.object(repository, "github_run", side_effect=racing):
+            with self.assertRaises(subprocess.CalledProcessError):
+                repository.rebase_task_branch(self.panel, "origin", "P0-001", [self.PULL])
+        self.assertEqual(git(self.origin, "rev-parse", "task/P0-001"), task)
+        self.assertEqual(git(self.origin, "rev-parse", "impl"), moved["impl"])
+
+
 class PullRequestTests(unittest.TestCase):
     def test_open_pull_requests_into_task_branch_include_head(self):
         pulls = [{"number": 9, "url": "https://example/pr/9", "headRefOid": "0123abcd"}]
@@ -107,7 +184,7 @@ class PullRequestTests(unittest.TestCase):
             self.assertEqual(repository.task_pull_requests(clone, "P0-001"), pulls)
             run.assert_called_once_with(
                 "gh", "pr", "list", "--base", "task/P0-001", "--state", "open",
-                "--json", "number,url,headRefOid", cwd=clone)
+                "--json", "number,url,headRefOid,headRefName,isCrossRepository", cwd=clone)
 
     def test_creating_the_task_pull_request_names_the_branch_and_returns_its_url(self):
         clone = Path("/checkout")

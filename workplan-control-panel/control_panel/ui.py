@@ -229,6 +229,8 @@ Implement run Codex on the task branch; merge refinement changes there before st
 implementation. Audit starts a Claude cloud session for an open implementation pull request into
 that branch. Repeating a stage at the same revision — the branch's, or the pull request's for
 Audit — returns the conversation it already opened, so submit again after the revision moves on.
+Rebase replays the task branch onto main and its open implementation pull requests onto the
+result, force-pushing them together or not at all.
 Expire releases a local reservation. No expiry cancels a cloud task or removes a link.</p>
 <script>
   const result = document.getElementById("result");
@@ -295,7 +297,7 @@ Expire releases a local reservation. No expiry cancels a cloud task or removes a
     if (token.value && window.isSecureContext) await signIn();
     return await request(endpoint, body === undefined ? {{}} : body);
   }}
-  // Sync, Prepare and Expire all change what the whole page says, so each ends in a reload.
+  // Sync, Prepare, Rebase and Expire all change what the whole page says, so each ends in a reload.
   document.querySelectorAll("[data-action]").forEach(button => {{
     button.onclick = async () => {{
       // A destructive action names what it destroys and runs only once the operator agrees.
@@ -316,6 +318,11 @@ Expire releases a local reservation. No expiry cancels a cloud task or removes a
             data = await request("api/sync/" + encodeURIComponent(data.id));
           }}
           if (data.status === "failed") throw new Error(data.error);
+        }}
+        // Nothing moved, so there is nothing for a reload to show.
+        if (action === "rebase" && !data.rebased) {{
+          showMessage("task/" + button.dataset.task + " already contains main.");
+          return;
         }}
         window.location.reload();
       }} catch (error) {{
@@ -675,6 +682,13 @@ def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
     if preparable(entry, runnable):
         actions += button("prepare", entry["id"], "Prepare",
                           hint="Refresh main, claim a scheduler slot, and prepare this branch.")
+    if entry["local"] and entry["prepared"] and entry["status"] != "completed":
+        actions += button("rebase", entry["id"], "Rebase",
+                          hint="Rebase this task's branch onto main, and its open implementation "
+                               "pull requests onto the result.",
+                          confirm=f"Rebase task/{entry['id']} onto main? This force-pushes the "
+                                  "task branch and the head branch of every open pull request "
+                                  "into it. Nothing is pushed if any of them conflicts.")
     if entry["local"] and entry["status"] != "completed":
         actions += button("expire", entry["id"], EXPIRE_ICON,
                           hint="Release this task's scheduler slot, delete its branch, and "
