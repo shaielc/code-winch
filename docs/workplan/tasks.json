@@ -105,6 +105,19 @@
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-008-plan-owned-live-harness-output.md"
+    },
+    {
+      "id": "P0-009",
+      "title": "Plan Phase 2 increment 1: harness profile presentation",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [
+        "P0-002"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-009-plan-harness-profile-presentation.md"
     }
   ]
 }
