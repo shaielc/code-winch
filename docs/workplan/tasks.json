@@ -98,7 +98,7 @@
       "title": "Plan Phase 1 increment 1: child status presentation",
       "phase": 0,
       "phase_name": "Plan the implementation phases",
-      "status": "in_progress",
+      "status": "completed",
       "depends_on": [
         "P0-001"
       ],
