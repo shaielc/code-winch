@@ -3,6 +3,31 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { App } from "./App";
 
 afterEach(cleanup);
+test("shows unknown child status independently of posture", async () => {
+  globalThis.fetch = vi.fn().mockImplementation(() => new Promise(() => {}));
+  render(<App />);
+
+  let region = screen.getByRole("region", { name: "Child status" });
+  expect(region).toHaveTextContent(/^Child statusUnknown$/);
+  expect(screen.getByText("Unknown", { selector: "p" })).toBeInTheDocument();
+  expect(region).not.toHaveTextContent(/Down|Running|ready|exit/i);
+  expect(
+    screen.getByRole("region", { name: "Local messages" }),
+  ).toBeInTheDocument();
+
+  cleanup();
+  globalThis.fetch = vi.fn().mockRejectedValue(new Error("request failed"));
+  render(<App />);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Sandbox posture is unavailable.",
+  );
+  region = screen.getByRole("region", { name: "Child status" });
+  expect(region).toHaveTextContent(/^Child statusUnknown$/);
+  expect(screen.getByText("Unknown", { selector: "p" })).toBeInTheDocument();
+  expect(region).not.toHaveTextContent(/Down|Running|ready|exit/i);
+});
+
 test("shows effective and unenforced posture", async () => {
   globalThis.fetch = vi.fn().mockResolvedValue({
     ok: true,
