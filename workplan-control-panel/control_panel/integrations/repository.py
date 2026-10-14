@@ -5,6 +5,7 @@ credential is involved; everything local stays on run().
 """
 
 import json
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,10 @@ TRACKER = Path("docs/workplan/tasks.json")
 
 class CheckoutConflict(Exception):
     """The checkout cannot safely be updated automatically."""
+
+
+class RebaseConflict(Exception):
+    """A branch could not be replayed without a conflict, so nothing was pushed."""
 
 
 def ensure_clone(clone: Path, url: str) -> None:
@@ -161,7 +166,62 @@ def task_pull_requests(clone: Path, task_id: str) -> list[dict[str, Any]]:
         "--state",
         "open",
         "--json",
-        "number,url,headRefOid",
+        "number,url,headRefOid,headRefName,isCrossRepository",
         cwd=clone,
     )
     return json.loads(listed)
+
+
+def rebase_task_branch(clone: Path, remote: str, task_id: str,
+                       pulls: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Rebase the task branch onto main, and each pull request into it onto the result.
+
+    Returns None when the branch already contains main. Every branch is replayed in a
+    temporary worktree before anything is pushed, and the push is atomic and leased on the
+    fetched tips, so a conflict or a branch that moved meanwhile leaves the remote untouched.
+    The pull requests' head branches must live on `remote`.
+    """
+    branch = task_branch(task_id)
+    heads = [branch] + [pull["headRefName"] for pull in pulls]
+    # Forced, because a rebase from elsewhere is exactly the update this must accept.
+    github_run("git", "fetch", remote, f"+refs/heads/main:refs/remotes/{remote}/main",
+               *(f"+refs/heads/{head}:refs/remotes/{remote}/{head}" for head in heads), cwd=clone)
+    main = run("git", "rev-parse", f"{remote}/main", cwd=clone)
+    old = {head: run("git", "rev-parse", f"{remote}/{head}", cwd=clone) for head in heads}
+    if run("git", "merge-base", main, old[branch], cwd=clone) == main:
+        return None
+
+    new = {}
+    with tempfile.TemporaryDirectory() as scratch:
+        worktree = Path(scratch) / "worktree"
+        run("git", "worktree", "add", "--detach", str(worktree), old[branch], cwd=clone)
+        try:
+            new[branch] = replay(worktree, branch, main, old[branch])
+            for head in heads[1:]:
+                new[head] = replay(worktree, head, new[branch], old[head], since=old[branch])
+        finally:
+            run("git", "worktree", "remove", "--force", str(worktree), cwd=clone)
+
+    github_run("git", "push", "--atomic", "--quiet", remote,
+               *(f"--force-with-lease=refs/heads/{head}:{old[head]}" for head in heads),
+               *(f"{new[head]}:refs/heads/{head}" for head in heads), cwd=clone)
+    # The clone fetches only main by default, so the push does not move these on its own.
+    for head in heads:
+        run("git", "update-ref", f"refs/remotes/{remote}/{head}", new[head], cwd=clone)
+    return {"main_commit": main, "head": new[branch],
+            "propagated": [{"number": pull["number"], "url": pull["url"],
+                            "head": new[pull["headRefName"]]} for pull in pulls]}
+
+
+def replay(worktree: Path, name: str, onto: str, tip: str, since: str | None = None) -> str:
+    """Replay `tip`'s commits after `since` (default: those not on `onto`) onto `onto`."""
+    run("git", "checkout", "--quiet", "--detach", tip, cwd=worktree)
+    try:
+        run("git", "rebase", "--quiet", "--onto", onto, since or onto, cwd=worktree)
+    except subprocess.CalledProcessError as error:
+        try:
+            run("git", "rebase", "--abort", cwd=worktree)
+        except subprocess.CalledProcessError:
+            pass
+        raise RebaseConflict(f"{name} does not rebase cleanly; resolve it by hand") from error
+    return run("git", "rev-parse", "HEAD", cwd=worktree)
