@@ -106,7 +106,7 @@ behavior must be described as such.
 | Order | Increment | Coverage |
 |---|---|---|
 | 1 | Child status presentation | [P1-009](P1-009-child-status-presentation.md), independently derived by [P0-008](../phase-0/P0-008-plan-owned-live-harness-output.md), owns the accessible static `Child status: Unknown` presentation |
-| 2 | Sandbox-backed child status | [P0-010](../phase-0/P0-010-plan-sandbox-backed-child-status.md) assigns independent derivation; implementation brief **not yet derived** |
+| 2 | Sandbox-backed child status | [P1-011](P1-011-sandbox-backed-child-status.md), independently derived by [P0-010](../phase-0/P0-010-plan-sandbox-backed-child-status.md), consumes P1-009 and owns the additive sandbox session `childStatus: "Down"` transport |
 | 3 | Actual child status | **Not yet derived** |
 | 4 | Harness output area | **Not yet derived** |
 | 5 | First live child output | **Not yet derived** |
@@ -136,12 +136,13 @@ behavior must be described as such.
 | 29 | Reader overflow outcome | **Not yet derived** |
 | 30 | Manual refetch after overflow | **Not yet derived** |
 
-Coverage records brief derivation, not implementation. P1-009 is the one
-derived implementation brief and is ready for independent refinement; its
-existence does not claim that the UI has changed. P0-010 is the next concrete
-Phase 1-specific planning handoff and targets increment 2 without reserving an
-implementation ID. Remaining increments receive independently authored concrete
-Phase 0 handoffs **one at a time** as planning proceeds.
+Coverage records brief derivation, not implementation. P1-009 and P1-011 are
+derived implementation briefs ready for different authors to refine with
+`skills/refine-task/SKILL.md`; their existence
+does not claim that the UI or API has changed. P1-011 depends on P1-009 because
+it consumes that presentation identity. Remaining increments receive
+independently authored concrete Phase 0 handoffs **one at a time** as planning
+proceeds; no implementation ID for increment 3 or later is reserved.
 The increment labels are not substitutes for task IDs or owners of completion
 deferrals. An implementation brief must include its own inherited safety and
 operability obligations; later increments never excuse a broken current slice.

@@ -129,6 +129,19 @@
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-010-plan-sandbox-backed-child-status.md"
+    },
+    {
+      "id": "P1-011",
+      "title": "Report sandbox-backed child status",
+      "phase": 1,
+      "phase_name": "Sandbox exchange",
+      "status": "pending",
+      "depends_on": [
+        "P1-009"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/P1-011-sandbox-backed-child-status.md"
     }
   ]
 }
