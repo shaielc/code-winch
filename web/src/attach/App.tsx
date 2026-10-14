@@ -24,10 +24,6 @@ export function App() {
       </header>
       {error && <p role="alert">Sandbox posture is unavailable.</p>}
       {posture && <Posture posture={posture} />}
-      <section aria-labelledby="child-status-heading">
-        <h2 id="child-status-heading">Child status</h2>
-        <p>Unknown</p>
-      </section>
       <section aria-labelledby="local-messages-heading">
         <h2 id="local-messages-heading">Local messages</h2>
         {localMessages.length === 0 ? (
