@@ -25,6 +25,7 @@ skills/
 | [`extend-phase`](extend-phase/SKILL.md) | phase author | Adding coverage to an existing phase |
 | [`revise-phase`](revise-phase/SKILL.md) | phase author | Changing increment boundaries or order |
 | [`audit-phase`](audit-phase/SKILL.md) | independent phase auditor | Judging phase design, task coverage, graph, and completion |
+| [`phase-increment-handoff`](phase-increment-handoff/SKILL.md) | phase-design or increment-derivation task author | Ending that task by adding the single planning-shape task that derives the phase's next increment |
 | [`derive-task`](derive-task/SKILL.md) | task author, separate from phase author | Deriving one brief or rederiving a pending brief and its graph records |
 | [`refine-task`](refine-task/SKILL.md) | task refiner | Making a derived brief concrete against dispatch-time code |
 | [`implement-task`](implement-task/SKILL.md) | task implementer | Building, verifying, and opening the task PR |

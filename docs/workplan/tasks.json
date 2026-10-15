@@ -142,6 +142,19 @@
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-1/P1-004-sandbox-backed-child-status.md"
+    },
+    {
+      "id": "P1-005",
+      "title": "Plan Phase 1 increment 3: actual child status",
+      "phase": 1,
+      "phase_name": "Sandbox exchange",
+      "status": "pending",
+      "depends_on": [
+        "P1-003"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/P1-005-plan-actual-child-status.md"
     }
   ]
 }
