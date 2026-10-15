@@ -132,6 +132,8 @@ PAGE = r"""<!doctype html>
   button.icon-button .icon {{ opacity: .85; }}
   button.icon-button:hover {{ background: #dc262622; }}
   button.icon-button:hover .icon {{ opacity: 1; }}
+  button.icon-button.rebase {{ color: #2563eb; }}
+  button.icon-button.rebase:hover {{ background: #2563eb22; }}
   .pr-icon {{ display: inline-flex; padding: .25rem; border-radius: 6px; color: inherit;
     text-decoration: none; }}
   .pr-icon:not([data-state="blocked"]) {{ cursor: pointer; }}
@@ -229,6 +231,8 @@ Implement run Codex on the task branch; merge refinement changes there before st
 implementation. Audit starts a Claude cloud session for an open implementation pull request into
 that branch. Repeating a stage at the same revision — the branch's, or the pull request's for
 Audit — returns the conversation it already opened, so submit again after the revision moves on.
+Rebase replays the task branch onto main and its open implementation pull requests onto the
+result, force-pushing them together or not at all.
 Expire releases a local reservation. No expiry cancels a cloud task or removes a link.</p>
 <script>
   const result = document.getElementById("result");
@@ -295,7 +299,7 @@ Expire releases a local reservation. No expiry cancels a cloud task or removes a
     if (token.value && window.isSecureContext) await signIn();
     return await request(endpoint, body === undefined ? {{}} : body);
   }}
-  // Sync, Prepare and Expire all change what the whole page says, so each ends in a reload.
+  // Sync, Prepare, Rebase and Expire all change what the whole page says, so each ends in a reload.
   document.querySelectorAll("[data-action]").forEach(button => {{
     button.onclick = async () => {{
       // A destructive action names what it destroys and runs only once the operator agrees.
@@ -316,6 +320,11 @@ Expire releases a local reservation. No expiry cancels a cloud task or removes a
             data = await request("api/sync/" + encodeURIComponent(data.id));
           }}
           if (data.status === "failed") throw new Error(data.error);
+        }}
+        // Nothing moved, so there is nothing for a reload to show.
+        if (action === "rebase" && !data.rebased) {{
+          showMessage("task/" + button.dataset.task + " already contains main.");
+          return;
         }}
         window.location.reload();
       }} catch (error) {{
@@ -622,6 +631,14 @@ EXPIRE_ICON = (
     'stroke-linecap="round"/></svg>'
 )
 
+# A branch whose tip moves onto a new base, for rebasing a task's branch onto main.
+REBASE_ICON = (
+    '<svg class="icon" viewBox="0 0 24 24" role="img" aria-label="Rebase">'
+    '<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/>'
+    '<circle cx="18" cy="5" r="2"/><path d="M6 7v10M18 7c0 6-6 5-10 11"/></g></svg>'
+)
+
 STAGES = ("refine", "implement", "audit")
 # Who runs each stage, named where an uncertain submission must be checked by hand.
 SERVICES = {"refine": "Codex", "implement": "Codex", "audit": "Claude"}
@@ -675,6 +692,14 @@ def actions_for(entry: dict[str, Any], runnable: set[str]) -> str:
     if preparable(entry, runnable):
         actions += button("prepare", entry["id"], "Prepare",
                           hint="Refresh main, claim a scheduler slot, and prepare this branch.")
+    if entry["local"] and entry["prepared"] and entry["status"] != "completed":
+        actions += button("rebase", entry["id"], REBASE_ICON,
+                          hint="Rebase this task's branch onto main, and its open implementation "
+                               "pull requests onto the result.",
+                          css="icon-button rebase",
+                          confirm=f"Rebase task/{entry['id']} onto main? This force-pushes the "
+                                  "task branch and the head branch of every open pull request "
+                                  "into it. Nothing is pushed if any of them conflicts.")
     if entry["local"] and entry["status"] != "completed":
         actions += button("expire", entry["id"], EXPIRE_ICON,
                           hint="Release this task's scheduler slot, delete its branch, and "
