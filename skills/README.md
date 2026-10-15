@@ -34,6 +34,7 @@ skills/
 | [`close-phase`](close-phase/SKILL.md) | phase closer | Explicitly ending a phase and preserving its system record |
 | [`propagate-task`](propagate-task/SKILL.md) | task agent or maintainer | Routing audit findings to tasks/issues and opening a new-branch propagation PR into the task branch |
 | [`reflect-task`](reflect-task/SKILL.md) | task agent or maintainer | Finding flaws in the development methodology and improving its planning, handoffs, and decisions |
+| [`refine-guidance`](refine-guidance/SKILL.md) | maintainer, in an interactive session | Removing redundant and outdated instructions, unused skills, and gaps across docs, skills, and agent extensions, with approval for each change |
 
 Use different authors for phase design and task derivation. Derivation,
 refinement, implementation, and audit of a task are separate assignments.
