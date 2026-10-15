@@ -25,6 +25,7 @@ skills/
 | [`extend-phase`](extend-phase/SKILL.md) | phase author | Adding coverage to an existing phase |
 | [`revise-phase`](revise-phase/SKILL.md) | phase author | Changing increment boundaries or order |
 | [`audit-phase`](audit-phase/SKILL.md) | independent phase auditor | Judging phase design, task coverage, graph, and completion |
+| [`phase-increment-handoff`](phase-increment-handoff/SKILL.md) | phase-design or increment-derivation task author | Ending that task by adding the single planning-shape task that derives the phase's next increment |
 | [`derive-task`](derive-task/SKILL.md) | task author, separate from phase author | Deriving one brief or rederiving a pending brief and its graph records |
 | [`refine-task`](refine-task/SKILL.md) | task refiner | Making a derived brief concrete against dispatch-time code |
 | [`implement-task`](implement-task/SKILL.md) | task implementer | Building, verifying, and opening the task PR |
@@ -33,6 +34,7 @@ skills/
 | [`close-phase`](close-phase/SKILL.md) | phase closer | Explicitly ending a phase and preserving its system record |
 | [`propagate-task`](propagate-task/SKILL.md) | task agent or maintainer | Routing audit findings to tasks/issues and opening a new-branch propagation PR into the task branch |
 | [`reflect-task`](reflect-task/SKILL.md) | task agent or maintainer | Finding flaws in the development methodology and improving its planning, handoffs, and decisions |
+| [`refine-guidance`](refine-guidance/SKILL.md) | maintainer, in an interactive session | Removing redundant and outdated instructions, unused skills, and gaps across docs, skills, and agent extensions, with approval for each change |
 
 Use different authors for phase design and task derivation. Derivation,
 refinement, implementation, and audit of a task are separate assignments.

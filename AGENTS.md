@@ -42,6 +42,10 @@ subtree.
 
 ## Rules that bind every task
 
+### Read files with the reading tools
+
+Read files with Read/Search tools. When attempting a read-only complex command, explain what you are trying to do before executing.
+
 ### Change files with the editing tools
 
 Change files with Edit and Write tools. Always ask for permission when using
