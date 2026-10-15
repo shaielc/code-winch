@@ -100,7 +100,10 @@ Run, in this order:
 3. **The standing scenario suite**, unchanged, against the profile or substrate
    the brief names.
 4. **The Demonstration, by hand, exactly as written.** Record the commands and
-   what you actually saw, not what the brief predicted.
+   what you actually saw, not what the brief predicted. If following it literally
+   would change a deployment you do not own, run the same check where the
+   project's deployment and test instructions say demonstrations run, record
+   the substitution, and report the brief's command as a plan finding.
 
 If the demonstration cannot produce the stated result, either the change is
 incomplete or the brief no longer matches the system. Correct the brief in the

@@ -58,6 +58,10 @@ output, or a `file:line`. A claim with neither is unmet.
    into one verdict.
 2. **Demonstration** — run it as written. Record any discrepancy as a finding
    and classify it; passing tests do not replace an observed demonstration.
+   If following it literally would change a deployment you do not own, run the
+   same check where the project's deployment and test instructions say
+   demonstrations run, record the substitution, and report the brief's command
+   as a plan finding.
 3. **Runtime reachability** — find the registration in the composition root and
    the profile or command that reaches the code. A port whose only
    implementations are test doubles, or an implementation nothing constructs, is
@@ -97,6 +101,12 @@ For example, rejected-button focus behavior may be a non-blocking Defect
 requiring human disposition; test coverage weaknesses may be Harden; stable
 identity for persisted submissions may be Deferrable if a person assigns it
 downstream.
+
+A check you could not run is a limit of this audit, not a finding against the
+implementation. Under that check, say what did not run and why, and mark the
+audit **partial**. Merge readiness then waits on a later audit at the same head
+that runs the check, or on a person's recorded acceptance of the gap. Classify
+only what you observed.
 
 ### Audit state
 
