@@ -2,7 +2,7 @@
 
 ## Outcome and starting point
 
-At exit, a contributor can locate a reviewed, bounded phase design and an assignable specific implementation brief for each planned implementation phase, with status, dependencies, and coverage recorded consistently. Phase 0 holds meta tasks. It produces planning artifacts and design-set updates only; it does not implement roadmap capabilities.
+At exit, a contributor can locate a reviewed, bounded phase design and an assignable specific implementation brief for each planned implementation phase, with status, dependencies, and coverage recorded consistently. Phase 0 holds meta tasks. Its outputs are phase designs and their revisions, the briefs that convert an issue into tasks of the phase that owns the work, and revisions to the design set (architecture, contracts, security, code structure, roadmap, ADRs). It does not derive briefs from an increment a phase has already decided — that is the phase's own planning task — and it does not implement roadmap capabilities.
 
 The prior workplan was explicitly closed and `docs/workplan/tasks.json` was empty when Phase 0 opened (`docs/state.md`, `AGENTS.md`). The sandbox page and local composer exist; the fake harness is shipped but is not launched by the sandbox. Harness output, retained history, persisted input, and delivery are missing or unwired (`docs/state.md`). Runtime checks are limited by the verification caveats there. `docs/roadmap.md` fixes Stages 0–6; workplan phase numbering is distinct.
 
