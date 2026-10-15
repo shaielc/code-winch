@@ -56,6 +56,7 @@ Check, with evidence — a command with its observed output, or a `file:line`:
    refinement does not substitute for phase revision or task derivation.
 5. **Demonstration** — the tools and existing commands it uses are present where
    it will run, and each expectation can be observed without false matches.
+
 Then make the brief concrete, in the sections it already has:
 
 - **Scope** — implementation instructions written against the code at HEAD:
