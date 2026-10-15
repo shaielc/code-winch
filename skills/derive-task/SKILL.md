@@ -13,9 +13,10 @@ Derive one task at a time: architecture → phase author → task author → opt
 phase revision by the phase author → next task. Deriving another task does not
 require implementing the previous one first.
 
-For Phase 0, derive a planning brief using the model's planning shape. Name its
-target artifact, assigned phase/task-author operation, and handoff. Deriving
-this planning brief does not itself perform the planning operation it assigns.
+For Phase 0, derive a meta-task brief using the model's planning shape. Name its
+target artifact — a phase design, the briefs converted from an issue, or a
+design-set update — its assigned phase/task-author operation, and its handoff.
+Deriving this brief does not itself perform the operation it assigns.
 Every acceptance criterion must be checkable from the task's own artifacts;
 name the next operation in the handoff, not as a criterion.
 
@@ -60,8 +61,11 @@ before recording a deferral. Create no placeholders merely to supply an ID.
 
 ## Integrate the task
 
-1. Allocate the next plan-wide ID for new work. Preserve IDs when rederiving
-   pending briefs, and never renumber completed tasks.
+1. Allocate the next ID of the new task's own phase: one past the highest
+   `P<phase>-` number in `tasks.json`, never filling a gap. A brief derived by a
+   Phase 0 meta task takes its number from its target phase's sequence, not
+   Phase 0's. Preserve IDs when rederiving pending briefs, and never renumber
+   merged or completed tasks.
 2. Add or reconcile the brief, tracker entry, dependency reasons, index row,
    and phase coverage mapping together. Updating coverage does not authorize
    changing the phase's boundaries.

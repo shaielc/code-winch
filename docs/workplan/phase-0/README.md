@@ -2,7 +2,7 @@
 
 ## Outcome and starting point
 
-At exit, a contributor can locate a reviewed, bounded phase design and an assignable specific implementation brief for each planned implementation phase, with status, dependencies, and coverage recorded consistently. Phase 0 produces planning artifacts only; it does not implement roadmap capabilities.
+At exit, a contributor can locate a reviewed, bounded phase design and an assignable specific implementation brief for each planned implementation phase, with status, dependencies, and coverage recorded consistently. Phase 0 holds meta tasks. It produces planning artifacts and design-set updates only; it does not implement roadmap capabilities.
 
 The prior workplan was explicitly closed and `docs/workplan/tasks.json` was empty when Phase 0 opened (`docs/state.md`, `AGENTS.md`). The sandbox page and local composer exist; the fake harness is shipped but is not launched by the sandbox. Harness output, retained history, persisted input, and delivery are missing or unwired (`docs/state.md`). Runtime checks are limited by the verification caveats there. `docs/roadmap.md` fixes Stages 0–6; workplan phase numbering is distinct.
 
@@ -20,8 +20,12 @@ Sources: [roadmap](../../roadmap.md), [state](../../state.md), [architecture](..
 | Control-plane ownership of lifecycle | 0.5 → implementation Phase 5 / roadmap Stage 4 |
 | Enforced isolation, secrets and egress | 0.6 → implementation Phase 6 / roadmap Stage 5 |
 | Second adapter and cross-run workflows | 0.7 → implementation Phase 7 / roadmap Stage 6 |
+| Converting an implementation-scope issue into phase tasks | Phase 0 meta task assigning derivation; the brief lands in the owning phase and takes its ID from that phase's own counter |
+| Architecture and design-set updates (`docs/architecture.md`, `contracts.md`, `security.md`, `code-structure.md`, `roadmap.md`, ADRs) | Phase 0 meta task, with the affected phase designs and briefs reconciled; an update that travels with an implementation task's own contract change stays in that task |
 | Product implementation and code changes | Respective implementation phases, never Phase 0 |
 | Revisions and issue-resolution follow-ups | Route through Phase 0 planning/coverage and the relevant phase author; do not silently change scope |
+
+Phase 0 IDs count on their own (`P0-<NNN>`); see [Task IDs](../README.md#task-ids). A Phase 0 task and the Phase 1 brief it derives do not share a sequence.
 
 ## Ordered planning increments
 
@@ -61,4 +65,4 @@ The actual dependency graph and concurrent write warnings are recorded in the wo
 
 ## Phase exit
 
-All seven phase designs have explicit baseline, ordered increments, prerequisites, boundaries, exit observations and coverage; separately authored specific briefs cover their actionable increments; `tasks.json`, the index, write/contract collision analysis and dependency graph agree. The reviewed artifacts, rather than runtime demonstrations of unimplemented product features, are the acceptance evidence. Phase 0 remains the front door for future planning and scope/issue resolution.
+All seven phase designs have explicit baseline, ordered increments, prerequisites, boundaries, exit observations and coverage; separately authored specific briefs cover their actionable increments; `tasks.json`, the index, write/contract collision analysis and dependency graph agree. The reviewed artifacts, rather than runtime demonstrations of unimplemented product features, are the acceptance evidence. Phase 0 remains the front door for future planning, design-set updates and scope/issue resolution.

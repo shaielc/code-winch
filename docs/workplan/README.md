@@ -1,14 +1,14 @@
 # Code Winch workplan
 
-This is a new planning workplan. The previous plan was closed; no former pending task is silently restored. The roadmap defines product Stages 0–6, while Phase 0 controls planning and implementation begins at Phase 1.
+This is a new planning workplan. The previous plan was closed; no former pending task is silently restored. The roadmap defines product Stages 0–6, while Phase 0 holds meta tasks — planning phases, converting issues into phase tasks, and updating the architecture and design set — and implementation begins at Phase 1.
 
-**All future planning, planning revisions, and resolution of implementation-scope issues must enter through [Phase 0](phase-0/README.md).** Consult the active phase and `docs/state.md`, record the disposition through the applicable skill, and update Phase 0 coverage and this index. An implementation finding must not be treated as authorization to skip phase revision, task derivation or separate-author review.
+**All future planning, planning revisions, design-set updates, and resolution of implementation-scope issues must enter through [Phase 0](phase-0/README.md).** A design-document update that travels with an implementation task's own contract change stays in that task. Consult the active phase and `docs/state.md`, record the disposition through the applicable skill, and update Phase 0 coverage and this index. An implementation finding must not be treated as authorization to skip phase revision, task derivation or separate-author review.
 
 ## Phases
 
 | Phase | Roadmap milestone | Design | Brief coverage |
 |---|---|---|---|
-| [0](phase-0/README.md) | Planning and issue-resolution coordination | Open | Seven phase-design planning briefs; first two Phase 1 implementation briefs derived |
+| [0](phase-0/README.md) | Meta tasks: phase planning, issue conversion, design-set updates | Open | Seven phase-design planning briefs; first two Phase 1 implementation briefs derived |
 | [1](phase-1/README.md) | Stage 0 — sandbox exchange | Repartitioned into 30 experience-led increments; independent re-audit pending | Child-status presentation brief P1-009 and sandbox-backed status brief P1-011 derived |
 | 2 | Stage 1 — first real vendor | Scheduled via 0.2 | Not yet derived |
 | 3 | Stage 2 — structured views and resume | Scheduled via 0.3 | Not yet derived |
@@ -23,6 +23,23 @@ This is a new planning workplan. The previous plan was closed; no former pending
 2. Hand its increments to a **different task author** using `skills/derive-task/SKILL.md`; derive one complete task at a time and reconcile the brief, tracker, dependency reasons, coverage and index. Do not confuse a planning brief with its assigned planning operation.
 3. Use the refinement, implementation, audit and phase-revision skills with their prescribed independent authors/PR boundaries. Route scope defects and issue resolution back to Phase 0 rather than bypassing the plan.
 4. Keep status changes under repository automation; do not claim completion from an empty tracker.
+
+## Task IDs
+
+IDs are `P<phase>-<NNN>` and **each phase counts on its own**: `P0-123` and
+`P1-123` are different tasks and both valid. The next ID in a phase is one past
+the highest number carrying that prefix; gaps are never filled. Meta work in
+Phase 0 and derivation in Phase 1 therefore never compete for a number, and a
+brief that a Phase 0 task derives takes its ID from its target phase. The rule
+is defined in [the workplan model](../../skills/shared/workplan-model.md).
+
+Existing IDs keep their identity. They were numbered from one plan-wide counter
+before this rule, so each phase continues after its own highest number: when
+per-phase counting began, P0 stood at `P0-010` and P1 at `P1-011`, making
+`P0-011` and `P1-012` the next IDs. The numbers the old counter spent in the
+other phase (`P0-009`, `P1-001`–`P1-008`, `P1-010`) are gaps and stay unused;
+for `009` and `010` this keeps a bare "009" or "010" in older pull requests and
+briefs naming exactly one task.
 
 ## Phase dependency and exit rules
 
@@ -91,6 +108,8 @@ Contract collisions: **none** in this derived graph. P1-009 owns the accessible
 static `Child status: Unknown` presentation; P1-011 consumes and preserves that
 identity while uniquely owning the additive `/api/session` `childStatus: "Down"`
 contract and its validated replacement behavior. Their semantic edge prevents
-concurrent redefinition. Planning tasks change no product contract. Required
-changes to shared product meaning must return through Phase 0 for phase-author
-disposition and graph reconciliation before assignment.
+concurrent redefinition. Phase 0 meta tasks change no running product behavior;
+a meta task that revises the design set's meaning of a contract surface declares
+that surface, so implementation tasks consuming it are ordered by the usual
+contract rule. Required changes to shared product meaning must return through
+Phase 0 for phase-author disposition and graph reconciliation before assignment.
