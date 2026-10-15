@@ -58,8 +58,10 @@ output, or a `file:line`. A claim with neither is unmet.
    into one verdict.
 2. **Demonstration** — run it as written. Record any discrepancy as a finding
    and classify it; passing tests do not replace an observed demonstration.
-   If following it literally would change a deployment you do not own, use the
-   model's [demonstration environment](../shared/workplan-model.md#demonstration-environment).
+   If following it literally would change a deployment you do not own, run the
+   same check where the project's deployment and test instructions say
+   demonstrations run, record the substitution, and report the brief's command
+   as a plan finding.
 3. **Runtime reachability** — find the registration in the composition root and
    the profile or command that reaches the code. A port whose only
    implementations are test doubles, or an implementation nothing constructs, is

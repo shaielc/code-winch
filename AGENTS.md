@@ -127,6 +127,15 @@ cover lint, so say which gates you ran. `make e2e` (host Go, through the local p
 and `make docker-e2e` (toolchain) only run the scenarios against an environment
 already started by `make test-env`, which is named after the current branch.
 
+A demonstration that starts the system runs in that per-branch environment:
+`make test-env`, then `http://127.0.0.1:$PROXY_PORT/<project>/sandbox/` (see
+`deployments/README.md`), then `make test-env-down`. The default compose project
+(`code-winch`, `127.0.0.1:8080`) is also the operator's deployment
+(`make main-up`), so `docker compose -f deployments/compose.yml up`/`down` can
+rebuild or remove it. A check that needs the host-published port, such as
+loopback-only publication, says so, first confirms that no `code-winch`
+deployment holds it, and stops rather than replacing one.
+
 Then run everything your brief lists under **Verification**. That is the minimum
 evidence expected in the pull request, not a ceiling.
 
