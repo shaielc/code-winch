@@ -28,6 +28,7 @@ skills/
 | [`phase-increment-handoff`](phase-increment-handoff/SKILL.md) | phase-design or increment-derivation task author | Ending that task by adding the single planning-shape task that derives the phase's next increment |
 | [`derive-task`](derive-task/SKILL.md) | task author, separate from phase author | Deriving one brief or rederiving a pending brief and its graph records |
 | [`refine-task`](refine-task/SKILL.md) | task refiner | Making a derived brief concrete against dispatch-time code |
+| [`review-refinement`](review-refinement/SKILL.md) | refinement reviewer | Judging a refinement against the original brief: problems found, size, scope, value and cost |
 | [`implement-task`](implement-task/SKILL.md) | task implementer | Building, verifying, and opening the task PR |
 | [`audit-task`](audit-task/SKILL.md) | independent task auditor | Judging the implementation against its accepted brief |
 | [`task-implement-merge`](task-implement-merge/SKILL.md) | implementation merge operator | Checking the current audit, obtaining finding verdicts, and merging implementation into the task branch |
