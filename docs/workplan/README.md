@@ -2,7 +2,7 @@
 
 This is a new planning workplan. The previous plan was closed; no former pending task is silently restored. The roadmap defines product Stages 0–6, while Phase 0 holds meta tasks — planning phases, converting issues into phase tasks, and updating the architecture and design set — and implementation begins at Phase 1.
 
-**All future planning, planning revisions, design-set updates, and resolution of implementation-scope issues must enter through [Phase 0](phase-0/README.md).** A design-document update that travels with an implementation task's own contract change stays in that task. Consult the active phase and `docs/state.md`, record the disposition through the applicable skill, and update Phase 0 coverage and this index. An implementation finding must not be treated as authorization to skip phase revision, task derivation or separate-author review.
+**Phase design and revision, design-set updates, and the conversion of implementation-scope issues into phase tasks must enter through [Phase 0](phase-0/README.md).** A design-document update that travels with an implementation task's own contract change stays in that task. Deriving briefs from an increment a phase has already decided is that phase's own planning task, numbered in that phase. Consult the active phase and `docs/state.md`, record the disposition through the applicable skill, and update Phase 0 coverage and this index. An implementation finding must not be treated as authorization to skip phase revision, task derivation or separate-author review.
 
 ## Phases
 
@@ -29,13 +29,14 @@ This is a new planning workplan. The previous plan was closed; no former pending
 IDs are `P<phase>-<NNN>` and **each phase counts on its own**: `P0-123` and
 `P1-123` are different tasks and both valid. The next ID in a phase is one past
 the highest number carrying that prefix; gaps are never filled. Meta work in
-Phase 0 and derivation in Phase 1 therefore never compete for a number, and a
-brief that a Phase 0 task derives takes its ID from its target phase. The rule
-is defined in [the workplan model](../../skills/shared/workplan-model.md).
+Phase 0 and planning in Phase 1 therefore never compete for a number, and a
+phase's planning tasks and the briefs they derive share that phase's sequence.
+The brief an issue conversion produces takes its ID from the phase that owns
+the work. The rule is defined in [the workplan model](../../skills/shared/workplan-model.md).
 
-Existing IDs keep their identity. They were numbered from one plan-wide counter
-before this rule, so each phase continues after its own highest number: when
-per-phase counting began, P0 stood at `P0-010` and P1 at `P1-011`, making
+The current IDs were numbered from one plan-wide counter before this rule, so
+until they are re-enumerated each phase continues after its own highest number:
+when per-phase counting began, P0 stood at `P0-010` and P1 at `P1-011`, making
 `P0-011` and `P1-012` the next IDs. The numbers the old counter spent in the
 other phase (`P0-009`, `P1-001`–`P1-008`, `P1-010`) are gaps and stay unused;
 for `009` and `010` this keeps a bare "009" or "010" in older pull requests and

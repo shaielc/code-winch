@@ -25,7 +25,7 @@ Sources: [roadmap](../../roadmap.md), [state](../../state.md), [architecture](..
 | Product implementation and code changes | Respective implementation phases, never Phase 0 |
 | Revisions and issue-resolution follow-ups | Route through Phase 0 planning/coverage and the relevant phase author; do not silently change scope |
 
-Phase 0 IDs count on their own (`P0-<NNN>`); see [Task IDs](../README.md#task-ids). A Phase 0 task and the Phase 1 brief it derives do not share a sequence.
+Phase 0 IDs count on their own (`P0-<NNN>`); see [Task IDs](../README.md#task-ids). Only meta tasks are Phase 0 tasks. A phase's own planning task, which derives briefs from an increment that phase has decided, belongs to that phase and shares its sequence with the briefs it derives.
 
 ## Ordered planning increments
 

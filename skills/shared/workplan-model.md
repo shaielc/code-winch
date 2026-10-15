@@ -57,12 +57,13 @@ a separate task author derives briefs with `skills/derive-task/SKILL.md`.
 
 ## Phase 0 — meta tasks
 
-Phase 0 is reserved for **meta tasks**: work on the plan and the design set
-rather than on running product behavior. Product implementation starts in
-Phase 1. Roadmap stage numbers describe product milestones and need not equal
-workplan phase numbers. A new workplan starts with the Phase 0 artifact, whose
-increments schedule its first meta tasks. Planning a specific brief depends on
-its target phase's decided artifact, not on implementation of that phase.
+Phase 0 is still the planning phase, reserved for **meta tasks**: planning work
+on the plan and the design set that sits above any one phase. Product
+implementation starts in Phase 1, and a phase's own task-level planning belongs
+to that phase (see *Planning inside a phase*). Roadmap stage numbers describe
+product milestones and need not equal workplan phase numbers. A new workplan
+starts with the Phase 0 artifact, whose increments schedule its first meta
+tasks.
 
 Three kinds of meta task are expected; the list is not closed:
 
@@ -72,32 +73,49 @@ Three kinds of meta task are expected; the list is not closed:
 | Converting issues into phase tasks | Specific briefs in the phase that owns the work, with tracker, index and coverage records; an issue that fits no increment goes to the phase author as a phase revision first |
 | Updating the architecture | A revised design-set document or ADR (`docs/architecture.md`, `contracts.md`, `security.md`, `code-structure.md`, `roadmap.md`, `docs/decisions/`) with the affected phase designs reconciled |
 
-A task whose result changes what the product does when run is Phase 1 or later.
-A task whose result changes only the plan or the design set is Phase 0. A
-design-document update that travels with an implementation task's own contract
+What the work is about decides the phase:
+
+- It changes what the product does when run: an implementation task of the
+  phase that owns the behavior.
+- It derives briefs from an increment its phase has already decided: a planning
+  task of that phase, not Phase 0.
+- It changes only the plan or the design set above any single phase — a phase
+  design, an issue not yet attached to a phase, the architecture: Phase 0.
+
+A design-document update that travels with an implementation task's own contract
 change stays in that task; any other design-set update is a Phase 0 meta task.
 
-Illustrative meta-task titles and their outputs:
+### Planning inside a phase
 
-| Title | Output |
-|---|---|
-| Plan phase-1: single sandbox | The phase artifact with ordered increments and explicit boundaries |
-| Plan P0-001: sandbox UI-only input | A specific brief for the UI-only input increment |
-| Plan P0-002: Send UI input to harness | A specific brief for the input-delivery increment |
-| Convert issue: input is lost on reconnect | The brief(s) that carry the issue's fix, in the phase that owns it |
-| Update architecture: run ownership | The revised design document or ADR and the reconciled phase designs |
+Deriving a decided increment into a specific brief is that phase's own
+planning, not meta work. It is a task of the phase whose increment it derives:
+`Shape: planning`, numbered from that phase's counter, and the briefs it
+produces are numbered from the same counter. Its one dependency on another
+phase is semantic, on the Phase 0 task whose phase design decided the increment.
+Planning in Phase 1 and in Phase 2 at once therefore never competes for a
+number, and Phase 0 stays reserved for work that really is above them.
 
-The examples allocate no IDs or live owners. In `Plan <ID>`, the title names
-the target brief; the meta task has its own tracker ID. Use an existing
-target's real ID, or name the increment until its brief is derived. Preserve
-existing IDs when moving tasks; new implementation tasks belong to Phase 1 or
-later and take their ID from the phase they belong to, never from Phase 0's
-sequence.
+Illustrative titles and their outputs:
+
+| Title | Phase | Output |
+|---|---|---|
+| Plan phase-1: single sandbox | 0 | The phase artifact with ordered increments and explicit boundaries |
+| Convert issue: input is lost on reconnect | 0 | The brief(s) that carry the issue's fix, in the phase that owns it |
+| Update architecture: run ownership | 0 | The revised design document or ADR and the reconciled phase designs |
+| Plan increment: sandbox UI-only input | 1 | A specific brief for the UI-only input increment |
+| Plan increment: send UI input to harness | 1 | A specific brief for the input-delivery increment |
+
+The examples allocate no IDs or live owners. A planning task's title names the
+increment it derives, or the target brief's real ID once one exists; the
+planning task has its own tracker ID in its phase's sequence. Preserve existing
+IDs when moving tasks.
 
 Phase authors use the phase skills; a different author derives each specific
 brief. Completing a planning task proves its artifact is ready for that handoff,
 not that the capability it describes exists. Planning tasks preserve existing
-runtime behavior without having to implement their target capabilities.
+runtime behavior without having to implement their target capabilities. Planning
+a specific brief depends on its phase's decided artifact, not on implementation
+of that phase.
 
 ## The seven invariants
 
@@ -238,9 +256,9 @@ the same task that introduces it.
 
 State the task's shape in its brief header.
 
-**Planning** — the shape of every Phase 0 meta task. Produces a phase design,
-derived task briefs, or a design-set update, with the matching index, coverage,
-and tracker records. Demonstration: review the named artifact,
+**Planning** — the shape of Phase 0 meta tasks and of a phase's own
+brief-derivation tasks. Produces a phase design, derived task briefs, or a
+design-set update, with the matching index, coverage, and tracker records. Demonstration: review the named artifact,
 its boundaries, references, and handoff; use `audit-phase` for phase designs.
 Acceptance concerns the artifact, not implementation of its predicted behavior.
 Use the assigned phase or task-author skill to produce it.
@@ -567,8 +585,8 @@ Consequences to respect:
 - The next ID in a phase is one past the highest number among existing IDs that
   carry that `P<phase>-` prefix. Gaps are never filled and numbers are never
   reused. Separate counters mean authors working in different phases — Phase 0
-  meta work beside a Phase 1 derivation — never contend for a number; only two
-  authors adding to the same phase can. Of two unmerged branches that take the
+  meta work beside Phase 1 planning, or Phase 1 planning beside Phase 2 planning
+  — never contend for a number; only two authors adding to the same phase can. Of two unmerged branches that take the
   same number, the one that merges second renumbers its own new IDs, which no
   merged record cites yet.
 - IDs are append-only once merged. Merged pull requests, dispatch history, and
