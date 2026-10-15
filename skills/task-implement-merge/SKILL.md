@@ -19,9 +19,7 @@ and audit lineage. This operation merges only that implementation PR.
 2. Find an independent audit that explicitly covers this implementation PR's
    **current head SHA**. Read its full findings and later reports or decisions.
    An approval, resolved thread, passing CI, or audit of an older head is not
-   a current audit. **If there is no current audit, refuse to merge.** A
-   partial audit covers only the checks it ran; each unrun check needs a later
-   audit at the same head or a person's recorded acceptance of the gap.
+   a current audit. **If there is no current audit, refuse to merge.**
 3. **If the current audit has any Blocking finding, refuse to merge.** Report
    each blocker and the condition for a new audit. Do not override or downgrade
    it because a person accepted a different finding or a follow-up issue exists.
