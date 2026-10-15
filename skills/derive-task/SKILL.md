@@ -66,14 +66,9 @@ before recording a deferral. Create no placeholders merely to supply an ID.
 
 ## Integrate the task
 
-1. Allocate the next ID of the new task's own phase: one past the highest
-   `P<phase>-` number in `tasks.json`, never filling a gap. A task that derives
-   a decided increment is a task of that increment's phase, and the briefs it
-   produces take their numbers from the same sequence. Only a Phase 0 meta task
-   — an issue conversion, a phase design, a design-set update — takes a Phase 0
-   number, and the briefs an issue conversion produces take their numbers from
-   the phase that owns the work. Preserve IDs when rederiving pending briefs,
-   and never renumber merged or completed tasks.
+1. Allocate the next ID in the task's own phase (see *The tracker* in
+   [the model](../shared/workplan-model.md)) for new work. Preserve IDs when
+   rederiving pending briefs, and never renumber completed tasks.
 2. Add or reconcile the brief, tracker entry, dependency reasons, index row,
    and phase coverage mapping together. Updating coverage does not authorize
    changing the phase's boundaries.
