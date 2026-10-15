@@ -111,7 +111,7 @@
       "title": "Present unknown child status",
       "phase": 1,
       "phase_name": "Sandbox exchange",
-      "status": "in_progress",
+      "status": "completed",
       "depends_on": [],
       "owner": null,
       "blocked_reason": null,
