@@ -58,56 +58,23 @@ a separate task author derives briefs with `skills/derive-task/SKILL.md`.
 ## Phase 0 — meta tasks
 
 Phase 0 is reserved for **meta tasks**: planning work on the plan and the design
-set that sits above any one phase. Product implementation starts in Phase 1, and
-a phase's own task-level planning belongs to that phase (see *Planning inside a
-phase*). Roadmap stage numbers describe product milestones and need not equal
-workplan phase numbers. A new workplan starts with the Phase 0 artifact, whose
-increments schedule its first meta tasks.
+set that sits above any one phase. Product implementation starts in Phase 1.
+Roadmap stage numbers describe product milestones and need not equal workplan
+phase numbers. A new workplan starts with the Phase 0 artifact, whose increments
+schedule its meta tasks.
 
-Three kinds of meta task are expected; the list is not closed:
+Meta tasks are:
 
-| Kind | Output |
-|---|---|
-| Planning phases | A phase design, or a revision of one, with ordered increments and explicit boundaries |
-| Converting issues into phase tasks | Specific briefs in the phase that owns the work, with tracker, index and coverage records; an issue that fits no increment goes to the phase author as a phase revision first |
-| Updating the architecture | A revised design-set document or ADR (`docs/architecture.md`, `contracts.md`, `security.md`, `code-structure.md`, `roadmap.md`, `docs/decisions/`) with the affected phase designs reconciled |
+- **Planning phases** — a phase design, or a revision of one.
+- **Converting issues into phase tasks** — briefs in the phase that owns the
+  work. An issue that fits no increment goes to the phase author as a phase
+  revision first.
+- **Updating the architecture** — a revised design-set document or ADR, with the
+  affected phase designs reconciled.
 
-What the work is about decides the phase:
-
-- It changes what the product does when run: an implementation task of the
-  phase that owns the behavior.
-- It derives briefs from an increment its phase has already decided: a planning
-  task of that phase, not Phase 0.
-- It changes only the plan or the design set above any single phase — a phase
-  design, an issue not yet attached to a phase, the architecture: Phase 0.
-
-A design-document update that travels with an implementation task's own contract
-change stays in that task; any other design-set update is a Phase 0 meta task.
-
-### Planning inside a phase
-
-Deriving a decided increment into a specific brief is that phase's own
-planning, not meta work. It is a task of the phase whose increment it derives:
-`Shape: planning`, numbered from that phase's counter, and the briefs it
-produces are numbered from the same counter. Its one dependency on another
-phase is semantic, on the Phase 0 task whose phase design decided the increment.
-Planning in Phase 1 and in Phase 2 at once therefore never competes for a
-number, and Phase 0 stays reserved for work that really is above them.
-
-Illustrative titles and their outputs:
-
-| Title | Phase | Output |
-|---|---|---|
-| Plan phase-1: single sandbox | 0 | The phase artifact with ordered increments and explicit boundaries |
-| Convert issue: input is lost on reconnect | 0 | The brief(s) that carry the issue's fix, in the phase that owns it |
-| Update architecture: run ownership | 0 | The revised design document or ADR and the reconciled phase designs |
-| Plan increment: sandbox UI-only input | 1 | A specific brief for the UI-only input increment |
-| Plan increment: send UI input to harness | 1 | A specific brief for the input-delivery increment |
-
-The examples allocate no IDs or live owners. A planning task's title names the
-increment it derives, or the target brief's real ID once one exists; the
-planning task has its own tracker ID in its phase's sequence. Preserve existing
-IDs when moving tasks.
+Deriving briefs from an increment a phase has already decided is that phase's
+own planning task, not Phase 0. A design update that travels with an
+implementation task's contract change stays in that task.
 
 Phase authors use the phase skills; a different author derives each specific
 brief. Completing a planning task proves its artifact is ready for that handoff,
@@ -574,31 +541,21 @@ Consequences to respect:
 - `blocked_reason` is a non-empty string when status is `blocked`, and `null`
   otherwise. The schema enforces this.
 - IDs are `P<phase>-<NNN>`: the phase number, then a three-digit counter that
-  starts at `001` **within that phase**. Every phase counts on its own, so
-  `P0-123` and `P1-123` are different tasks and both valid. `P0-001` is the first
-  meta task of a new plan and `P1-001` the first task of phase 1, however many
-  Phase 0 tasks exist. The phase number is open-ended — a plan derives as many
-  phases as its design set needs, and `tasks.schema.json` must not cap them.
-- The full ID is the key. A brief, branch, pull request, or tool never identifies
-  a task by its number alone.
-- The next ID in a phase is one past the highest number among existing IDs that
-  carry that `P<phase>-` prefix. Gaps are never filled and numbers are never
-  reused. Separate counters mean authors working in different phases — Phase 0
-  meta work beside Phase 1 planning, or Phase 1 planning beside Phase 2 planning
-  — never contend for a number; only two authors adding to the same phase can. Of two unmerged branches that take the
-  same number, the one that merges second renumbers its own new IDs, which no
-  merged record cites yet.
-- IDs are append-only once merged. Merged pull requests, dispatch history, and
-  cross-brief references all cite them; renumbering silently invalidates that
-  record. A task inserted logically "between" two others still gets the next
-  number of its phase.
+  starts at `001` within that phase. Each phase counts on its own, so `P0-123`
+  and `P1-123` are different tasks. The next ID in a phase is one past the
+  highest number carrying that prefix. The phase number is open-ended — a plan
+  derives as many phases as its design set needs, and `tasks.schema.json` must
+  not cap them.
+- IDs are append-only. Merged pull requests, dispatch history, and cross-brief
+  references all cite them; renumbering silently invalidates that record. A task
+  inserted logically "between" two others still gets the next number of its
+  phase.
 - `brief` paths are `phase-N/<id>-<slug>.md` and must resolve to a real file.
   The ID leads the filename so a phase directory lists in creation order.
 - An ID's phase prefix is frozen at creation; the `phase` field is authoritative.
   Moving a task between phases changes the field and the brief's directory and
   leaves the ID alone, so a stale prefix is expected and is not a defect. Never
-  reissue an ID to match a move. A moved task keeps its number in its original
-  prefix's sequence and consumes nothing from the destination phase's.
+  reissue an ID to match a move.
 - Status fields are stamped by automation when a pull request is approved
   (`scripts/stamp_task_completion.py`). An implementing change does not edit
   them.
