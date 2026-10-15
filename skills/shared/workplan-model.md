@@ -57,13 +57,12 @@ a separate task author derives briefs with `skills/derive-task/SKILL.md`.
 
 ## Phase 0 — meta tasks
 
-Phase 0 is still the planning phase, reserved for **meta tasks**: planning work
-on the plan and the design set that sits above any one phase. Product
-implementation starts in Phase 1, and a phase's own task-level planning belongs
-to that phase (see *Planning inside a phase*). Roadmap stage numbers describe
-product milestones and need not equal workplan phase numbers. A new workplan
-starts with the Phase 0 artifact, whose increments schedule its first meta
-tasks.
+Phase 0 is reserved for **meta tasks**: planning work on the plan and the design
+set that sits above any one phase. Product implementation starts in Phase 1, and
+a phase's own task-level planning belongs to that phase (see *Planning inside a
+phase*). Roadmap stage numbers describe product milestones and need not equal
+workplan phase numbers. A new workplan starts with the Phase 0 artifact, whose
+increments schedule its first meta tasks.
 
 Three kinds of meta task are expected; the list is not closed:
 
