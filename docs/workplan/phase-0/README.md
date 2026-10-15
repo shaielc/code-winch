@@ -41,13 +41,13 @@ Phase 0 IDs count on their own (`P0-<NNN>`); see [Task IDs](../README.md#task-id
 
 The seven rows are a **planning handoff order**, not invented implementation dependency edges. Each phase design must be created by a phase author using `create-phase`; a different author then uses `derive-task` to derive **one specific brief at a time** and reconcile tracker, index, coverage, dependencies and collisions. Planning a brief depends on the target phase design, not on implementation of the preceding phase. Later phases must be rechecked against HEAD when their roadmap triggers arrive.
 
-Each increment is named for the phase it plans, "Plan Phase 1" to "Plan Phase 7", so a reference survives a change of order. Completed briefs P0-001, P0-008 and P0-010 cite the same increments in an earlier dotted form; read `0.N` there as "Plan Phase N".
+Each increment is named for the phase it plans, "Plan Phase 1" to "Plan Phase 7", so a reference survives a change of order. Completed briefs P0-001, P1-001 and P1-003 cite the same increments in an earlier dotted form; read `0.N` there as "Plan Phase N".
 
 ## Task coverage
 
 | Increment | Phase design | Specific-brief coverage |
 |---|---|---|
-| Plan Phase 1 (order 1) | [P0-001](P0-001-plan-phase-1-sandbox-exchange.md) assigns the authored and independently audited [Phase 1 sandbox-exchange design](../phase-1/README.md) plus a tracked follow-up | [P0-008](P0-008-plan-owned-live-harness-output.md) independently derived [P1-009](../phase-1/P1-009-child-status-presentation.md) for increment 1; [P0-010](P0-010-plan-sandbox-backed-child-status.md) independently derives [P1-011](../phase-1/P1-011-sandbox-backed-child-status.md) for increment 2 |
+| Plan Phase 1 (order 1) | [P0-001](P0-001-plan-phase-1-sandbox-exchange.md) assigns the authored and independently audited [Phase 1 sandbox-exchange design](../phase-1/README.md) plus a tracked follow-up | [P1-001](../phase-1/P1-001-plan-owned-live-harness-output.md) independently derived [P1-002](../phase-1/P1-002-child-status-presentation.md) for increment 1; [P1-003](../phase-1/P1-003-plan-sandbox-backed-child-status.md) independently derives [P1-004](../phase-1/P1-004-sandbox-backed-child-status.md) for increment 2 |
 | Plan Phase 2 (order 2) | [P0-002](P0-002-plan-phase-2-first-real-vendor.md) assigns design plus tracked follow-up for phase-2 design; **not yet authored** | **Not yet derived** |
 | Plan Phase 3 (order 3) | [P0-003](P0-003-plan-phase-3-structured-views-resume.md) assigns design plus tracked follow-up for phase-3 design; **not yet authored** | **Not yet derived** |
 | Plan Phase 4 (order 4) | [P0-004](P0-004-plan-phase-4-observe-sandboxes.md) assigns design plus tracked follow-up for phase-4 design; **not yet authored** | **Not yet derived** |
@@ -55,9 +55,9 @@ Each increment is named for the phase it plans, "Plan Phase 1" to "Plan Phase 7"
 | Plan Phase 6 (order 6) | [P0-006](P0-006-plan-phase-6-enforce-isolation.md) assigns design plus tracked follow-up for phase-6 design; **not yet authored** | **Not yet derived** |
 | Plan Phase 7 (order 7) | [P0-007](P0-007-plan-phase-7-second-adapter-workflows.md) assigns design plus tracked follow-up for phase-7 design; **not yet authored** | **Not yet derived** |
 
-Coverage remains partial: P1-009 and P1-011 are the first two derived Phase 1
-implementation briefs and await separate refinement and implementation. P1-011
-consumes P1-009; all later Phase 1 briefs remain not yet derived, and no later
+Coverage remains partial: P1-002 and P1-004 are the first two derived Phase 1
+implementation briefs and await separate refinement and implementation. P1-004
+consumes P1-002; all later Phase 1 briefs remain not yet derived, and no later
 implementation ID has been reserved. The other phase designs and specific-brief
 coverage likewise remain pending.
 
