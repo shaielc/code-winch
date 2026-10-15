@@ -1,8 +1,8 @@
-# P0-010: Plan Phase 1 increment 2: sandbox-backed child status
+# P1-003: Plan Phase 1 increment 2: sandbox-backed child status
 
-**Phase:** 0 — Plan the implementation phases
+**Phase:** 1 — Sandbox exchange
 **Shape:** planning
-**Dependencies:** P0-008 (semantic: the assigned brief must consume the independently derived child-status presentation boundary and preserve its label/value contract while replacing the browser constant)
+**Dependencies:** P1-001 (semantic: the assigned brief must consume the independently derived child-status presentation boundary and preserve its label/value contract while replacing the browser constant)
 
 ## Objective
 
@@ -15,13 +15,13 @@ browser-only constant with sandbox-owned observation that truthfully reports
 ## Scope
 
 Use `skills/derive-task/SKILL.md` against the reviewed Phase 1 design, the
-completed P0-008 planning output, and code at HEAD. Derive exactly increment 2.
+completed P1-001 planning output, and code at HEAD. Derive exactly increment 2.
 Inspect the existing attach server and page before deciding the minimum status
 transport and maintained hand path. Preserve increment 1's accessible child
 status identity while moving authority to the sandbox. Do not combine increment
 3's child launch, ownership, cleanup, or `Running`/`Exited` behavior.
 
-Allocate the next plan-wide implementation ID only when its complete brief and
+Allocate the next Phase 1 implementation ID only when its complete brief and
 matching tracker entry exist. Reconcile dependency reasons, coverage, graph
 metrics, and collision analysis in the index and both phase records. Arrange
 handoff to a different refiner using `skills/refine-task/SKILL.md`.
@@ -81,7 +81,7 @@ and dependency set and no later implementation ID has been reserved.
 ## Verification
 
 Run completion-script and control-panel tests, tracker JSON validation,
-`scripts/list-available-tasks.sh`, an `rg` consistency search for both P0-010
+`scripts/list-available-tasks.sh`, an `rg` consistency search for both P1-003
 and the allocated implementation ID, `git diff --check`, `make check`, and
 `make test-cycle`. Report unavailable Docker/toolchains as limitations. The
 derived brief must additionally name focused frontend/server contract tests and

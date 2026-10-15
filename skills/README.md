@@ -52,7 +52,7 @@ what it needs and does not restate it.
 
 | Document | Defines |
 |---|---|
-| [`shared/workplan-model.md`](shared/workplan-model.md) | Shared terms, artifact layout, Phase 0 planning tasks, seven runtime invariants, planning and implementation task shapes, dependency-edge reasons, write sets and contract surfaces, brief anatomy, and the frozen tracker schema |
+| [`shared/workplan-model.md`](shared/workplan-model.md) | Shared terms, artifact layout, Phase 0 meta tasks, per-phase task IDs, seven runtime invariants, planning and implementation task shapes, dependency-edge reasons, write sets and contract surfaces, brief anatomy, and the frozen tracker schema |
 
 The [phase format](shared/phase-design.md) is shared by the phase design
 operations. Procedure lives in each operation skill; the model holds definitions.

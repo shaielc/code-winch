@@ -13,9 +13,10 @@ Read applicable `AGENTS.md` files, the design set, roadmap, `docs/state.md`,
 and the active plan. Use [the model](../shared/workplan-model.md) and
 [the phase format](../shared/phase-design.md).
 
-Phase 0 partitions planning artifacts and handoffs. For that phase, use the
-model's planning shape rather than requiring new runtime wiring or operator
-commands. Later phases partition product implementation.
+Phase 0 partitions meta work — phase planning, issue conversion, and design-set
+updates — and its handoffs. For that phase, use the model's planning shape
+rather than requiring new runtime wiring or operator commands. Later phases
+partition product implementation.
 When opening a new workplan without an explicitly selected target phase, create
 Phase 0 first to schedule phase design and subsequent specific-brief derivation.
 An explicit request to design a named implementation phase selects that target.

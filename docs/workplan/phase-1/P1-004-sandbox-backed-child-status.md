@@ -1,8 +1,8 @@
-# P1-011: Report sandbox-backed child status
+# P1-004: Report sandbox-backed child status
 
 **Phase:** 1 — Sandbox exchange
 **Shape:** capability
-**Dependencies:** P1-009 (semantic: this task replaces the independently
+**Dependencies:** P1-002 (semantic: this task replaces the independently
 identifiable `Child status: Unknown` browser constant while preserving its
 accessible label/value identity)
 
@@ -22,7 +22,7 @@ output, or the absence of a fake process.
 - Define the child-status value in the attach transport and have
   `cmd/winch-sandbox` explicitly supply `Down` when it constructs the server.
   This is sandbox-owned configuration, not a browser default or process probe.
-- Replace P1-009's static `Unknown` value only after a successful response with
+- Replace P1-002's static `Unknown` value only after a successful response with
   the exact supported value. Preserve the independently named `Child status`
   region and use `Unknown` while the request is pending, fails, contains invalid
   JSON, or contains a missing/unknown `childStatus`.
@@ -87,10 +87,10 @@ Owns the additive `childStatus` member of `GET /api/session` for the standalone
 sandbox attach surface. Its complete wire contract in this increment is the
 case-sensitive string `Down`; missing values and every other value are invalid
 and must not be presented as authoritative. Owns replacing the value in
-P1-009's accessible `Child status` region after a valid response, while
+P1-002's accessible `Child status` region after a valid response, while
 preserving that region's label and `Unknown` fallback.
 
-Consumes the existing `/api/session` posture fields and P1-009 presentation
+Consumes the existing `/api/session` posture fields and P1-002 presentation
 identity. It owns no child lifecycle, readiness, output/input state, exit
 interpretation, control-plane run state, or provider meaning.
 
@@ -172,6 +172,6 @@ this sandbox-owned no-child status.
 
 ## Traces to
 
-`docs/workplan/phase-1/README.md` increment 2; P1-009;
+`docs/workplan/phase-1/README.md` increment 2; P1-002;
 `docs/roadmap.md` §§1 and 3, Stage 0; `docs/contracts.md` §§8–9; ADR-0005;
 ADR-0006.

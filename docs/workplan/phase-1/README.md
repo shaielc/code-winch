@@ -105,8 +105,8 @@ behavior must be described as such.
 
 | Order | Increment | Coverage |
 |---|---|---|
-| 1 | Child status presentation | [P1-009](P1-009-child-status-presentation.md), independently derived by [P0-008](../phase-0/P0-008-plan-owned-live-harness-output.md), owns the accessible static `Child status: Unknown` presentation |
-| 2 | Sandbox-backed child status | [P1-011](P1-011-sandbox-backed-child-status.md), independently derived by [P0-010](../phase-0/P0-010-plan-sandbox-backed-child-status.md), consumes P1-009 and owns the additive sandbox session `childStatus: "Down"` transport |
+| 1 | Child status presentation | [P1-002](P1-002-child-status-presentation.md), independently derived by [P1-001](P1-001-plan-owned-live-harness-output.md), owns the accessible static `Child status: Unknown` presentation |
+| 2 | Sandbox-backed child status | [P1-004](P1-004-sandbox-backed-child-status.md), independently derived by [P1-003](P1-003-plan-sandbox-backed-child-status.md), consumes P1-002 and owns the additive sandbox session `childStatus: "Down"` transport |
 | 3 | Actual child status | **Not yet derived** |
 | 4 | Harness output area | **Not yet derived** |
 | 5 | First live child output | **Not yet derived** |
@@ -136,12 +136,14 @@ behavior must be described as such.
 | 29 | Reader overflow outcome | **Not yet derived** |
 | 30 | Manual refetch after overflow | **Not yet derived** |
 
-Coverage records brief derivation, not implementation. P1-009 and P1-011 are
+Coverage records brief derivation, not implementation. P1-002 and P1-004 are
 derived implementation briefs ready for different authors to refine with
 `skills/refine-task/SKILL.md`; their existence
-does not claim that the UI or API has changed. P1-011 depends on P1-009 because
-it consumes that presentation identity. Remaining increments receive
-independently authored concrete Phase 0 handoffs **one at a time** as planning
+does not claim that the UI or API has changed. P1-004 depends on P1-002 because
+it consumes that presentation identity. Each derivation is a Phase 1 planning
+task numbered in this phase's own sequence beside the brief it derives (P1-001
+derived P1-002; P1-003 derived P1-004). Remaining increments receive
+independently authored concrete Phase 1 planning handoffs **one at a time** as planning
 proceeds; no implementation ID for increment 3 or later is reserved.
 The increment labels are not substitutes for task IDs or owners of completion
 deferrals. An implementation brief must include its own inherited safety and

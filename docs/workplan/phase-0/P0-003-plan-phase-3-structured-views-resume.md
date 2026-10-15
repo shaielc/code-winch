@@ -34,7 +34,7 @@ The phase author creates `docs/workplan/phase-3/README.md`, records its source-s
 
 A separate phase auditor uses `skills/audit-phase/SKILL.md` against the decided design. Resolve blocking artifact findings. Then arrange for a **different task author** to use `skills/derive-task/SKILL.md` to produce at least one concrete Phase 0 planning follow-up brief assigning derivation of the next uncovered implementation increment in phase-3. The phase author cannot author that follow-up. This independent derivation is an expected artifact of P0-003's completion, not merely an invitation to do more work.
 
-Allocate the follow-up's next plan-wide ID only when its complete brief is actually derived; create its real file and matching pending tracker entry, index row and Phase 0 coverage together. The follow-up records a **semantic dependency on P0-003** because it consumes the reviewed `docs/workplan/phase-3/README.md` produced here. Name the target increment until a real implementation brief ID exists; do not allocate a placeholder ID for the implementation task. Recompute the actual partial graph and collision report after each addition, preserving all existing statuses.
+Allocate the follow-up's next ID in its own phase only when its complete brief is actually derived; create its real file and matching pending tracker entry, index row and Phase 0 coverage together. The follow-up records a **semantic dependency on P0-003** because it consumes the reviewed `docs/workplan/phase-3/README.md` produced here. Name the target increment until a real implementation brief ID exists; do not allocate a placeholder ID for the implementation task. Recompute the actual partial graph and collision report after each addition, preserving all existing statuses.
 
 The follow-up itself assigns a separate task author to derive one implementation brief at a time against the decided phase artifact, reconcile its tracker/index/coverage records, and arrange the next concrete tracked planning follow-up when actionable coverage remains. Repeat that handoff until the phase's actionable increments are covered. Do not bundle all increments into one derivation or depend on product implementation simply to plan its brief. Dispatch this phase-design task through a separate refiner using `skills/refine-task/SKILL.md` against current HEAD.
 
@@ -44,7 +44,7 @@ Forecast:
 
 - `docs/workplan/phase-3/README.md` (new phase artifact).
 - `docs/workplan/README.md` (phase 3 design row, actual follow-up dependency row, affected coverage and graph/collision report).
-- `docs/workplan/phase-0/README.md` (increment order 3, legacy reference 0.3, design and follow-up coverage/handoff).
+- `docs/workplan/phase-0/README.md` (increment order 3, Plan Phase 3, design and follow-up coverage/handoff).
 - `docs/workplan/phase-0/<allocated-ID>-<target-increment-slug>.md` (new follow-up planning brief, independently authored after the design is decided; concrete ID/title/path recorded then).
 - `docs/workplan/tasks.json` (add the actual follow-up entry and its semantic dependency on P0-003; preserve all existing task statuses and metadata).
 
@@ -89,5 +89,5 @@ None. Producing the independently authored tracked follow-up is part of completi
 
 ## Traces to
 
-`docs/workplan/phase-0/README.md` ordered planning increment 3 (legacy reference 0.3); docs/roadmap.md §3 Stage 2; docs/contracts.md §6/8; ADR-0002 (Proposed); ADR-0006.
+`docs/workplan/phase-0/README.md` ordered planning increment 3 (Plan Phase 3); docs/roadmap.md §3 Stage 2; docs/contracts.md §6/8; ADR-0002 (Proposed); ADR-0006.
 

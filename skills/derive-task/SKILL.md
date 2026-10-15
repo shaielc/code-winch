@@ -13,11 +13,17 @@ Derive one task at a time: architecture → phase author → task author → opt
 phase revision by the phase author → next task. Deriving another task does not
 require implementing the previous one first.
 
-For Phase 0, derive a planning brief using the model's planning shape. Name its
-target artifact, assigned phase/task-author operation, and handoff. Deriving
-this planning brief does not itself perform the planning operation it assigns.
-Every acceptance criterion must be checkable from the task's own artifacts;
-name the next operation in the handoff, not as a criterion.
+Planning-shaped tasks use the model's planning shape and belong to one of two
+places. Phase 0 holds only meta tasks: designing or revising a phase,
+converting an issue into phase tasks, and updating the design set (see *Phase 0
+— meta tasks* in [the model](../shared/workplan-model.md)). Deriving the briefs
+for an increment a phase has already decided is that phase's own planning task,
+not a Phase 0 task.
+
+For either, name the target artifact, the assigned phase/task-author operation,
+and the handoff. Deriving this brief does not itself perform the operation it
+assigns. Every acceptance criterion must be checkable from the task's own
+artifacts; name the next operation in the handoff, not as a criterion.
 
 ## Select the change
 
@@ -60,8 +66,9 @@ before recording a deferral. Create no placeholders merely to supply an ID.
 
 ## Integrate the task
 
-1. Allocate the next plan-wide ID for new work. Preserve IDs when rederiving
-   pending briefs, and never renumber completed tasks.
+1. Allocate the next ID in the task's own phase (see *The tracker* in
+   [the model](../shared/workplan-model.md)) for new work. Preserve IDs when
+   rederiving pending briefs, and never renumber completed tasks.
 2. Add or reconcile the brief, tracker entry, dependency reasons, index row,
    and phase coverage mapping together. Updating coverage does not authorize
    changing the phase's boundaries.
