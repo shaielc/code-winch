@@ -44,7 +44,7 @@ Forecast:
 
 - `docs/workplan/phase-2/README.md` (new phase artifact).
 - `docs/workplan/README.md` (phase 2 design row, actual follow-up dependency row, affected coverage and graph/collision report).
-- `docs/workplan/phase-0/README.md` (increment order 2, legacy reference 0.2, design and follow-up coverage/handoff).
+- `docs/workplan/phase-0/README.md` (increment order 2, Plan Phase 2, design and follow-up coverage/handoff).
 - `docs/workplan/phase-0/<allocated-ID>-<target-increment-slug>.md` (new follow-up planning brief, independently authored after the design is decided; concrete ID/title/path recorded then).
 - `docs/workplan/tasks.json` (add the actual follow-up entry and its semantic dependency on P0-002; preserve all existing task statuses and metadata).
 
@@ -89,5 +89,5 @@ None. Producing the independently authored tracked follow-up is part of completi
 
 ## Traces to
 
-`docs/workplan/phase-0/README.md` ordered planning increment 2 (legacy reference 0.2); docs/roadmap.md §3 Stage 1 and §6 D1/D5; docs/contracts.md §8–9; docs/code-structure.md §4; ADR-0003 (Proposed).
+`docs/workplan/phase-0/README.md` ordered planning increment 2 (Plan Phase 2); docs/roadmap.md §3 Stage 1 and §6 D1/D5; docs/contracts.md §8–9; docs/code-structure.md §4; ADR-0003 (Proposed).
 

@@ -10,12 +10,12 @@ This is a new planning workplan. The previous plan was closed; no former pending
 |---|---|---|---|
 | [0](phase-0/README.md) | Meta tasks: phase planning, issue conversion, design-set updates | Open | Seven phase-design planning briefs; first two Phase 1 implementation briefs derived |
 | [1](phase-1/README.md) | Stage 0 — sandbox exchange | Repartitioned into 30 experience-led increments; independent re-audit pending | Child-status presentation brief P1-009 and sandbox-backed status brief P1-011 derived |
-| 2 | Stage 1 — first real vendor | Scheduled via 0.2 | Not yet derived |
-| 3 | Stage 2 — structured views and resume | Scheduled via 0.3 | Not yet derived |
-| 4 | Stage 3 — observe existing sandboxes | Scheduled via 0.4 | Not yet derived |
-| 5 | Stage 4 — run lifecycle control | Scheduled via 0.5 | Not yet derived |
-| 6 | Stage 5 — enforce isolation | Scheduled via 0.6 | Not yet derived |
-| 7 | Stage 6 — second adapter and workflows | Scheduled via 0.7 | Not yet derived |
+| 2 | Stage 1 — first real vendor | Scheduled via Plan Phase 2 | Not yet derived |
+| 3 | Stage 2 — structured views and resume | Scheduled via Plan Phase 3 | Not yet derived |
+| 4 | Stage 3 — observe existing sandboxes | Scheduled via Plan Phase 4 | Not yet derived |
+| 5 | Stage 4 — run lifecycle control | Scheduled via Plan Phase 5 | Not yet derived |
+| 6 | Stage 5 — enforce isolation | Scheduled via Plan Phase 6 | Not yet derived |
+| 7 | Stage 6 — second adapter and workflows | Scheduled via Plan Phase 7 | Not yet derived |
 
 ## Planning and execution
 
@@ -47,13 +47,13 @@ briefs naming exactly one task.
 | Phase | Planning prerequisite | Exit evidence |
 |---|---|---|
 | 0 | Existing design, roadmap, state and HEAD | Seven reviewed designs and concrete separately authored briefs, reconciled coverage/graph |
-| 1 | Phase 0 increment 0.1 design and briefs | Stage 0 exchange can be observed and survives reload |
-| 2 | Phase 0 increment 0.2 design and briefs | Real agent behind wrapper with fake parity |
-| 3 | Phase 0 increment 0.3 design and briefs | Multiple views and gap-free resume |
-| 4 | Phase 0 increment 0.4 design and briefs | Two manually started sandboxes visible centrally |
-| 5 | Phase 0 increment 0.5 design and briefs | Create/stop run through product |
-| 6 | Phase 0 increment 0.6 design and briefs | Security refusals demonstrated |
-| 7 | Phase 0 increment 0.7 design and briefs | Two vendors and a cross-run workflow |
+| 1 | Phase 0 increment Plan Phase 1: design and briefs | Stage 0 exchange can be observed and survives reload |
+| 2 | Phase 0 increment Plan Phase 2: design and briefs | Real agent behind wrapper with fake parity |
+| 3 | Phase 0 increment Plan Phase 3: design and briefs | Multiple views and gap-free resume |
+| 4 | Phase 0 increment Plan Phase 4: design and briefs | Two manually started sandboxes visible centrally |
+| 5 | Phase 0 increment Plan Phase 5: design and briefs | Create/stop run through product |
+| 6 | Phase 0 increment Plan Phase 6: design and briefs | Security refusals demonstrated |
+| 7 | Phase 0 increment Plan Phase 7: design and briefs | Two vendors and a cross-run workflow |
 
 These are phase outcome conditions, **not** task-graph dependency edges. The planning briefs below assign future phase design plus an independently authored tracked follow-up; they do not themselves author implementation phases.
 
