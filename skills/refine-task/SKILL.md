@@ -56,6 +56,8 @@ Check, with evidence — a command with its observed output, or a `file:line`:
    refinement does not substitute for phase revision or task derivation.
 5. **Demonstration** — the tools and existing commands it uses are present where
    it will run, and each expectation can be observed without false matches.
+   Running it leaves deployments it does not own alone; see the model's
+   [demonstration environment](../shared/workplan-model.md#demonstration-environment).
 
 Then make the brief concrete, in the sections it already has:
 

@@ -520,6 +520,23 @@ Or: `None.`
 `docs/<file>.md` §<section>, ADR-<nnnn>
 ```
 
+### Demonstration environment
+
+A demonstration runs on a host that may already serve a deployment the task does
+not own. The default compose project (`code-winch`, `127.0.0.1:8080`) is also the
+operator's deployment (`make main-up`), so `docker compose -f
+deployments/compose.yml up`/`down` can rebuild or remove it. A demonstration that
+starts the system uses this branch's isolated environment: `make test-env`, then
+`http://127.0.0.1:$PROXY_PORT/<project>/sandbox/` (see `deployments/README.md`),
+then `make test-env-down`. A check that needs the host-published port, such as
+loopback-only publication, says so, first confirms that no `code-winch`
+deployment holds it, and stops rather than replacing one.
+
+Whoever runs a brief's demonstration and finds that following it literally would
+change a deployment they do not own runs the same check in the isolated
+environment, records the substitution, and reports the brief's command as a plan
+finding.
+
 ## The tracker
 
 `docs/workplan/tasks.json`'s schema is **frozen**. It has exactly these fields

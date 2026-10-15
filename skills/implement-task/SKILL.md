@@ -100,7 +100,9 @@ Run, in this order:
 3. **The standing scenario suite**, unchanged, against the profile or substrate
    the brief names.
 4. **The Demonstration, by hand, exactly as written.** Record the commands and
-   what you actually saw, not what the brief predicted.
+   what you actually saw, not what the brief predicted. If following it literally
+   would change a deployment you do not own, use the model's
+   [demonstration environment](../shared/workplan-model.md#demonstration-environment).
 
 If the demonstration cannot produce the stated result, either the change is
 incomplete or the brief no longer matches the system. Correct the brief in the
