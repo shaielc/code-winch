@@ -42,6 +42,11 @@ subtree.
 
 ## Rules that bind every task
 
+### Change files with the editing tools
+
+Change files with Edit and Write tools. Always ask for permission when using
+shell commands to change files.
+
 ### Respect the boundaries
 
 Dependencies point inward: the domain depends on nothing, the application layer
