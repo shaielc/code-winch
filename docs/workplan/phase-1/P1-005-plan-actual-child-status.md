@@ -7,13 +7,11 @@
 ## Objective
 
 Produce one complete implementation brief, P1-006, for launching the shipped
-fake and showing truthful sandbox-owned `Running` status on the attach page.
-Reconcile the brief with the tracker, workplan index, and Phase 0/1 coverage.
-
-The review narrows this task from the phase increment's original
-`Running`/`Exited` objective. Exit observation and an `Exited` demonstration
-are outside this task's completion criteria; record that scope difference in
-the planning records rather than claiming the full original increment is covered.
+fake and showing its actual child status on the attach page: `Running` after
+successful launch while no exit has been observed, and `Exited` after the
+sandbox observes that child end. Reconcile the brief with the tracker, workplan
+index, and Phase 0/1 coverage. Demonstrating `Exited` and implementing harness
+input or commands are outside this task's scope.
 
 ## Scope
 
@@ -27,18 +25,23 @@ the React app fetches the session once, and the image ships
 presentation are predictions from its pending brief, not implemented behavior
 at this baseline. Recheck these observations when deriving the brief.
 
-P1-006 must make the sandbox launch the shipped fake and connect its own
-knowledge of that child to the existing session response and attach page.
-Report `Running` only from sandbox-owned observation, never from browser
-timing, output, or a host process-table scan. The brief must explain how it
-avoids claiming a successful launch when spawning fails. Do not prescribe
-HTTP startup ordering or require sandbox startup to fail when the child cannot
+P1-006 must make the sandbox launch the shipped fake and connect the owned
+process handle's start and exit observations to the session response and page.
+A successful start permits `Running` until the sandbox observes that handle
+end; the recorded status then becomes `Exited`. A failed start never permits
+`Running`. These values describe process observations, not health or readiness.
+The brief must specify the process bookkeeping and focused tests needed to
+keep those observations accurate, without browser inference or process-table
+scans. Do not prescribe HTTP startup ordering or require sandbox startup to fail when the child cannot
 be launched.
 
 Plan against P1-004's brief without waiting for its implementation. Label
 predicted behavior and give P1-006 a `contract` dependency on P1-004 because it
 extends that task's exact wire and presentation contract. Keep the existing
-one-shot page fetch; this capability needs no polling or streaming.
+one-shot page fetch. The derived hand check must wait for the session endpoint
+to report `Running`, then load or reload the page to fetch that state. If the
+page was opened before launch and still shows `Down`, reload it after that
+observation. No polling or streaming feature in the product is required.
 
 Allocate P1-006 only with its complete brief and matching tracker entry.
 Reconcile dependency reasons, coverage, graph metrics, and collision analysis.
@@ -54,25 +57,26 @@ the Phase 1 design and depends on P0-001.
 - Document the `childStatus` contract extension in the implementation change.
   Require focused checks that a failed launch cannot be presented as `Running`
   and that missing or invalid wire values retain the `Unknown` fallback.
-- Keep the derived capability limited to launch and running-status wiring.
-  It must not require harness stopping, an exit control, or an exit demonstration.
+- Keep the derived capability focused on launch and actual child-status wiring.
+  Necessary exit observation, reaping, and process bookkeeping remain in scope.
 
 ## Non-goals
 
-This task writes planning artifacts only. The derived task excludes harness-stop
-and shutdown policies, exit observation and demonstration of `Exited`, an
-exit/shutdown command, output transport or display, input delivery, persistence,
-restart/retry policy, provider semantics, and broad page restructuring.
-Do not add lifecycle requirements or tests for termination, reaping, signal
-forwarding, or bounded child shutdown as conditions for this capability.
+This task writes planning artifacts only. The derived task excludes demonstrating
+`Exited` and implementing harness input or commands, including an exit/shutdown
+command. Output transport or display, persistence, restart/retry policy, provider
+semantics, and broad page restructuring are also outside the increment.
+Choose process bookkeeping and its tests according to the launch/status
+implementation; this brief imposes no separate harness-stop policy.
 Do not derive a second implementation brief or reserve later implementation IDs.
 
 ## Planning outputs and handoff
 
 Create `docs/workplan/phase-1/P1-006-actual-child-status.md` and its tracker
 entry. Reconcile `docs/workplan/README.md`, `docs/workplan/phase-0/README.md`,
-and `docs/workplan/phase-1/README.md`. Record the running-status contract,
-launch surface, write forecast, and the reduced coverage of increment 3.
+and `docs/workplan/phase-1/README.md`. Record the actual child-status contract,
+launch surface, write forecast, and the boundary between status behavior and
+its manual demonstration.
 Preserve all existing statuses.
 
 Create the complete planning-shaped
@@ -92,22 +96,25 @@ refiner then takes P1-006 with `skills/refine-task/SKILL.md`.
 ## Contract surfaces
 
 This planning task changes no product contract. P1-006 will extend P1-004's
-`GET /api/session` `childStatus` member with `Running` and connect it to
-sandbox-owned child observation. Record the collision and `contract` edge
-on P1-004. Do not add an `Exited` requirement or output/input/readiness meaning.
+`GET /api/session` `childStatus` member with `Running` and `Exited`, based on
+the owned child's start and observed exit. Record the collision and `contract`
+edge on P1-004. Status behavior includes observed exit; its hand demonstration
+does not. The contract conveys no output, input availability, or readiness.
 
 ## Demonstration
 
-Review the derived brief and planning records. Its predicted hand check must
-show `Running` on the attach page after the sandbox launches the fake and
-preserve the existing posture and local composer behavior. It must not require
-making the fake exit or stopping it to complete the demonstration.
+For P1-005, review the derived brief and planning records for completeness and
+consistency. Check that the brief defines the start/exit observation path and
+contains the following manual check for the future P1-006 implementation.
 
-Use the per-branch `make test-env`, proxy URL, and `make test-env-down` path
-from `deployments/README.md`; never replace or tear down the operator's default
-`code-winch` deployment. These are predicted implementation checks. This
-planning task demonstrates the completeness and consistency of the artifacts,
-including the explicit limit on increment-3 coverage.
+For P1-006, the predicted manual check starts the per-branch environment with
+`make test-env`, waits for `GET /api/session` through the branch proxy to report
+`Running`, and loads or reloads the attach page to show the same state. It also
+checks existing posture and local composer behavior, then uses
+`make test-env-down` for environment teardown. Use the proxy URL from
+`deployments/README.md`; never replace or tear down the operator's default
+`code-winch` deployment. The manual check does not make the fake exit or
+require observing `Exited`.
 
 ## Verification
 
@@ -119,32 +126,35 @@ Report unavailable Docker/toolchains as limitations.
 The derived brief must name focused launch/status tests, attach contract tests,
 React validation/presentation tests, the standing e2e scenario, and Go/web/build
 gates for its forecast implementation surfaces. Keep those checks within the
-launch and running-status capability.
+launch and actual child-status capability.
 
 ## Acceptance criteria
 
-- [ ] One complete brief, P1-006, covers launch and truthful running status,
+- [ ] One complete brief, P1-006, defines launch, failed-start handling, and
+      truthful `Running`/`Exited` observations from the owned process handle,
       takes a `contract` dependency on P1-004, and labels predictions.
-- [ ] Its criteria and hand check require no harness-stop implementation,
-      startup-ordering policy, fatal sandbox-startup behavior, or `Exited`
-      demonstration.
+- [ ] The brief includes focused status-observation tests and a repeatable
+      `Running` page demonstration, with `Exited` demonstration and harness
+      input/commands outside scope.
 - [ ] It covers failed-launch status, wire validation, contract documentation,
       existing page behavior, and safe per-branch deployment checks.
 - [ ] Tracker, index, Phase 0/1 coverage, graph metrics, and collision warnings
-      agree, preserve statuses, and disclose the narrowed increment-3 scope.
+      agree, preserve statuses, and distinguish status coverage from
+      demonstration.
 - [ ] P1-007 is the sole complete derivation task for increment 4, depends only
       on P0-001, and has matching pending tracker, index, and coverage records.
       No later implementation ID is reserved.
 
 ## Deferrals
 
-None assigned by this task. The excluded lifecycle and exit work is not an
-unfinished acceptance criterion of P1-006; the planning records must not claim
-that the original increment's exit capability has been delivered.
+None. Start and exit observation remain part of P1-006's status capability.
+Only its manual `Exited` demonstration is omitted; that omission does not
+remove exit observation or necessary process bookkeeping from implementation.
+Harness input and commands belong outside this increment.
 
 ## Traces to
 
-`docs/workplan/phase-1/README.md` increment 3 (scope narrowed by PR #136 review);
+`docs/workplan/phase-1/README.md` increment 3;
 Phase 0 increment Plan Phase 1; `docs/roadmap.md` Stage 0;
 `docs/contracts.md` §§8–9; ADR-0005/0006;
 `skills/shared/workplan-model.md` planning shape and I1–I7.
