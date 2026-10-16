@@ -2,137 +2,143 @@
 
 **Phase:** 1 — Sandbox exchange
 **Shape:** planning
-**Dependencies:** P1-003 (semantic: the assigned brief must consume the independently derived sandbox session `childStatus` contract and its `Down` presentation, which P1-003 produced in P1-004, and extend rather than redefine it)
+**Dependencies:** P1-003 (semantic: consume the P1-004 brief produced by P1-003, which defines the sandbox session `childStatus` contract and `Down` presentation)
 
 ## Objective
 
-Produce one complete, independently authored implementation brief for Phase 1
-increment 3, **Actual child status**, and reconcile it with the tracker,
-workplan index, and Phase 0/1 coverage. The derived capability must make the
-sandbox launch and own the shipped fake, and make the attach page report
-`Running` while that child runs and `Exited` once it ends, from sandbox-owned
-observation.
+Produce one complete, independently authored implementation brief, P1-006,
+for Phase 1 increment 3, **Actual child status**, together with its tracker
+entry and the next planning handoff.
+
+## Source baseline
+
+At this PR's HEAD, `cmd/winch-sandbox/main.go` constructs the attach HTTP
+handler and server but starts no child. The attach server stores only posture,
+the React app fetches the session once, and the image ships
+`/usr/local/bin/fake-harness`.
+
+P1-004's session response, validation, and `Down` presentation are predicted
+by its pending brief. Recheck the source when deriving P1-006 and distinguish
+observations at that revision from behavior predicted by either brief.
 
 ## Scope
 
-Use `skills/derive-task/SKILL.md` against the reviewed Phase 1 design, the
-completed P1-003 planning output (the P1-004 brief), and code at HEAD. Derive
-exactly increment 3. Inspect the sandbox composition root, the shipped fake
-binary, and the attach server and page before deciding the minimum spawn,
-ownership, cleanup, and status-wiring path and the maintained hand path.
+Use `skills/derive-task/SKILL.md`, the Phase 1 design, P1-004's brief, and
+code at HEAD to derive P1-006. The implementation must launch the shipped fake
+from the sandbox and connect observations of that owned process to the session
+endpoint and existing attach page.
 
-This task is pipelined: it derives increment 3 while P1-004 is still being
-implemented. Plan against P1-004's brief as the consumed contract, label
-behavior it predicts as a prediction, and record the derived brief's dependency
-on P1-004's implementation as a graph edge rather than waiting for it here. Do
-not combine increment 4–6 output display or transport, any input behavior, or
-vendor-native exit interpretation.
+Specify the launch surface, process bookkeeping, and status wiring needed for
+the contract below. Preserve the existing one-shot page fetch. Plan against
+P1-004's brief without waiting for implementation; give P1-006 a `contract`
+dependency on P1-004 because it extends that task's wire and presentation
+contract.
 
-Allocate the next Phase 1 implementation ID only when its complete brief and
-matching tracker entry exist. Reconcile dependency reasons, coverage, graph
-metrics, and collision analysis in the index and both phase records. Then
-complete `skills/phase-increment-handoff/SKILL.md` in this same change.
+## Contract surfaces and constraints
 
-## Required constraints
+This planning task changes no product contract. The derived implementation
+extends P1-004's `GET /api/session` `childStatus` member:
 
-- Distinguish source-observed behavior from behavior predicted by P1-004's
-  pending implementation and by the derived brief.
-- Treat `Running` and `Exited` as sandbox-owned knowledge of a child the sandbox
-  launched and owns, not a browser inference from output, request timing, or
-  process-table scans.
-- `Exited` reports only that the owned child ended. Exit codes, signals, or
-  success/failure meaning are vendor-native interpretation (D5, Phase 2) unless
-  the brief labels them as raw process observations.
-- Require minimum cleanup: no orphaned child after sandbox shutdown, and
-  observable behavior when spawn fails. Require negative tests for spawn failure
-  and invalid status values, and prohibit false readiness or input-availability
-  claims.
-- Fake controls are chosen for this demonstration (for example, a way to make
-  the fake exit) and may change the fake's current behavior; they do not define
-  product configuration.
-- Preserve loopback-only serving, posture disclosure, the local composer,
-  deployment, the `Unknown` fallback and `Down` state, and existing tests. Any
-  change to the `childStatus` wire contract is documented in the same change.
+- `Running`: the owned child started successfully and the sandbox has not
+  observed its exit.
+- `Exited`: the sandbox has observed that child's exit.
+
+A failed start cannot produce `Running`. Status comes from the owned process,
+not browser timing, output, or host process-table scans, and conveys no health,
+readiness, or input-availability claim. Include necessary exit observation and
+process bookkeeping in the implementation forecast.
+
+The implementation must document the wire extension and preserve P1-004's
+`Down` presentation and `Unknown` fallback for missing or invalid values.
+It must also preserve loopback-only serving, posture disclosure, the local
+composer, deployment, and existing tests.
 
 ## Non-goals
 
-This task writes planning artifacts only. Its target increment excludes reading
-or presenting child output, input delivery, persistence, restart or retry
-policy, provider semantics, and broad page restructuring. It does not derive a
-second implementation brief or reserve implementation IDs for later increments.
+This task writes planning artifacts only. The target increment excludes the
+manual `Exited` demonstration, harness input or commands (including an
+exit/shutdown command), output transport or display, persistence, restart/retry
+policy, provider semantics, and broad page restructuring.
+
+Do not derive a second implementation brief or reserve later implementation IDs.
 
 ## Planning outputs and handoff
 
-Create `docs/workplan/phase-1/<allocated-ID>-actual-child-status.md` and its
-matching tracker entry, then reconcile `docs/workplan/README.md`,
-`docs/workplan/phase-0/README.md`, and `docs/workplan/phase-1/README.md`. Record
-the extended `childStatus` values, the owning spawn/cleanup surface, and the
-documentation/write forecast. Preserve every pre-existing status.
+Create `docs/workplan/phase-1/P1-006-actual-child-status.md` and its matching
+tracker entry together. The brief must contain a concrete implementation write
+forecast, contract documentation changes, tests, and the manual check described
+below.
 
-Handoff: complete `skills/phase-increment-handoff/SKILL.md` in this task; a
-different refiner then takes the derived brief with
+Reconcile dependency reasons, coverage, graph metrics, and collision analysis
+in `docs/workplan/README.md`, `docs/workplan/phase-0/README.md`, and
+`docs/workplan/phase-1/README.md`. Record P1-006 against increment 3 and its
+contract collision with P1-004. Preserve all existing tracker statuses.
+
+Complete `skills/phase-increment-handoff/SKILL.md` by creating the complete
+planning-shaped `docs/workplan/phase-1/P1-007-plan-harness-output-area.md`
+and its pending tracker, index, and coverage records. P1-007 plans increment 4,
+**Harness output area**, consumes only the Phase 1 design, and depends on
+P0-001. A different refiner then takes P1-006 with
 `skills/refine-task/SKILL.md`.
 
 ## Write set
 
-- `docs/workplan/phase-1/<allocated-ID>-actual-child-status.md`
-- `docs/workplan/phase-1/<next-ID>-plan-<next-increment>.md` (from the handoff)
+- `docs/workplan/phase-1/P1-006-actual-child-status.md`
+- `docs/workplan/phase-1/P1-007-plan-harness-output-area.md`
 - `docs/workplan/tasks.json` (new entries only; existing statuses unchanged)
 - `docs/workplan/README.md`
 - `docs/workplan/phase-0/README.md`
 - `docs/workplan/phase-1/README.md`
 
-## Contract surfaces
-
-This planning task changes no product contract. Its derived brief will extend
-P1-004's `GET /api/session` `childStatus` member with `Running` and `Exited` and
-own the sandbox's child launch and ownership. That is a contract collision with
-P1-004, which defines `childStatus`. The derived brief therefore takes a
-`contract` edge on P1-004. It must not own output, input, readiness, or provider
-interpretation.
-
 ## Demonstration
 
-Review the derived brief and matching tracker/index/coverage records. Confirm
-that its predicted compose-based hand check observes `Running` after the
-sandbox starts the fake and `Exited` after the fake is made to end, preserves
-`Down`, posture, and composer behavior, and claims no output or input
-readiness. Confirm all records use one real ID and dependency set and that no
-later implementation ID has been reserved. Confirm the next plan increment task
-exists with its brief, tracker entry, and coverage.
+For P1-005, review the generated artifacts against the acceptance criteria.
+Runtime behavior is a prediction to be checked during P1-006 implementation.
+
+P1-006's brief must provide a repeatable manual check using `make test-env`,
+the branch proxy URL from `deployments/README.md`, and
+`make test-env-down`. Explain how the chosen fake configuration keeps the
+child running long enough for endpoint and page observation without harness
+input or commands. Wait for the session endpoint to report `Running`, then
+load or reload the attach page and confirm the same status, posture disclosure,
+and local composer behavior. Include environment teardown. Never replace or
+tear down the operator's default `code-winch` deployment.
 
 ## Verification
 
-Run completion-script and control-panel tests, tracker JSON validation,
-`scripts/list-available-tasks.sh`, an `rg` consistency search for both P1-005
-and the allocated implementation ID, `git diff --check`, `make check`, and
-`make test-cycle`. Report unavailable Docker/toolchains as limitations. The
-derived brief must additionally name focused process-ownership, server-contract,
-and frontend tests and the gates for every forecast implementation surface.
+For the planning change, run completion-script and control-panel tests, tracker
+JSON validation, `scripts/list-available-tasks.sh`, an `rg` consistency search
+for P1-005/P1-006/P1-007, `git diff --check`, `make check`, and
+`make test-cycle`. Report unavailable Docker/toolchains as limitations.
+
+P1-006's brief must name focused tests for successful and failed launch,
+observed child exit, session wire values, and React validation/presentation.
+Include checks for the preservation constraints above, the standing e2e
+scenario, and Go/web/build gates for every forecast implementation surface.
 
 ## Acceptance criteria
 
-- [ ] Exactly one complete Phase 1 brief covers increment 3 with one real ID and
-      a `contract` dependency on P1-004.
-- [ ] The brief defines sandbox-owned `Running`/`Exited`, spawn-failure and
-      cleanup behavior, fake controls, contract documentation, tests,
-      deployment reachability, and evidence limits without absorbing
-      increments 4–6.
-- [ ] Tracker, index, Phase 0/1 coverage, graph metrics, and collision warnings
-      agree and preserve all existing statuses.
-- [ ] No speculative later implementation ID exists.
-- [ ] Every `phase-increment-handoff` action holds: the next undelivered Phase 1
-      increment has exactly one derivation task with a complete brief, an edge
-      only to planning work it consumes, and matching tracker, index, and
-      coverage records.
+- [ ] P1-006 exists as a complete implementation brief with a concrete write
+      forecast and contract documentation changes. Its status definitions and
+      preservation requirements match this brief's contract section.
+- [ ] P1-006 names tests for every case listed under Verification and gives
+      executable verification commands for its forecast surfaces.
+- [ ] P1-006 contains the per-branch manual check, identifies the fake
+      configuration that keeps `Running` observable, and explains why it works.
+      Its demonstration and implementation requirements respect Non-goals.
+- [ ] P1-006's tracker entry has a `contract` dependency on P1-004. The index,
+      Phase 0/1 coverage, dependency reasons, metrics, and collision records
+      agree with the tracker; all pre-existing statuses remain unchanged.
+- [ ] P1-007 is the sole complete planning task for increment 4, has a pending
+      tracker entry depending only on P0-001, and appears in the index and
+      Phase 0/1 coverage. No later implementation ID is reserved.
 
 ## Deferrals
 
-None. Output, input, and vendor-native exit interpretation are excluded by the
-decided Phase 1 and roadmap boundaries, not unfinished completion work in the
-actual-child-status increment.
+None.
 
 ## Traces to
 
 `docs/workplan/phase-1/README.md` increment 3; Phase 0 increment Plan Phase 1;
-`docs/roadmap.md` Stage 0 and §6 D5; `docs/contracts.md` §§8–9; ADR-0005/0006.
+`docs/roadmap.md` Stage 0; `docs/contracts.md` §§8–9; ADR-0005/0006;
+`skills/shared/workplan-model.md` planning shape and I1–I7.

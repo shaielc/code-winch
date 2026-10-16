@@ -148,7 +148,7 @@
       "title": "Plan Phase 1 increment 3: actual child status",
       "phase": 1,
       "phase_name": "Sandbox exchange",
-      "status": "pending",
+      "status": "in_progress",
       "depends_on": [
         "P1-003"
       ],
