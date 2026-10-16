@@ -45,6 +45,11 @@ skills, or `AGENTS.md` already settle it. Record the person's reason. A rejected
 finding needs no action before merge and gets no follow-up; the audit record
 keeps it unchanged.
 
+**Already resolved** is the verdict for a valid finding of any class that a
+change already on the default branch resolves. Cite that commit or PR in the
+record. It needs no action before merge and gets no follow-up. It is not a
+Reject: the finding stands as audited, so the record does not call it invalid.
+
 Show concrete scope/impact in the option descriptions. The tool is for product
 tradeoffs; invocation of this skill already authorizes the merge once its
 conditions hold. Do not ask a second generic merge-permission question.

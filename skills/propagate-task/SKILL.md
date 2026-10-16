@@ -36,7 +36,7 @@ accepted.
 | Deferrable | Check for an appropriate existing task; otherwise open an issue |
 | Defect | Check for an appropriate existing task; otherwise open an issue |
 | Harden / hardening | Open an issue for each finding |
-| Any finding with a **Reject** verdict | No destination; record the verdict link in the ledger |
+| Any finding with a **Reject** or **Already resolved** verdict | No destination; record the verdict link in the ledger, and for **Already resolved** the cited change |
 
 Check task suitability against its objective, non-goals, phase, contract ownership,
 status, and prerequisite behavior. A nearby filename or similar title is not
@@ -93,8 +93,8 @@ the ledger comment.
 Propagation ran only after `task-implement-merge` recorded a verdict for every
 finding. Every accepted Defect and Deferrable finding has a checked
 existing-task destination or an issue; every tracked hardening finding has an
-issue; every rejected finding is in the ledger with its verdict link. The
-ledger is one comment on the source task PR; brief changes travel in a
-new-branch propagation PR into the source task branch.
+issue; every rejected or already-resolved finding is in the ledger with its
+verdict link. The ledger is one comment on the source task PR; brief changes
+travel in a new-branch propagation PR into the source task branch.
 Unresolved verdicts and blockers remain visible; no finding was silently
 reclassified or treated as fixed merely because it was tracked.
