@@ -4,6 +4,8 @@ BUILD_DIR ?= bin
 COMPOSE ?= docker compose -f deployments/compose.yml
 BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null)
 TEST_PROJECT ?= $(shell printf '%s' '$(or $(BRANCH),code-winch-test)' | tr 'A-Z' 'a-z' | tr -c 'a-z0-9_-' '-')
+WINCH_TEST_PROJECT := $(TEST_PROJECT)
+export WINCH_TEST_PROJECT
 COMPOSE_TEST ?= $(COMPOSE) -f deployments/compose.test.yml -p $(TEST_PROJECT)
 COMPOSE_MAIN ?= $(COMPOSE) -f deployments/compose.main.yml
 COMPOSE_PROXY ?= docker compose -f deployments/compose.proxy.yml $(if $(wildcard deployments/compose.proxy.override.yml),-f deployments/compose.proxy.override.yml)
@@ -52,7 +54,7 @@ web-test:
 toolchain-image:
 	$(COMPOSE_TEST) --profile test build toolchain
 proxy:
-	$(COMPOSE_PROXY) up -d --wait
+	$(COMPOSE_PROXY) up -d --wait --no-recreate
 	@$(COMPOSE_PROXY) config | grep -q 'host_ip: 127.0.0.1' || { echo "proxy is not published on 127.0.0.1 only" >&2; exit 1; }
 proxy-down:
 	$(COMPOSE_PROXY) down --remove-orphans
