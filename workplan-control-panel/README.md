@@ -244,5 +244,6 @@ output. One line per mint records which installation the token came from and whe
 expires, and never the token.
 
 Use `PANEL_BIND` and `PANEL_PORT` to override `127.0.0.1:8765`. Site-specific
-Compose changes belong in the gitignored `compose.override.yml`; `up.sh` includes
-it. Pin reviewed image digests and a tested Codex CLI version for repeatable builds.
+Compose changes belong in the gitignored `compose.override.yml`; `up.sh` and
+`build.sh` include it, and read `.env`, from the first copy `scripts/resolve-override.sh` finds in this
+worktree, the main worktree, or `${CODE_WINCH_CONFIG_DIR:-/var/code-winch}/workplan-control-panel/`. Pin reviewed image digests and a tested Codex CLI version for repeatable builds.

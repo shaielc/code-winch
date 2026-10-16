@@ -22,7 +22,10 @@ test project. It publishes only on `127.0.0.1:${PROXY_PORT:-7080}` and routes
 `/<project>/sandbox/...` to that project's sandbox over the `code-winch-proxy` network;
 `/<project>/sandbox` redirects to the trailing-slash form. The attach page builds with
 relative asset URLs and derives its API base from `location`, so it works at the root or
-under any `/{proxy/}+sandbox/` prefix.
+under any `/{proxy/}+sandbox/` prefix. A site-specific, gitignored
+`compose.proxy.override.yml` is layered on top: `scripts/resolve-override.sh` takes the
+first copy found in this worktree, the main worktree, or
+`${CODE_WINCH_CONFIG_DIR:-/var/code-winch}/deployments/`.
 
 - `make test-cycle` is the whole path and needs only Docker: it starts the test
   environment, runs the format, vet, unit-test, and build gates plus the e2e scenarios
