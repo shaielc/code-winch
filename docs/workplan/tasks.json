@@ -155,6 +155,32 @@
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-1/P1-005-plan-actual-child-status.md"
+    },
+    {
+      "id": "P1-006",
+      "title": "Report actual child status",
+      "phase": 1,
+      "phase_name": "Sandbox exchange",
+      "status": "pending",
+      "depends_on": [
+        "P1-004"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/P1-006-actual-child-status.md"
+    },
+    {
+      "id": "P1-007",
+      "title": "Plan Phase 1 increment 4: harness output area",
+      "phase": 1,
+      "phase_name": "Sandbox exchange",
+      "status": "pending",
+      "depends_on": [
+        "P0-001"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/P1-007-plan-harness-output-area.md"
     }
   ]
 }
