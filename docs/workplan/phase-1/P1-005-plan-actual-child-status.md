@@ -9,7 +9,7 @@
 Produce one complete implementation brief, P1-006, for launching the shipped
 fake and showing its actual child status on the attach page: `Running` after
 successful launch while no exit has been observed, and `Exited` after the
-sandbox observes that child end. Reconcile the brief with the tracker, workplan
+sandbox observes the child's exit. Reconcile the brief with the tracker, workplan
 index, and Phase 0/1 coverage. Demonstrating `Exited` and implementing harness
 input or commands are outside this task's scope.
 
@@ -26,22 +26,19 @@ presentation are predictions from its pending brief, not implemented behavior
 at this baseline. Recheck these observations when deriving the brief.
 
 P1-006 must make the sandbox launch the shipped fake and connect the owned
-process handle's start and exit observations to the session response and page.
-A successful start permits `Running` until the sandbox observes that handle
-end; the recorded status then becomes `Exited`. A failed start never permits
+process's start and exit observations to the session response and page.
+A successful start permits `Running` until the sandbox observes the child's
+exit; the recorded status then becomes `Exited`. A failed start never permits
 `Running`. These values describe process observations, not health or readiness.
 The brief must specify the process bookkeeping and focused tests needed to
 keep those observations accurate, without browser inference or process-table
-scans. Do not prescribe HTTP startup ordering or require sandbox startup to fail when the child cannot
-be launched.
+scans.
 
 Plan against P1-004's brief without waiting for its implementation. Label
 predicted behavior and give P1-006 a `contract` dependency on P1-004 because it
 extends that task's exact wire and presentation contract. Keep the existing
-one-shot page fetch. The derived hand check must wait for the session endpoint
-to report `Running`, then load or reload the page to fetch that state. If the
-page was opened before launch and still shows `Down`, reload it after that
-observation. No polling or streaming feature in the product is required.
+one-shot page fetch: the derived hand check waits for the session endpoint to
+report `Running`, then loads or reloads the page to fetch that state.
 
 Allocate P1-006 only with its complete brief and matching tracker entry.
 Reconcile dependency reasons, coverage, graph metrics, and collision analysis.
@@ -147,10 +144,7 @@ launch and actual child-status capability.
 
 ## Deferrals
 
-None. Start and exit observation remain part of P1-006's status capability.
-Only its manual `Exited` demonstration is omitted; that omission does not
-remove exit observation or necessary process bookkeeping from implementation.
-Harness input and commands belong outside this increment.
+None.
 
 ## Traces to
 
