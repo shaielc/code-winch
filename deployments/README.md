@@ -17,10 +17,16 @@ on different branches therefore run test environments side by side. The sandbox 
 publishes no host port, so it cannot collide with a running dev sandbox, and it shares a
 `test-network` with the `toolchain` service, which reaches it as `http://sandbox:8080`.
 
-One shared proxy, `compose.proxy.yml` (project `code-winch-proxy`, nginx), fronts every
+One shared proxy, `compose.proxy.yml` (project `code-winch-proxy`, Traefik), fronts every
 test project. It publishes only on `127.0.0.1:${PROXY_PORT:-7080}` and routes
 `/<project>/sandbox/...` to that project's sandbox over the `code-winch-proxy` network;
-`/<project>/sandbox` redirects to the trailing-slash form. The attach page builds with
+`/<project>/sandbox` redirects to the trailing-slash form. Each sandbox declares its own
+route as Traefik labels (`compose.test.yml`, `compose.main.yml` for `/main/sandbox`), and
+Traefik forwards to the container's IP, so project names of any length route; a lookup by
+container name would fail once `<project>-sandbox-1` exceeds the 63-character DNS label.
+Traefik discovers routes through the Docker socket, mounted read-only — which does not
+restrict the Docker API, so the proxy container has effective control of the host's
+Docker daemon. Its health endpoint is `/ping`. The attach page builds with
 relative asset URLs and derives its API base from `location`, so it works at the root or
 under any `/{proxy/}+sandbox/` prefix. A site-specific, gitignored
 `compose.proxy.override.yml` is layered on top: `scripts/resolve-override.sh` takes the
@@ -30,7 +36,8 @@ first copy found in this worktree, the main worktree, or
 - `make test-cycle` is the whole path and needs only Docker: it starts the test
   environment, runs the format, vet, unit-test, and build gates plus the e2e scenarios
   inside the `toolchain` service, and always tears the environment down.
-- `make test-env` starts the proxy if needed, then the test environment, and checks that
+- `make test-env` starts the proxy if it is not running (never recreating a running one;
+  `make proxy-down` first to apply proxy changes), then the test environment, and checks that
   the sandbox is healthy, runs as a non-root user, and that the production and proxy
   compose files pin the published host IP to `127.0.0.1`. `make test-env-down` removes
   this branch's environment and leaves the shared proxy; `make proxy-down` removes it.
