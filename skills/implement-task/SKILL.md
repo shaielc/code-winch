@@ -93,8 +93,8 @@ Run, in this order:
 
 1. **The repository's standard gates**, as `AGENTS.md` specifies — including the
    integration and web gates when the change touches what they cover. If a gate
-   could not run in the environment, say which and why rather than reporting a
-   pass.
+   could not run in the environment, cite the CI job that ran it at your head;
+   if none did, say which and why rather than reporting a pass.
 2. **Everything under the brief's Verification.** That is the minimum evidence
    expected in the pull request, not a ceiling.
 3. **The standing scenario suite**, unchanged, against the profile or substrate

@@ -145,6 +145,10 @@ rebuild or remove it. A check that needs the host-published port, such as
 loopback-only publication, says so, first confirms that no `code-winch`
 deployment holds it, and stops rather than replacing one.
 
+CI (`.github/workflows/`) runs these gates on every push and pull request,
+including `make check` and `make test-cycle`; a pull request's CI result at its
+head is the evidence for them. CI does not run the brief's demonstration.
+
 Then run everything your brief lists under **Verification**. That is the minimum
 evidence expected in the pull request, not a ceiling.
 
