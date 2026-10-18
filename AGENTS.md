@@ -128,11 +128,14 @@ make check                                                  # Go host gate
 make test-cycle                                             # Docker-only path: test env, gates, e2e, teardown
 ```
 
-`make check` is the minimum and always: Go formatting, vet, lint, tests, and the
-build. It is a host target needing Go and golangci-lint. `make test-cycle` is the
-Docker path: it starts the isolated `code-winch-test` environment, runs the gates and
-the composed-image e2e scenarios in the `toolchain`, and tears it down. It does not
-cover lint, so say which gates you ran. `make e2e` (host Go, through the local proxy)
+`make check` is the host path: Go formatting, vet, lint, tests, and the build,
+needing Go and golangci-lint. `make test-cycle` is the Docker path: it starts the
+isolated `code-winch-test` environment, runs the same gates except lint plus the
+composed-image e2e scenarios in the `toolchain`, and tears it down. Run whichever
+path your environment supports and say which; you do not need both. CI
+(`.github/workflows/`) runs both paths, the web gates, and both Python suites on
+every push and pull request, so its passing job at a head is the evidence for
+those gates there. `make e2e` (host Go, through the local proxy)
 and `make docker-e2e` (toolchain) only run the scenarios against an environment
 already started by `make test-env`, which is named after the current branch.
 

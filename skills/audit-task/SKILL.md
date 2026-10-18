@@ -52,7 +52,9 @@ for the right things was settled when the brief was refined. The audit does not
 re-derive the objective's guarantees or grade the task against them.
 
 Produce evidence for each line below. Evidence is a command with its observed
-output, or a `file:line`. A claim with neither is unmet.
+output, a `file:line`, or the project's CI job that ran the check at the audited
+head; cite that job rather than re-running the check. A claim with none of these
+is unmet.
 
 1. **Acceptance criteria** — one at a time, in order. No summarizing several
    into one verdict.
@@ -61,7 +63,10 @@ output, or a `file:line`. A claim with neither is unmet.
    If following it literally would change a deployment you do not own, run the
    same check where the project's deployment and test instructions say
    demonstrations run, record the substitution, and report the brief's command
-   as a plan finding.
+   as a plan finding. A hand demonstration is the check automation does not
+   run, so this audit must. Before recording it as not run, start what the
+   environment provides and apply its documented workarounds, and say what you
+   tried.
 3. **Runtime reachability** — find the registration in the composition root and
    the profile or command that reaches the code. A port whose only
    implementations are test doubles, or an implementation nothing constructs, is
@@ -93,7 +98,8 @@ criteria and demonstrations as well as findings outside the brief:
   Requires human disposition before merge: handle now or assign a destination
   and owner. The auditor may suggest one but does not decide to defer it.
 - **Harden** — recommended robustness, test-quality, or maintainability
-  follow-up; no pre-merge action required.
+  follow-up; no pre-merge action required. Keep the bar high: record one only
+  when you expect a person to track it.
 
 Keep observed acceptance results distinct from classification. A failed
 criterion is not automatically Blocking or an automatic not-complete verdict.
