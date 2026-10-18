@@ -67,7 +67,8 @@ output, or a `file:line`. A claim with neither is unmet.
    implementations are test doubles, or an implementation nothing constructs, is
    an orphan.
 4. **Verification** — every check the brief lists exists and passes now, not
-   only when the pull request merged.
+   only when the pull request merged. Cite CI's result at the audited head for
+   the checks it ran.
 5. **Contract surfaces** — the change touched no contract the brief does not
    declare, or names and justifies each one it did. List the files written
    outside the write set for the plan's write-collision report; they are not a
@@ -79,7 +80,8 @@ output, or a `file:line`. A claim with neither is unmet.
 7. **Shape** — the task delivered what its shape promises, as defined by the
    shared model.
 8. **Invariants** — the seven hold at HEAD with this task in. Start the system,
-   run the fake profile by hand, run the standing scenario suite.
+   run the fake profile by hand, and take the standing scenario suite from CI's
+   run at the audited head.
 
 For every audit check above, report what holds and what does not, with
 evidence. **Classify every finding**, including deviations from acceptance

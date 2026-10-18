@@ -124,15 +124,24 @@ The standard gates are:
 ```sh
 python3 -m unittest discover -s test                        # completion scripts
 cd workplan-control-panel && python3 -m unittest discover -s tests
-make check                                                  # Go host gate
-make test-cycle                                             # Docker-only path: test env, gates, e2e, teardown
+make check                                                  # Go host: format, vet, lint, tests, build
+make test-cycle                                             # Docker: test env, format, vet, tests, build, e2e, teardown
+cd web && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build
 ```
 
-`make check` is the minimum and always: Go formatting, vet, lint, tests, and the
-build. It is a host target needing Go and golangci-lint. `make test-cycle` is the
-Docker path: it starts the isolated `code-winch-test` environment, runs the gates and
-the composed-image e2e scenarios in the `toolchain`, and tears it down. It does not
-cover lint, so say which gates you ran. `make e2e` (host Go, through the local proxy)
+CI (`.github/workflows/`) runs these gates on pushes and pull requests (some are
+path-filtered), including `make check` and `make test-cycle`; a pull request's CI
+result at its head is the evidence for them. CI does not run the brief's
+demonstration.
+
+Locally, run the gates your environment supports. `make check` needs Go and
+golangci-lint on the host; `make test-cycle` needs only Docker, starts the isolated
+`code-winch-test` environment, runs the gates and the composed-image e2e scenarios in
+the `toolchain`, and tears it down. They overlap on format, vet, tests, and build, so
+one is enough locally. Lint runs only in `make check`; the composed-image e2e
+scenarios only in `make test-cycle`. Say which gates you ran and cite CI for the rest;
+a gate that neither you nor CI ran is reported as unrun, never as a pass.
+`make e2e` (host Go, through the local proxy)
 and `make docker-e2e` (toolchain) only run the scenarios against an environment
 already started by `make test-env`, which is named after the current branch.
 
@@ -144,10 +153,6 @@ A demonstration that starts the system runs in that per-branch environment:
 rebuild or remove it. A check that needs the host-published port, such as
 loopback-only publication, says so, first confirms that no `code-winch`
 deployment holds it, and stops rather than replacing one.
-
-CI (`.github/workflows/`) runs these gates on every push and pull request,
-including `make check` and `make test-cycle`; a pull request's CI result at its
-head is the evidence for them. CI does not run the brief's demonstration.
 
 Then run everything your brief lists under **Verification**. That is the minimum
 evidence expected in the pull request, not a ceiling.

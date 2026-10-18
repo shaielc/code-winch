@@ -20,5 +20,6 @@ with evidence: a command with its observed output, or a `file:line`.
    not already imply.
 4. **What value does it add, and what cost?** Value: what an implementer gains
    from the refined brief. Cost: everything the refinement adds beyond that,
-   whether or not questions 1–3 found it — reading, work to build and verify,
+   whether or not questions 1–3 found it — reading, work to build and verify
+   (including gates CI already runs that the brief asks the implementer to rerun),
    constraints on how to implement, and what can go wrong or go stale.

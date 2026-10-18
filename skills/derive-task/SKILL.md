@@ -46,6 +46,8 @@ Use the shared anatomy and select a task shape. State required behavior and
 product constraints separately from proposed implementation approaches.
 Provide reachability, concrete write forecasts, owned contract surfaces,
 acceptance criteria, verification, and a credible manual demonstration.
+Verification names the checks specific to this task; the repository gates are
+CI's, so do not restate them.
 For a planning shape, use planning outputs and artifact review in place of
 runtime reachability and demonstrations of the target product capability.
 

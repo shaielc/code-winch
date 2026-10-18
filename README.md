@@ -67,6 +67,7 @@ github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6`); `[docker]`
 targets need only Docker and run in the `toolchain` container. `make check` is
 the host gate CI runs for Go; `make test-cycle` is the Docker path, which also runs the
 composed-image scenarios in an isolated test project named after the current branch,
-and does not run golangci-lint. To run only the scenarios, use `make test-env`, then
+and does not run golangci-lint. CI runs both, so locally run what your environment
+supports (see `AGENTS.md`, Verification). To run only the scenarios, use `make test-env`, then
 `make e2e` (host Go, through the local proxy) or `make docker-e2e` (toolchain), and
 `make test-env-down` (see `deployments/README.md`).
