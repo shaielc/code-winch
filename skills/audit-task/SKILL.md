@@ -67,8 +67,7 @@ output, or a `file:line`. A claim with neither is unmet.
    implementations are test doubles, or an implementation nothing constructs, is
    an orphan.
 4. **Verification** — every check the brief lists exists and passes now, not
-   only when the pull request merged. Cite CI's result at the audited head for
-   the checks it ran.
+   only when the pull request merged.
 5. **Contract surfaces** — the change touched no contract the brief does not
    declare, or names and justifies each one it did. List the files written
    outside the write set for the plan's write-collision report; they are not a
@@ -80,8 +79,7 @@ output, or a `file:line`. A claim with neither is unmet.
 7. **Shape** — the task delivered what its shape promises, as defined by the
    shared model.
 8. **Invariants** — the seven hold at HEAD with this task in. Start the system,
-   run the fake profile by hand, and take the standing scenario suite from CI's
-   run at the audited head.
+   run the fake profile by hand, run the standing scenario suite.
 
 For every audit check above, report what holds and what does not, with
 evidence. **Classify every finding**, including deviations from acceptance
@@ -104,8 +102,9 @@ requiring human disposition; test coverage weaknesses may be Harden; stable
 identity for persisted submissions may be Deferrable if a person assigns it
 downstream.
 
-Where the project's CI ran a check at the audited head, cite that job as its
-result instead of re-running it; spend the audit on what CI does not run. A
+Where the project's CI ran a check at the audited head (`docs/testing.md` lists
+what it runs), cite that job as its result instead of re-running it; spend the
+audit on what CI does not run. A
 check you could not run is a limit of this audit, not a finding against the
 implementation. Under that check, say what did not run and why, and mark the
 audit **partial**. Merge readiness then waits on a later audit at the same head

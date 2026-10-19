@@ -275,7 +275,7 @@ recorded older failures and rules that remain part of the system record:
   retired links and deferral owners (`skills/close-phase/SKILL.md`).
 - Product implementation was removed with the earlier plan, leaving gates aimed
   at absent files. Rule: retire planning artifacts, preserve working code,
-  reconcile every gate, and let CI run both the host and Docker paths. Current Makefile and
+  reconcile every gate against the sources that exist. Current Makefile and
   workflows target existing sources, but closure cannot certify they pass here
   (`Makefile:6-52`, `.github/workflows/go.yml`, `web.yml`).
 - The earlier tracker was `{}`, and an older closure example omitted required

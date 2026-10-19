@@ -497,11 +497,10 @@ Exact commands and the expected observable result.
 
 ## Verification
 
-- Standing scenario suite passes against <profile/substrate>; CI's run counts
-  where it runs against that substrate.
+Task-specific checks only; the repository gates are in `docs/testing.md`.
+
+- Standing scenario suite passes against <profile/substrate>.
 - <Focused automated tests specific to this task.>
-- The repository gates are CI's (`AGENTS.md`, Verification); list a check here
-  only if CI does not run it.
 
 ## Acceptance criteria
 

@@ -91,19 +91,16 @@ the problem is discovered, not when the plan is drawn.
 
 Run, in this order:
 
-1. **The repository's standard gates**, as `AGENTS.md` specifies — including the
-   integration and web gates when the change touches what they cover. Run those
-   your environment supports and cite the CI job that ran the rest at your head;
-   a gate that neither you nor CI ran is reported as unrun, never as a pass.
-2. **Everything under the brief's Verification.** That is the minimum evidence
+1. **Everything under the brief's Verification.** That is the minimum evidence
    expected in the pull request, not a ceiling.
-3. **The standing scenario suite**, unchanged, against the profile or substrate
-   the brief names. Cite CI where it ran the suite against that substrate.
-4. **The Demonstration, by hand, exactly as written.** Record the commands and
+2. **The Demonstration, by hand, exactly as written.** Record the commands and
    what you actually saw, not what the brief predicted. If following it literally
    would change a deployment you do not own, run the same check where the
    project's deployment and test instructions say demonstrations run, record
    the substitution, and report the brief's command as a plan finding.
+3. **The repository's gates**, as `docs/testing.md` specifies, including the
+   standing scenario suite — unchanged, against the profile or substrate the
+   brief names.
 
 If the demonstration cannot produce the stated result, either the change is
 incomplete or the brief no longer matches the system. Correct the brief in the
