@@ -1,42 +1,40 @@
 # Testing and gates
 
-How this repository is tested: the gates, what each needs, what to run in your
-environment, how CI covers the rest, and where a demonstration runs.
-`AGENTS.md`, the skills, and the briefs point here and do not restate it. A
-brief's **Verification** lists only the checks specific to its task.
+How this repository is tested: the gates, which are required and when, how to
+run them, how CI covers them, and how a demonstration is run. `AGENTS.md`, the
+skills, and the briefs point here and do not restate it. A brief's
+**Verification** lists only the checks specific to its task.
 
 ## Gates
 
-| Gate | Command | Needs | Covers |
+| Gate | Covers | Options | Required when |
 |---|---|---|---|
-| Completion scripts | `python3 -m unittest discover -s test` | Python 3 | The task-status and completion scripts |
-| Control panel | `cd workplan-control-panel && python3 -m unittest discover -s tests` | Python 3.11+, Git | The workplan control panel |
-| Go, host | `make check` | Go 1.24+, golangci-lint 2.1.6 | Format, vet, lint, unit and contract tests, build |
-| Go, Docker | `make test-cycle` | Docker | Starts the isolated test environment; format, vet, unit and contract tests, build, and the composed-image e2e scenarios in the `toolchain`; tears it down |
-| Web | `cd web && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build` | Node and npm, or `make web-test` with Docker | The attach page |
+| Go | Format, vet, lint, unit and contract tests, build; the Docker option also runs the composed-image e2e scenarios | Host or Docker | Always |
+| Web | Format, lint, typecheck, unit tests, build of the attach page | Host or Docker | Always |
+| Control panel | The workplan control panel's tests | Host | When the change touches `workplan-control-panel/` |
+| Completion scripts | The task-status and completion scripts' tests | Host | CI only |
 
-Install golangci-lint with `go install
-github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6`.
+The two Go options overlap on format, vet, tests, and build, and currently
+differ: lint runs only in the host option and the e2e scenarios only in the
+Docker option ([#149](https://github.com/shaielc/code-winch/issues/149)).
 
-`make check` and `make test-cycle` overlap on format, vet, tests, and build.
-Lint runs only in `make check`; the composed-image e2e scenarios run only in
-`make test-cycle`.
+## Running the gates
 
-## What to run
+Run the option your environment supports. Running both is not needed. Say which
+you ran.
 
-Run the gates your environment supports. Running both Go paths is not a
-requirement:
+| Gate | Host | Docker |
+|---|---|---|
+| Go | `make check` (Go 1.24+, golangci-lint 2.1.6) | `make test-cycle` |
+| Web | `cd web && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build` | `make web-test` |
+| Control panel | `cd workplan-control-panel && python3 -m unittest discover -s tests` (Python 3.11+, Git) | |
+| Completion scripts | `python3 -m unittest discover -s test` | |
 
-- Go and golangci-lint on the host: `make check`.
-- Only Docker: `make test-cycle`.
-- The Python suites always, and the web gate when the change touches `web/`.
+`make test-cycle` starts the isolated test environment, runs the gates and the
+composed-image e2e scenarios in the `toolchain`, and tears it down.
 
-Say which you ran. A gate you did not run is covered if CI ran it at your head
-(see CI below); otherwise report it as unrun, never as a pass.
-
-To run only the scenarios, start the environment with `make test-env`, then
-`make e2e` (host Go, through the local proxy) or `make docker-e2e` (toolchain),
-then `make test-env-down` (see `deployments/README.md`). The test environment is
+To run only the scenarios: `make test-env`, then `make docker-e2e`, then
+`make test-env-down` (see `deployments/README.md`). The test environment is
 named after the current branch.
 
 ## The standing scenario suite
@@ -47,10 +45,10 @@ runs the same scenario against that substrate as well as the fake profile.
 
 ## CI
 
-`.github/workflows/` runs the gates above:
+`.github/workflows/` runs the gates:
 
-- `go.yml`: the completion-script tests, `make check`, and `make test-cycle`, on
-  pushes and pull requests.
+- `go.yml`: the completion-script tests, the Go gate in both options
+  (`make check` and `make test-cycle`), on pushes and pull requests.
 - `web.yml`: the web gate, on pull requests and pushes to `main`.
 - `control-panel.yml`: the control-panel tests, when files under
   `workplan-control-panel/` change.
@@ -59,14 +57,6 @@ CI does not run a brief's demonstration.
 
 ## Demonstrations
 
-A demonstration is a manual check. One that starts the system runs in the
-per-branch environment: `make test-env`, then
-`http://127.0.0.1:$PROXY_PORT/<project>/sandbox/` (see `deployments/README.md`),
-then `make test-env-down`.
-
-The default compose project (`code-winch`, `127.0.0.1:8080`) is also the
-operator's deployment (`make main-up`), so
-`docker compose -f deployments/compose.yml up` and `down` can rebuild or remove
-it. A check that needs the host-published port, such as loopback-only
-publication, says so, first confirms that no `code-winch` deployment holds it,
-and stops rather than replacing one.
+A demonstration is a manual check, run as the brief writes it. One that starts
+the system runs in an isolated environment (see `deployments/README.md`), never
+in the operator's deployment.
