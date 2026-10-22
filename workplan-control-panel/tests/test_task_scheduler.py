@@ -168,6 +168,48 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
                 page.count(f'data-state="open" href="https://chatgpt.com/remote/task_e_{number}"'), 2)
         self.assertNotIn('clipboard', page)
 
+    def test_rebase_moves_the_task_onto_main_and_reopens_its_stages(self):
+        self.panel.sync()
+        with patch.object(repository, 'task_pull_requests', return_value=[]):
+            for task, status in (('P9-999', 404), ('P0-002', 409)):
+                with self.assertRaises(TaskError) as refused:
+                    self.panel.rebase(task)
+                self.assertEqual(refused.exception.status, status)
+            self.assertEqual(self.panel.rebase('P0-001'), {'task': 'P0-001', 'rebased': False})
+            with patch.object(codex, 'submit', side_effect=['https://example/codex/1',
+                                                            'https://example/codex/2']) as submit:
+                self.panel.stage('P0-001', 'implement')
+                seed = self.root / 'seed'
+                (seed / 'upstream.txt').write_text('new\n')
+                git(seed, 'add', 'upstream.txt')
+                git(seed, 'commit', '-m', 'upstream')
+                git(seed, 'push', 'origin', 'main')
+                result = self.panel.rebase('P0-001')
+                self.assertTrue(result['rebased'])
+                self.assertEqual(result['main_commit'], git(seed, 'rev-parse', 'HEAD'))
+                # The moved tip is a new revision, so implement is sent again.
+                self.assertNotIn('reused', self.panel.stage('P0-001', 'implement'))
+                self.assertEqual(submit.call_count, 2)
+
+    def test_rebase_refuses_fork_pull_requests_and_reports_conflicts(self):
+        self.panel.sync()
+        fork = [{'number': 3, 'url': 'https://example/pr/3', 'headRefName': 'x',
+                 'headRefOid': 'abc', 'isCrossRepository': True}]
+        with patch.object(repository, 'task_pull_requests', return_value=fork), \
+                patch.object(repository, 'rebase_task_branch') as rebase:
+            with self.assertRaises(TaskError) as refused:
+                self.panel.rebase('P0-001')
+            self.assertEqual(refused.exception.status, 409)
+            self.assertIn('https://example/pr/3', str(refused.exception))
+            rebase.assert_not_called()
+        with patch.object(repository, 'task_pull_requests', return_value=[]), \
+                patch.object(repository, 'rebase_task_branch',
+                             side_effect=repository.RebaseConflict('task/P0-001 conflicts')):
+            with self.assertRaises(TaskError) as conflicted:
+                self.panel.rebase('P0-001')
+            self.assertEqual(conflicted.exception.status, 409)
+            self.assertIn('Nothing was pushed', str(conflicted.exception))
+
     def test_expire_releases_reservation_and_retains_stage_conversations(self):
         self.panel.sync()
         urls = ['https://chatgpt.com/codex/cloud/tasks/refine',
@@ -178,9 +220,10 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
         before = self.panel.snapshot()
         page = render(before['tracker'], before['state'], '', False)
         self.assertEqual(page.count('data-action="expire"'), 2)
-        # Expiry deletes the branch, so its button asks first; Prepare does not.
+        # Expiry and Rebase rewrite the branch, so their buttons ask first; Prepare does not.
         self.assertEqual(page.count('data-confirm="Expire P0-001? This deletes task/P0-001 on GitHub'), 2)
-        self.assertEqual(page.count('data-confirm='), 2)
+        self.assertEqual(page.count('data-confirm="Rebase task/P0-001 onto main?'), 2)
+        self.assertEqual(page.count('data-confirm='), 4)
         self.assertEqual(self.panel.expire('P0-001'), {'expired': 'P0-001'})
         snapshot = self.panel.snapshot()
         effective = task_state.effective_tracker(snapshot['tracker'], snapshot['state'])
@@ -558,6 +601,10 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.assertEqual((status, data['pull_request']), (200, 'https://example/pr/9'))
             self.assertEqual(request('/api/tasks/P0-002/pull-request')[0], 409)
             self.assertEqual(request('/api/tasks/P0-999/pull-request')[0], 404)
+            with patch.object(repository, 'task_pull_requests', return_value=[]):
+                self.assertEqual(request('/api/tasks/P0-001/rebase'),
+                                 (200, {'task': 'P0-001', 'rebased': False}))
+                self.assertEqual(request('/api/tasks/P0-002/rebase')[0], 409)
         finally:
             server.shutdown()
             server.server_close()

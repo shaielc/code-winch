@@ -199,6 +199,39 @@ class TaskScheduler:
             return {"task": task_id, "pull_request": record.get("pull_request"),
                     "pull_request_state": record.get("pull_request_state")}
 
+    def rebase(self, task_id: str):
+        """Rebase the task branch onto main, carrying its open pull requests along with it.
+
+        A moved tip reopens every stage at the new revision, as any other push would; no
+        stage record is touched.
+        """
+        with self.locked():
+            state = task_state.load_state(self.state_file)
+            self.task(task_id, state)
+            try:
+                pulls = repository.task_pull_requests(self.clone, task_id)
+            except (OSError, subprocess.SubprocessError, ValueError) as error:
+                raise TaskError(502, "GitHub did not list the pull requests into the task "
+                                "branch; check the control panel's GitHub App installation "
+                                "and retry") from error
+            forks = [pull["url"] for pull in pulls if pull.get("isCrossRepository")]
+            if forks:
+                raise TaskError(409, f"{task_id} has open pull requests from forks the panel "
+                                     "cannot rebase: " + ", ".join(forks), pull_requests=pulls)
+            try:
+                result = repository.rebase_task_branch(self.clone, "origin", task_id, pulls)
+            except repository.RebaseConflict as error:
+                raise TaskError(409, f"{task_id} was not rebased: {error}. Nothing was "
+                                     "pushed.") from error
+            except (OSError, subprocess.SubprocessError) as error:
+                raise TaskError(502, f"{task_id} was not rebased; a branch may have moved "
+                                     "meanwhile, so retry. " + failure_message(error)) from error
+            if result is None:
+                return {"task": task_id, "rebased": False}
+            logs.output(f"rebased task/{task_id} onto {result['main_commit'][:12]}",
+                        ", ".join(pull["url"] for pull in result["propagated"]) or "no pull requests")
+            return {"task": task_id, "rebased": True, **result}
+
     def sync(self, event: dict[str, Any] | None = None, only: str | None = None):
         if event is not None:
             pull = event.get("pull_request")

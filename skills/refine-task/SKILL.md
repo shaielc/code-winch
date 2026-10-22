@@ -56,6 +56,8 @@ Check, with evidence — a command with its observed output, or a `file:line`:
    refinement does not substitute for phase revision or task derivation.
 5. **Demonstration** — the tools and existing commands it uses are present where
    it will run, and each expectation can be observed without false matches.
+   It runs where the project's deployment and test instructions say a
+   demonstration runs, and leaves deployments it does not own alone.
 
 Then make the brief concrete, in the sections it already has:
 
@@ -69,7 +71,8 @@ Then make the brief concrete, in the sections it already has:
 - **Write set** — the forecast, updated from the concrete Scope.
 - **Acceptance criteria**, **Verification**, and **Demonstration** — the
   results of the criteria and demonstration checks, and the test that will show
-  each criterion.
+  each criterion. Verification lists only checks specific to this task; the
+  repository gates are in `docs/testing.md`.
 - **Deferrals** — rows only for owners that already exist in `tasks.json`. Have
   a separate task author derive a missing owner before adding its row.
 

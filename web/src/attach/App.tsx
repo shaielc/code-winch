@@ -4,15 +4,21 @@ import { sandboxURL } from "./paths";
 import { Posture, type SessionPosture } from "./Posture";
 export function App() {
   const [posture, setPosture] = useState<SessionPosture>();
+  const [childStatus, setChildStatus] = useState("Unknown");
   const [error, setError] = useState(false);
   const [localMessages, setLocalMessages] = useState<string[]>([]);
   useEffect(() => {
     fetch(sandboxURL("api/session"))
       .then((response) => {
         if (!response.ok) throw new Error("request failed");
-        return response.json() as Promise<SessionPosture>;
+        return response.json() as Promise<unknown>;
       })
-      .then(setPosture)
+      .then((payload) => {
+        if (isSessionPosture(payload)) setPosture(payload);
+        if (isObject(payload) && payload.childStatus === "Down") {
+          setChildStatus("Down");
+        }
+      })
       .catch(() => setError(true));
   }, []);
   return (
@@ -24,6 +30,10 @@ export function App() {
       </header>
       {error && <p role="alert">Sandbox posture is unavailable.</p>}
       {posture && <Posture posture={posture} />}
+      <section aria-labelledby="child-status-heading">
+        <h2 id="child-status-heading">Child status</h2>
+        <p>{childStatus}</p>
+      </section>
       <section aria-labelledby="local-messages-heading">
         <h2 id="local-messages-heading">Local messages</h2>
         {localMessages.length === 0 ? (
@@ -45,5 +55,18 @@ export function App() {
         }
       />
     </main>
+  );
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isSessionPosture(value: unknown): value is SessionPosture {
+  return (
+    isObject(value) &&
+    typeof value.profile === "string" &&
+    Array.isArray(value.unenforcedControls) &&
+    value.unenforcedControls.every((control) => typeof control === "string")
   );
 }

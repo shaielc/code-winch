@@ -1,6 +1,6 @@
-# P0-008: Plan Phase 1 increment 1: child status presentation
+# P1-001: Plan Phase 1 increment 1: child status presentation
 
-**Phase:** 0 — Plan the implementation phases
+**Phase:** 1 — Sandbox exchange
 **Shape:** planning
 **Dependencies:** P0-001
 
@@ -16,7 +16,7 @@ task must make the existing deployed attach page identify the child state as
 
 Use `skills/derive-task/SKILL.md` against the reviewed
 `docs/workplan/phase-1/README.md` and the code at HEAD. Allocate the next
-plan-wide ID only when the implementation brief and its tracker record are
+Phase 1 ID only when the implementation brief and its tracker record are
 written. Derive exactly increment 1; do not combine its presentation-only loop
 with increment 2's sandbox-owned observation or increment 3's child ownership.
 
@@ -75,7 +75,7 @@ harness-specific capability semantics, vendor interpretation, or broad page
 restructuring. It does not change the meanings of `/healthz` or `/api/session`.
 
 Do not derive a second Phase 1 implementation brief in this task. Increment 2,
-**Sandbox-backed child status**, receives a new, separately authored Phase 0
+**Sandbox-backed child status**, receives a new, separately authored Phase 1
 planning brief and tracker entry as part of this task's planning handoff; that
 planning entry must not reserve or invent increment 2's implementation ID.
 
@@ -93,7 +93,7 @@ artifact that does not exist:
    `docs/workplan/phase-1/README.md` with the real ID, dependency reason,
    coverage state, graph metrics, and concurrent write/contract collision
    analysis. Preserve every pre-existing tracker status.
-3. Create the next concrete Phase 0 planning task for increment 2,
+3. Create the next concrete Phase 1 planning task for increment 2,
    **Sandbox-backed child status**, including its independently authored brief,
    tracker entry, index/dependency reason, and Phase 0/1 coverage records. Its
    target operation is future implementation-brief derivation, not product
@@ -107,7 +107,7 @@ artifact that does not exist:
 Forecast for the assigned planning operation:
 
 - `docs/workplan/phase-1/<allocated-ID>-child-status-presentation.md`;
-- `docs/workplan/phase-0/<next-planning-ID>-plan-sandbox-backed-child-status.md`;
+- `docs/workplan/phase-1/<next-planning-ID>-plan-sandbox-backed-child-status.md`;
 - `docs/workplan/tasks.json` (the two matching new entries, with all existing
   statuses unchanged);
 - `docs/workplan/README.md`;
@@ -123,7 +123,7 @@ first returned for phase revision. No later implementation IDs are reserved.
 
 ## Contract surfaces
 
-This Phase 0 task changes no product contract. The derived implementation brief
+This planning task changes no product contract. The derived implementation brief
 owns only the attach page's visible and accessible **Child status: Unknown**
 presentation. It consumes the existing static React page, its deployed image
 path, and the permanent single-sandbox attach-surface boundary from ADR-0005
@@ -151,7 +151,7 @@ changed:
    text-only Go e2e check executes the browser UI.
 3. Confirm the implementation brief, its tracker entry, the workplan index, and
    Phase 0/1 coverage all use the same allocated ID and dependency set.
-4. Confirm the separately authored Phase 0 increment-2 planning brief and its
+4. Confirm the separately authored Phase 1 increment-2 planning brief and its
    tracker/coverage records exist, while no increment-2 implementation ID does.
 
 ## Verification
@@ -197,7 +197,7 @@ and web format/lint/typecheck/build gates for the files it forecasts.
 - [ ] Tracker, index, Phase 0/1 coverage, graph metrics, and collision warnings
       agree, and the diff proves all pre-existing tracker statuses are unchanged.
 - [ ] A different refiner receives the increment-1 brief, and a separately
-      authored, fully registered Phase 0 planning brief assigns increment 2
+      authored, fully registered Phase 1 planning brief assigns increment 2
       without allocating a speculative implementation ID.
 
 ## Deferrals

@@ -110,7 +110,8 @@ class Handler(BaseHTTPRequestHandler):
             path = urlparse(self.path).path
             match = re.fullmatch(
                 r"/api/tasks/(P\d+-\d{3})/"
-                r"(refine|implement|audit|expire|prepare|pull-request|create-pull-request)", path)
+                r"(refine|implement|audit|expire|prepare|rebase|pull-request|create-pull-request)",
+                path)
             stage_match = re.fullmatch(r"/api/tasks/(P\d+-\d{3})/(refine|implement|audit)/expire", path)
             if path == "/api/session":
                 if not self.bearer_valid():
@@ -136,6 +137,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = self.scheduler.expire_stage(*stage_match.groups())
             elif match and match[2] == "expire":
                 result = self.scheduler.expire(match[1])
+            elif match and match[2] == "rebase":
+                result = self.scheduler.rebase(match[1])
             elif match and match[2] == "pull-request":
                 result = self.scheduler.refresh_pull_request(match[1])
             elif match and match[2] == "create-pull-request":
@@ -163,7 +166,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tracker", type=Path)
     parser.add_argument("--state-file", type=Path, required=True)
     parser.add_argument("--clone", type=Path, required=True, help="dedicated main checkout")
-    parser.add_argument("--max-concurrent", type=int, default=3)
+    parser.add_argument("--max-concurrent", type=int, default=1000,
+                        help="active task limit; the default is high enough not to bind")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     return parser.parse_args()
