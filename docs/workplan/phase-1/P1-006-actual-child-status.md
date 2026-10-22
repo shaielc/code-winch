@@ -114,13 +114,10 @@ lifecycle, or provider contract.
 ## Demonstration
 
 After the automated gates, from the repository root, start only the branch's
-isolated test environment with `make test-env`. It publishes the proxy on
-`PROXY_PORT` (7090 by default), so the attach URL is
-`http://127.0.0.1:<PROXY_PORT>/<project>/sandbox/`, where `<project>` is the
-branch's compose project name as in `deployments/README.md`.
+isolated test environment with `make test-env`.
 
-Wait until `GET /api/session` at that URL reports `Running`, then load the
-page. Reload it if it was loaded earlier, because the fetch is one-shot. Observe
+Wait until the session reports `Running`, then load the attach page. Reload it
+if it was loaded earlier, because the fetch is one-shot. Observe
 **Child status: Running**, the unchanged `container-standard` posture and
 `network-egress` disclosure, and a usable local composer. The default fake,
 launched without `-early-exit`, a transcript, or failure injection, blocks
