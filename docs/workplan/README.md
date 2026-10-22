@@ -89,7 +89,7 @@ These are phase outcome conditions, **not** task-graph dependency edges. The pla
 **Partial derivation:** the seven phase-design tasks assign phase design. P1-001
 produced P1-002 for Phase 1 increment 1, P1-003 produced P1-004 for increment
 2, and P1-005 produced P1-006 for increment 3. P1-006 takes a `contract` edge
-on P1-004 because it extends that pending brief's wire and presentation
+on P1-004 because it extends that implemented brief's wire and presentation
 contract. P1-007 assigns increment 4's independent presentation derivation and
 depends only on the Phase 1 design produced by P0-001. No implementation ID for
 increment 4 or later has been reserved.
@@ -112,7 +112,7 @@ contract extension. P0-001 → P1-007 records the independent increment 4 design
 input. Longest-path layer widths are 4, 4, 3, 2, 1, so average layer width is
 **2.8** (14/5); root width is **4**: P0-001, P0-002, P0-006 and P1-002. These
 are unweighted graph measures, not duration estimates. Currently available:
-P0-002, P0-006, P1-004, P1-005 and P1-007.
+P0-002, P0-006, P1-006 and P1-007.
 
 Concurrent write warnings: every phase-design brief forecasts edits to the
 shared index, Phase 0 coverage, and tracker for its independently derived
@@ -123,9 +123,9 @@ writes. P1-007's future implementation brief is presentation-only and may
 forecast `App.tsx`, `App.test.tsx`, and styles that overlap P1-004/P1-006; it
 has no semantic dependency on their behavior, so this is a write collision to
 rebase rather than an ordering edge. Among currently available tasks, P0-002,
-P0-006, P1-005, and P1-007 share planning-record writes (index, tracker, and
-Phase 0 coverage; both Phase 1 planning tasks also share Phase 1 coverage).
-P1-004's forecast product files do not overlap the planning artifacts. Rebase
+P0-006, and P1-007 share planning-record writes (index, tracker, and Phase 0
+coverage). P1-006's forecast product files do not overlap those planning
+artifacts. Rebase
 and reconcile shared records rather than adding ordering-only edges. No task
 edits existing tracker status fields.
 

@@ -14,6 +14,16 @@ while that exact process has not been observed to exit, then **Exited** after
 its exit is observed. This status describes process ownership and observation
 only; it is not a health, readiness, input-availability, or provider claim.
 
+## Source baseline
+
+At this brief's derivation revision, P1-004 is implemented: the composition
+root constructs an attach session with `ChildStatus: Down`, the session handler
+returns that construction-time value, and the one-shot React fetch validates
+and presents exact `Down`. The sandbox still starts no child. P1-006 therefore
+extends behavior observed in source rather than supplying P1-004's predicted
+contract, while its dependency remains required because both tasks own the
+same wire and presentation surface.
+
 ## Scope
 
 - Add a small process owner in `cmd/winch-sandbox` that starts
@@ -79,7 +89,7 @@ retry policy, readiness, provider semantics, PTY support, persistence, polling,
 and broad page restructuring are excluded. They are not required to complete
 this truthful owned-process status slice.
 
-## Reachability
+## Runtime reachability
 
 The `winch-sandbox` composition root starts `/usr/local/bin/fake-harness`, which
 already ships in the composed image, before it serves the existing attach
@@ -127,7 +137,7 @@ isolated test environment:
 ```sh
 make test-env
 project=$(printf '%s' "$(git branch --show-current)" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9_-' '-')
-base="http://127.0.0.1:${PROXY_PORT:-7090}/${project}/sandbox"
+base="http://127.0.0.1:${PROXY_PORT:-7080}/${project}/sandbox"
 until [ "$(curl -fsS "$base/api/session" | python3 -c \
   'import json,sys; print(json.load(sys.stdin).get("childStatus", ""))')" = Running ]; do
   sleep 0.2
