@@ -74,11 +74,11 @@ this truthful owned-process status slice.
 
 ## Runtime reachability
 
-The `winch-sandbox` composition root starts the fake harness that already
-ships in the composed image. The existing `/api/session` route reads the owner's current observation,
-and the existing one-shot fetch renders it at the branch proxy attach URL. No
-provider account, auxiliary service, new public endpoint, or host process scan
-is required.
+The `winch-sandbox` composition root starts the fake harness that already ships
+in the composed image. The existing `/api/session` route reads the owner's
+current observation, and the existing one-shot fetch renders it at the branch
+proxy attach URL. No provider account, auxiliary service, new public endpoint,
+or host process scan is required.
 
 ## Write set
 
@@ -114,21 +114,24 @@ lifecycle, or provider contract.
 ## Demonstration
 
 After the automated gates, from the repository root, start only the branch's
-isolated test environment:
+isolated test environment with `make test-env`. It publishes the proxy on
+`PROXY_PORT` (7090 by default), so the attach URL is
+`http://127.0.0.1:<PROXY_PORT>/<project>/sandbox/`, where `<project>` is the
+branch's compose project name as in `deployments/README.md`.
 
-Using `make test-env` and the proxy URL for this branch's `sandbox` project
-(`make test-env` publishes the proxy on `PROXY_PORT`, 7090 by default), wait,
-with a bounded number of attempts, until `GET /api/session` reports `Running`,
-then load the page. Reload it if it was loaded earlier, because the fetch is
-one-shot. Observe **Child status: Running**, the unchanged `container-standard`
-posture and `network-egress` disclosure, and a usable local composer. The default fake, launched without `-early-exit`, a transcript, or failure
-injection, blocks reading its open standard input after its startup records, so
-the owned process stays alive for the observation without any harness command.
-Tear down with `make test-env-down`. This proves that the sandbox owns a live fake process
-and transports the observation through the deployed page; it does not prove
-fake readiness, input delivery, output handling, provider compatibility, or exit
-interpretation. Never use `make main-down` or replace the operator's default
-`code-winch` deployment.
+Wait until `GET /api/session` at that URL reports `Running`, then load the
+page. Reload it if it was loaded earlier, because the fetch is one-shot. Observe
+**Child status: Running**, the unchanged `container-standard` posture and
+`network-egress` disclosure, and a usable local composer. The default fake,
+launched without `-early-exit`, a transcript, or failure injection, blocks
+reading its open standard input after its startup records, so the owned process
+stays alive for the observation without any harness command.
+
+Tear down with `make test-env-down`. This proves that the sandbox owns a live
+fake process and transports the observation through the deployed page; it does
+not prove fake readiness, input delivery, output handling, provider
+compatibility, or exit interpretation. Never use `make main-down` or replace the
+operator's default `code-winch` deployment.
 
 ## Verification
 
@@ -154,9 +157,8 @@ transitions, not compatibility with a real vendor CLI.
 
 ## Acceptance criteria
 
-- [ ] The maintained sandbox starts the shipped fake before serving, retains
-      ownership of that exact process, and cleans it up without an orphan or a
-      second waiter; a failed start cannot produce `Running`.
+- [ ] The maintained sandbox launches and owns the shipped fake and cleans it
+      up; a failed start cannot produce `Running`.
 - [ ] A concurrency-safe observation reports `Running` only after successful
       start and before observed exit, then `Exited` after `Wait` returns,
       without host process scans, browser inference, output inference, or
@@ -169,7 +171,7 @@ transitions, not compatibility with a real vendor CLI.
       data while preserving posture and the local composer.
 - [ ] The default fake configuration keeps `Running` observable without input
       commands or output handling, and automated tests cover successful launch,
-      failed launch, observed exit, cleanup, wire values, and React validation.
+      failed launch, observed exit, wire values, and React validation.
 - [ ] The branch-isolated hand check observes `Running` at the endpoint and on
       the loaded/reloaded page, retains posture/composer behavior, tears down
       its own environment, and states the limits of fake-process evidence.
