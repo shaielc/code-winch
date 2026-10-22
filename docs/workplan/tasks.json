@@ -135,7 +135,7 @@
       "title": "Report sandbox-backed child status",
       "phase": 1,
       "phase_name": "Sandbox exchange",
-      "status": "in_progress",
+      "status": "completed",
       "depends_on": [
         "P1-002"
       ],
