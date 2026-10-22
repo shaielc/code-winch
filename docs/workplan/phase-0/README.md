@@ -56,8 +56,9 @@ Each increment is named for the phase it plans, "Plan Phase 1" to "Plan Phase 7"
 | Plan Phase 7 (order 7) | [P0-007](P0-007-plan-phase-7-second-adapter-workflows.md) assigns design plus tracked follow-up for phase-7 design; **not yet authored** | **Not yet derived** |
 
 Coverage remains partial: P1-002, P1-004, and P1-006 are the first three derived
-Phase 1 implementation briefs and await separate refinement and implementation.
-P1-004 consumes P1-002, and P1-006 extends P1-004's contract. P1-007 assigns
+Phase 1 implementation briefs. P1-002 and P1-004 are implemented; P1-006 awaits
+separate refinement and implementation. P1-004 consumes P1-002, and P1-006
+extends P1-004's contract. P1-007 assigns
 the independent derivation of increment 4; all later Phase 1 briefs remain not
 yet derived, and no later implementation ID has been reserved. The other phase designs and specific-brief
 coverage likewise remain pending.

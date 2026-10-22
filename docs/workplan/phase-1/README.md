@@ -136,10 +136,10 @@ behavior must be described as such.
 | 29 | Reader overflow outcome | **Not yet derived** |
 | 30 | Manual refetch after overflow | **Not yet derived** |
 
-Coverage records brief derivation, not implementation. P1-002, P1-004, and
-P1-006 are derived implementation briefs ready for different authors to refine
-with `skills/refine-task/SKILL.md`; their existence does not claim that the UI,
-API, or child process behavior has changed. P1-004 depends on P1-002 because it
+Coverage records brief derivation, not implementation. P1-002 and P1-004 have
+subsequently been implemented; P1-006 is the derived implementation brief ready
+for a different author to refine with `skills/refine-task/SKILL.md`. Its
+existence does not claim that child-process behavior has changed. P1-004 depends on P1-002 because it
 consumes that presentation identity. P1-006 takes a contract edge on P1-004
 because it extends the session values and presentation P1-004 defines. Each
 derivation is a Phase 1 planning task numbered in this phase's own sequence
