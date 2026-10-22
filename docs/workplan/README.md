@@ -2,7 +2,7 @@
 
 This is a new planning workplan. The previous plan was closed; no former pending task is silently restored. The roadmap defines product Stages 0–6, while Phase 0 holds meta tasks — planning phases, converting issues into phase tasks, and updating the architecture and design set — and implementation begins at Phase 1.
 
-**Phase design and revision, design-set updates, and the conversion of implementation-scope issues into phase tasks must enter through [Phase 0](phase-0/README.md).** A design-document update that travels with an implementation task's own contract change stays in that task. Deriving briefs from an increment a phase has already decided is that phase's own planning task, numbered in that phase. Consult the active phase and `docs/state.md`, record the disposition through the applicable skill, and update Phase 0 coverage and this index. An implementation finding must not be treated as authorization to skip phase revision, task derivation or separate-author review.
+**Phase design and revision, design-set updates, repository toolchain and gate changes, and the conversion of implementation-scope issues into phase tasks must enter through [Phase 0](phase-0/README.md).** A design-document update that travels with an implementation task's own contract change stays in that task. Deriving briefs from an increment a phase has already decided is that phase's own planning task, numbered in that phase. Consult the active phase and `docs/state.md`, record the disposition through the applicable skill, and update Phase 0 coverage and this index. An implementation finding must not be treated as authorization to skip phase revision, task derivation or separate-author review.
 
 ## Phases
 
@@ -78,7 +78,7 @@ These are phase outcome conditions, **not** task-graph dependency edges. The pla
 | [P0-005](phase-0/P0-005-plan-phase-5-run-lifecycle.md) | phase-5/README.md — run lifecycle control | P0-004 | P0-004 (semantic: this artifact must extend the decided observe-only run/registration boundary in phase-4/README.md) |
 | [P0-006](phase-0/P0-006-plan-phase-6-enforce-isolation.md) | phase-6/README.md — enforced isolation | None | Existing design/HEAD is sufficient; no pending artifact is consumed |
 | [P0-007](phase-0/P0-007-plan-phase-7-second-adapter-workflows.md) | phase-7/README.md — second adapter and workflows | P0-002, P0-005 | P0-002 (semantic: this artifact must consume the first-adapter seam decided in phase-2/README.md); P0-005 (semantic: workflow boundaries require the ordinary run commands and event ownership decided in phase-5/README.md) |
-| [P0-008](phase-0/P0-008-route-go-gate-parity-issue.md) | Phase disposition for issue #149 (Go gate option parity) | None | Existing `Makefile`, `docs/testing.md` and HEAD are sufficient; no pending artifact is consumed |
+| [P0-008](phase-0/P0-008-align-go-gate-options.md) | Toolchain change for issue #149 — one Go check list for `make check` and `make test-cycle` | None | Existing `Makefile`, `docs/testing.md` and HEAD are sufficient; no pending artifact is consumed |
 | [P1-001](phase-1/P1-001-plan-owned-live-harness-output.md) | Phase 1 increment 1 implementation brief — child status presentation | P0-001 | P0-001 (semantic: the assigned brief must consume the reviewed increment boundary, prerequisite, and concern ownership decided in phase-1/README.md) |
 | [P1-002](phase-1/P1-002-child-status-presentation.md) | Phase 1 increment 1 — present truthful unknown child status | None | Existing deployed attach page is sufficient; no planned product behavior is consumed |
 | [P1-003](phase-1/P1-003-plan-sandbox-backed-child-status.md) | Phase 1 increment 2 implementation brief — sandbox-backed child status | P1-001 | P1-001 (semantic: derivation must consume the independently authored presentation boundary and preserve its accessible label/value contract) |
@@ -91,8 +91,7 @@ increment 2. P1-005 assigns the derivation of increment 3. It is pipelined: it
 consumes P1-004's brief, not its implementation, so it is available while
 P1-004 is being implemented. The brief it derives will take a `contract` edge on
 P1-004. No implementation ID for increment 3 or later has been reserved.
-P0-008 routes issue #149 to a phase author; it assigns no
-implementation brief yet. All later specific-brief coverage remains not yet derived. Completion of each
+P0-008 is a derived toolchain brief (issue #149), not a phase-design task. All later specific-brief coverage remains not yet derived. Completion of each
 phase-design task still requires its reviewed design and the planning task for
 increment 1. Each phase-design and derivation task repeats the one-at-a-time
 tracked handoff by completing `phase-increment-handoff`, which adds the

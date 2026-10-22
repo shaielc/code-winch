@@ -2,7 +2,7 @@
 
 ## Outcome and starting point
 
-At exit, a contributor can locate a reviewed, bounded phase design and an assignable specific implementation brief for each planned implementation phase, with status, dependencies, and coverage recorded consistently. Phase 0 holds meta tasks. Its outputs are phase designs and their revisions, the briefs that convert an issue into tasks of the phase that owns the work, and revisions to the design set (architecture, contracts, security, code structure, roadmap, ADRs). It does not derive briefs from an increment a phase has already decided — that is the phase's own planning task — and it does not implement roadmap capabilities.
+At exit, a contributor can locate a reviewed, bounded phase design and an assignable specific implementation brief for each planned implementation phase, with status, dependencies, and coverage recorded consistently. Phase 0 holds meta tasks. Its outputs are phase designs and their revisions, the briefs that convert an issue into tasks of the phase that owns the work, and revisions to the design set (architecture, contracts, security, code structure, roadmap, ADRs), and changes to the repository toolchain and gates (Makefile, toolchain image, CI, testing documentation). It does not derive briefs from an increment a phase has already decided — that is the phase's own planning task — and it does not implement roadmap capabilities.
 
 The prior workplan was explicitly closed and `docs/workplan/tasks.json` was empty when Phase 0 opened (`docs/state.md`, `AGENTS.md`). The sandbox page and local composer exist; the fake harness is shipped but is not launched by the sandbox. Harness output, retained history, persisted input, and delivery are missing or unwired (`docs/state.md`). Runtime checks are limited by the verification caveats there. `docs/roadmap.md` fixes Stages 0–6; workplan phase numbering is distinct.
 
@@ -22,8 +22,8 @@ Sources: [roadmap](../../roadmap.md), [state](../../state.md), [architecture](..
 | Second adapter and cross-run workflows | Plan Phase 7, then implementation Phase 7 / roadmap Stage 6 |
 | Converting an implementation-scope issue into phase tasks | Phase 0 meta task assigning derivation; the brief lands in the owning phase and takes its ID from that phase's own counter |
 | Architecture and design-set updates (`docs/architecture.md`, `contracts.md`, `security.md`, `code-structure.md`, `roadmap.md`, ADRs) | Phase 0 meta task, with the affected phase designs and briefs reconciled; an update that travels with an implementation task's own contract change stays in that task |
-| Product implementation and code changes | Respective implementation phases, never Phase 0 |
-| Issue #149: Go gate option parity | [P0-008](P0-008-route-go-gate-parity-issue.md) assigns the phase-author disposition; no derived brief yet |
+| Product implementation and product code changes | Respective implementation phases, never Phase 0 |
+| Repository toolchain and gate changes (Makefile, toolchain image, CI, `docs/testing.md`) | Phase 0 meta task; the brief lands here and takes a Phase 0 ID. Issue #149 is [P0-008](P0-008-align-go-gate-options.md) |
 | Revisions and issue-resolution follow-ups | Route through Phase 0 planning/coverage and the relevant phase author; do not silently change scope |
 
 Phase 0 IDs count on their own (`P0-<NNN>`); see [Task IDs](../README.md#task-ids). Only meta tasks are Phase 0 tasks. A phase's own planning task, which derives briefs from an increment that phase has decided, belongs to that phase and shares its sequence with the briefs it derives.
@@ -56,7 +56,7 @@ Each increment is named for the phase it plans, "Plan Phase 1" to "Plan Phase 7"
 | Plan Phase 6 (order 6) | [P0-006](P0-006-plan-phase-6-enforce-isolation.md) assigns design plus tracked follow-up for phase-6 design; **not yet authored** | **Not yet derived** |
 | Plan Phase 7 (order 7) | [P0-007](P0-007-plan-phase-7-second-adapter-workflows.md) assigns design plus tracked follow-up for phase-7 design; **not yet authored** | **Not yet derived** |
 
-Issue [#149](https://github.com/shaielc/code-winch/issues/149) (Go gate option parity) fits no increment of any decided phase; [P0-008](P0-008-route-go-gate-parity-issue.md) assigns its phase-author disposition and is outside the seven-increment planning handoff order.
+Issue [#149](https://github.com/shaielc/code-winch/issues/149) (Go gate option parity) is repository toolchain work, which Phase 0 owns; [P0-008](P0-008-align-go-gate-options.md) is its derived brief and is outside the seven-increment planning handoff order.
 
 Coverage remains partial: P1-002 and P1-004 are the first two derived Phase 1
 implementation briefs and await separate refinement and implementation. P1-004
