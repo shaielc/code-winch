@@ -71,7 +71,8 @@ Then make the brief concrete, in the sections it already has:
 - **Write set** — the forecast, updated from the concrete Scope.
 - **Acceptance criteria**, **Verification**, and **Demonstration** — the
   results of the criteria and demonstration checks, and the test that will show
-  each criterion.
+  each criterion. Verification lists only checks specific to this task; the
+  repository gates are in `docs/testing.md`.
 - **Deferrals** — rows only for owners that already exist in `tasks.json`. Have
   a separate task author derive a missing owner before adding its row.
 

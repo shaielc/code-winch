@@ -23,3 +23,5 @@ deployments/.env
 workplan-control-panel/.env
 workplan-control-panel/compose.override.yml
 workplan-control-panel/secrets/
+# Playwright CLI output (may contain credentials)
+.playwright-cli/

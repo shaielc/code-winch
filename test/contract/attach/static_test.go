@@ -15,7 +15,7 @@ func TestStaticAssetsAndSPAFallback(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "index.html"), "attach shell")
 	writeFile(t, filepath.Join(dir, "asset.js"), "asset")
-	handler, err := attach.New(dir, attach.DefaultPosture())
+	handler, err := attach.New(dir, attach.Session{Posture: attach.DefaultPosture(), ChildStatus: attach.ChildDown})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestTraversalDoesNotEscapeStaticRoot(t *testing.T) {
 	if err := os.Symlink(filepath.Join(parent, "secret"), filepath.Join(root, "linked-secret")); err != nil {
 		t.Fatal(err)
 	}
-	handler, _ := attach.New(root, attach.DefaultPosture())
+	handler, _ := attach.New(root, attach.Session{Posture: attach.DefaultPosture(), ChildStatus: attach.ChildDown})
 	for _, path := range []string{"/%2e%2e/secret", "/../secret", "/..%2fsecret", "/a/../../secret", "/linked-secret"} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		response := httptest.NewRecorder()
@@ -52,7 +52,7 @@ func TestTraversalDoesNotEscapeStaticRoot(t *testing.T) {
 }
 
 func TestMissingIndexIsRejected(t *testing.T) {
-	if _, err := attach.New(t.TempDir(), attach.DefaultPosture()); err == nil {
+	if _, err := attach.New(t.TempDir(), attach.Session{Posture: attach.DefaultPosture(), ChildStatus: attach.ChildDown}); err == nil {
 		t.Fatal("expected missing index to fail")
 	}
 }

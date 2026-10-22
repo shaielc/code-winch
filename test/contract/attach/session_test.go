@@ -12,13 +12,13 @@ import (
 	"github.com/shaielc/code-winch/internal/adapters/transport/attach"
 )
 
-func fixture(t *testing.T, posture attach.Posture) http.Handler {
+func fixture(t *testing.T, posture attach.Posture, childStatus attach.ChildStatus) http.Handler {
 	t.Helper()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("Attach page"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	handler, err := attach.New(dir, posture)
+	handler, err := attach.New(dir, attach.Session{Posture: posture, ChildStatus: childStatus})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,10 +26,10 @@ func fixture(t *testing.T, posture attach.Posture) http.Handler {
 }
 
 func TestEndpointContracts(t *testing.T) {
-	handler := fixture(t, attach.DefaultPosture())
+	handler := fixture(t, attach.DefaultPosture(), attach.ChildDown)
 	cases := []struct{ path, body, contentType string }{
 		{"/healthz", "{\"service\":\"winch-sandbox\",\"status\":\"ok\"}\n", "application/json"},
-		{"/api/session", "{\"profile\":\"container-standard\",\"unenforcedControls\":[\"network-egress\"]}\n", "application/json"},
+		{"/api/session", "{\"profile\":\"container-standard\",\"unenforcedControls\":[\"network-egress\"],\"childStatus\":\"Down\"}\n", "application/json"},
 	}
 	for _, tc := range cases {
 		request := httptest.NewRequest(http.MethodGet, tc.path, nil)
@@ -41,8 +41,18 @@ func TestEndpointContracts(t *testing.T) {
 	}
 }
 
+func TestSessionSerializesSuppliedChildStatus(t *testing.T) {
+	handler := fixture(t, attach.DefaultPosture(), attach.ChildStatus("observed-value"))
+	request := httptest.NewRequest(http.MethodGet, "/api/session", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if !strings.Contains(response.Body.String(), `"childStatus":"observed-value"`) {
+		t.Fatalf("session did not retain supplied child status: %q", response.Body.String())
+	}
+}
+
 func TestRejectsMethodsAndUnknownAPI(t *testing.T) {
-	handler := fixture(t, attach.DefaultPosture())
+	handler := fixture(t, attach.DefaultPosture(), attach.ChildDown)
 	request := httptest.NewRequest(http.MethodPost, "/api/session", nil)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -67,7 +77,7 @@ func TestDefaultPostureNamesNetworkEgress(t *testing.T) {
 }
 
 func TestHeadHasNoBody(t *testing.T) {
-	server := httptest.NewServer(fixture(t, attach.DefaultPosture()))
+	server := httptest.NewServer(fixture(t, attach.DefaultPosture(), attach.ChildDown))
 	defer server.Close()
 	response, err := http.Head(server.URL + "/")
 	if err != nil {
