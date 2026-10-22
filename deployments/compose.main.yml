@@ -2,6 +2,15 @@ services:
   sandbox:
     ports: !reset []
     networks: [default, proxy]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.main.rule=Path(`/main/sandbox`) || PathPrefix(`/main/sandbox/`)
+      - traefik.http.routers.main.middlewares=main-slash,main-strip
+      - traefik.http.middlewares.main-slash.redirectregex.regex=^(https?://[^/]+/main/sandbox)(\?.*)?$$
+      - traefik.http.middlewares.main-slash.redirectregex.replacement=$${1}/$${2}
+      - traefik.http.middlewares.main-slash.redirectregex.permanent=true
+      - traefik.http.middlewares.main-strip.stripprefix.prefixes=/main/sandbox
+      - traefik.http.services.main.loadbalancer.server.port=8080
 networks:
   proxy:
     external: true
