@@ -137,9 +137,11 @@ isolated test environment:
 ```sh
 make test-env
 project=$(printf '%s' "$(git branch --show-current)" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9_-' '-')
-base="http://127.0.0.1:${PROXY_PORT:-7080}/${project}/sandbox"
-until [ "$(curl -fsS "$base/api/session" | python3 -c \
-  'import json,sys; print(json.load(sys.stdin).get("childStatus", ""))')" = Running ]; do
+base="http://127.0.0.1:${PROXY_PORT:-7090}/${project}/sandbox"
+for attempt in $(seq 1 100); do
+  [ "$(curl -fsS "$base/api/session" | python3 -c \
+    'import json,sys; print(json.load(sys.stdin).get("childStatus", ""))')" = Running ] && break
+  [ "$attempt" -lt 100 ] || { echo 'session never reported Running' >&2; false; }
   sleep 0.2
 done
 printf 'session: '; curl -fsS "$base/api/session"; printf '\npage: %s/\n' "$base"
