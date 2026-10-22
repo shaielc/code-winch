@@ -23,6 +23,7 @@ Sources: [roadmap](../../roadmap.md), [state](../../state.md), [architecture](..
 | Converting an implementation-scope issue into phase tasks | Phase 0 meta task assigning derivation; the brief lands in the owning phase and takes its ID from that phase's own counter |
 | Architecture and design-set updates (`docs/architecture.md`, `contracts.md`, `security.md`, `code-structure.md`, `roadmap.md`, ADRs) | Phase 0 meta task, with the affected phase designs and briefs reconciled; an update that travels with an implementation task's own contract change stays in that task |
 | Product implementation and code changes | Respective implementation phases, never Phase 0 |
+| Issue #149: Go gate option parity | [P0-008](P0-008-route-go-gate-parity-issue.md) assigns the phase-author disposition; no derived brief yet |
 | Revisions and issue-resolution follow-ups | Route through Phase 0 planning/coverage and the relevant phase author; do not silently change scope |
 
 Phase 0 IDs count on their own (`P0-<NNN>`); see [Task IDs](../README.md#task-ids). Only meta tasks are Phase 0 tasks. A phase's own planning task, which derives briefs from an increment that phase has decided, belongs to that phase and shares its sequence with the briefs it derives.
@@ -54,6 +55,8 @@ Each increment is named for the phase it plans, "Plan Phase 1" to "Plan Phase 7"
 | Plan Phase 5 (order 5) | [P0-005](P0-005-plan-phase-5-run-lifecycle.md) assigns design plus tracked follow-up for phase-5 design; **not yet authored** | **Not yet derived** |
 | Plan Phase 6 (order 6) | [P0-006](P0-006-plan-phase-6-enforce-isolation.md) assigns design plus tracked follow-up for phase-6 design; **not yet authored** | **Not yet derived** |
 | Plan Phase 7 (order 7) | [P0-007](P0-007-plan-phase-7-second-adapter-workflows.md) assigns design plus tracked follow-up for phase-7 design; **not yet authored** | **Not yet derived** |
+
+Issue [#149](https://github.com/shaielc/code-winch/issues/149) (Go gate option parity) fits no increment of any decided phase; [P0-008](P0-008-route-go-gate-parity-issue.md) assigns its phase-author disposition and is outside the seven-increment planning handoff order.
 
 Coverage remains partial: P1-002 and P1-004 are the first two derived Phase 1
 implementation briefs and await separate refinement and implementation. P1-004

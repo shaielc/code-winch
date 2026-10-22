@@ -155,6 +155,17 @@
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-1/P1-005-plan-actual-child-status.md"
+    },
+    {
+      "id": "P0-008",
+      "title": "Route issue #149: Go gate option parity",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-008-route-go-gate-parity-issue.md"
     }
   ]
 }
