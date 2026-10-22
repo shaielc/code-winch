@@ -94,41 +94,78 @@
       "brief": "phase-0/P0-007-plan-phase-7-second-adapter-workflows.md"
     },
     {
-      "id": "P0-008",
+      "id": "P1-001",
       "title": "Plan Phase 1 increment 1: child status presentation",
-      "phase": 0,
-      "phase_name": "Plan the implementation phases",
-      "status": "in_progress",
+      "phase": 1,
+      "phase_name": "Sandbox exchange",
+      "status": "completed",
       "depends_on": [
         "P0-001"
       ],
       "owner": null,
       "blocked_reason": null,
-      "brief": "phase-0/P0-008-plan-owned-live-harness-output.md"
+      "brief": "phase-1/P1-001-plan-owned-live-harness-output.md"
     },
     {
-      "id": "P1-009",
+      "id": "P1-002",
       "title": "Present unknown child status",
       "phase": 1,
       "phase_name": "Sandbox exchange",
+      "status": "completed",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/P1-002-child-status-presentation.md"
+    },
+    {
+      "id": "P1-003",
+      "title": "Plan Phase 1 increment 2: sandbox-backed child status",
+      "phase": 1,
+      "phase_name": "Sandbox exchange",
+      "status": "completed",
+      "depends_on": [
+        "P1-001"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/P1-003-plan-sandbox-backed-child-status.md"
+    },
+    {
+      "id": "P1-004",
+      "title": "Report sandbox-backed child status",
+      "phase": 1,
+      "phase_name": "Sandbox exchange",
+      "status": "completed",
+      "depends_on": [
+        "P1-002"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/P1-004-sandbox-backed-child-status.md"
+    },
+    {
+      "id": "P1-005",
+      "title": "Plan Phase 1 increment 3: actual child status",
+      "phase": 1,
+      "phase_name": "Sandbox exchange",
+      "status": "pending",
+      "depends_on": [
+        "P1-003"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/P1-005-plan-actual-child-status.md"
+    },
+    {
+      "id": "P0-008",
+      "title": "Align the host and Docker Go gate options",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
       "status": "pending",
       "depends_on": [],
       "owner": null,
       "blocked_reason": null,
-      "brief": "phase-1/P1-009-child-status-presentation.md"
-    },
-    {
-      "id": "P0-010",
-      "title": "Plan Phase 1 increment 2: sandbox-backed child status",
-      "phase": 0,
-      "phase_name": "Plan the implementation phases",
-      "status": "pending",
-      "depends_on": [
-        "P0-008"
-      ],
-      "owner": null,
-      "blocked_reason": null,
-      "brief": "phase-0/P0-010-plan-sandbox-backed-child-status.md"
+      "brief": "phase-0/P0-008-align-go-gate-options.md"
     }
   ]
 }

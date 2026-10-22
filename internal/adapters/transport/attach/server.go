@@ -8,15 +8,15 @@ import (
 
 type Server struct {
 	static  http.Handler
-	posture Posture
+	session Session
 }
 
-func New(staticDir string, posture Posture) (http.Handler, error) {
+func New(staticDir string, session Session) (http.Handler, error) {
 	static, err := newStaticHandler(staticDir)
 	if err != nil {
 		return nil, err
 	}
-	return &Server{static: static, posture: posture}, nil
+	return &Server{static: static, session: session}, nil
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -29,7 +29,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/healthz":
 		writeJSON(w, map[string]string{"service": "winch-sandbox", "status": "ok"})
 	case "/api/session":
-		writeJSON(w, s.posture)
+		writeJSON(w, s.session)
 	default:
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
 			w.Header().Set("Content-Type", "application/json")

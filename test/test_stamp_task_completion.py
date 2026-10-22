@@ -104,6 +104,17 @@ class StampHelpersTests(unittest.TestCase):
         pull = {"title": "P0-001 and P0-002", "body": "", "head": {"ref": "work"}}
         self.assertIsNone(stamp.task_id_for_pr(pull, {"P0-001", "P0-002"}))
 
+    def test_task_id_for_pr_keeps_the_same_number_in_different_phases_apart(self):
+        known = {"P0-123", "P1-123"}
+        phase_one = {"title": "Implement P1-123", "body": "Task: P1-123", "head": {"ref": "task/P1-123"}}
+        phase_zero = {"title": "Plan P0-123", "body": "", "head": {"ref": "task/P0-123"}}
+        self.assertEqual(stamp.task_id_for_pr(phase_one, known), "P1-123")
+        self.assertEqual(stamp.task_id_for_pr(phase_zero, known), "P0-123")
+
+    def test_task_id_for_pr_rejects_a_bare_number_shared_by_two_phases(self):
+        pull = {"title": "Fixes 123", "body": "Task: P0-123 and P1-123", "head": {"ref": "work"}}
+        self.assertIsNone(stamp.task_id_for_pr(pull, {"P0-123", "P1-123"}))
+
     def test_failure_detail_keeps_the_captured_stderr(self):
         error = subprocess.CalledProcessError(1, ["codex"], stderr="environment not found\n")
         self.assertIn("environment not found", stamp.failure_detail(error))

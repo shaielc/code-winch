@@ -241,8 +241,11 @@ what that profile does not isolate, so a caller cannot be misled about effective
 isolation — threat T02 in [the security model](security.md#3-threat-and-mitigation-register).
 The standalone surface exposes `GET /healthz` as
 `{"service":"winch-sandbox","status":"ok"}` and `GET /api/session` as
-`{"profile": string, "unenforcedControls": string[]}`. The unenforced-controls
-array is non-empty; for `container-standard` it includes `network-egress`.
+`{"profile": string, "unenforcedControls": string[], "childStatus":"Down"}`.
+The unenforced-controls array is non-empty; for `container-standard` it includes
+`network-egress`. `Down` is the only child-status value in this increment and is
+an affirmative observation supplied by the no-child sandbox composition; a
+missing or different value is unknown, not evidence of child state.
 
 ## 9. Fake runtime profile contract
 

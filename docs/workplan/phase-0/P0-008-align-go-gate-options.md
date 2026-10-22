@@ -4,95 +4,63 @@
 **Shape:** capability
 **Dependencies:** None
 
-Resolves issue [#149](https://github.com/shaielc/code-winch/issues/149). This is
-a Phase 0 meta task because it changes the repository's toolchain and gates, not
-the product. The shape is the nearest fit: it adds observable behavior to the
-maintained gate commands, and the model's reachability rule is met by the
-`Makefile` targets and CI.
+Resolves issue [#149](https://github.com/shaielc/code-winch/issues/149). This
+Phase 0 meta task changes repository tooling; its observable capability is
+reached through the Makefile targets and CI.
 
 ## Objective
 
-`make check` (host) and `make test-cycle` (Docker) run the same Go checks —
-format, vet, lint, unit and contract tests, build, and the composed-image e2e
-scenarios — so that "I ran the Go gate" means the same thing for either option.
+`make check` (host) and `make test-cycle` (Docker) run the same Go checks,
+including the composed-image e2e scenarios, so either option proves the Go gate.
 
 ## Scope
 
-Observed at refinement HEAD:
+Baseline: `617a89e` on `main`, whose tracker and Phase 0 coverage identify this
+task. The original PR base `0ebe55b` instead assigned this ID to child-status
+planning and lacked `docs/testing.md`. At the corrected baseline, `AGENTS.md`
+delegates verification to that file. The Makefile's `check` and `test-cycle`
+targets show unequal gates; `test-cycle` also hides teardown-only failure.
 
-- `Makefile` defines `check: format-check vet lint test build`, while
-  `test-cycle` invokes `make format-check vet test build e2e` in the toolchain.
-  `GO_PACKAGES` omits `./test/e2e/...`; `CHECKED_PACKAGES` includes it for vet
-  and lint. `E2E_TEST` runs that package separately.
-- `test-env` creates the branch-named Compose project and shared proxy;
-  `compose.test.yml` removes the sandbox's host port and gives the toolchain
-  `WINCH_E2E_URL=http://sandbox:8080`. The host's default URL instead reaches
-  the same sandbox through the loopback-only proxy. `main-up` uses the separate
-  main Compose overlay and is not part of either path.
-- `deployments/Dockerfile.toolchain` contains Go, Git, and Make but no
-  golangci-lint. CI installs golangci-lint v2.1.6 before the host option and then
-  runs both options serially.
-- `make -n check` currently lists only the five host checks. `make -n
-  test-cycle` lists the image build and lifecycle recipe whose inner command
-  omits lint. A real run is not a safe pre-change demonstration because the two
-  commands are known not to provide the promised parity.
-
-Implement the alignment as follows:
-
-- In `Makefile`, state the ordered list `format-check vet lint test build e2e`
-  once and add one internal target that invokes that list. Both public options
-  call that target: directly on the host for `check`, and inside `toolchain` for
-  `test-cycle`. Continue using the existing `.golangci.yml`,
-  `CHECKED_PACKAGES`, and `E2E_TEST`; do not duplicate package lists or recipes.
-- Give both public options the same lifecycle wrapper: call `test-env`, run the
-  shared target only after setup succeeds, and call `test-env-down` on every
-  path after setup was attempted. Preserve the first non-zero setup/check
-  status; if those succeeded, propagate a teardown failure. The host target
-  uses the proxy URL already exported by the `Makefile`; the Docker target uses
-  the service URL already supplied by `compose.test.yml`.
-- Install golangci-lint v2.1.6 in `deployments/Dockerfile.toolchain` and keep
-  `GOLANGCI_LINT=golangci-lint` usable in that image. Do not install Node or
-  move web checks into the Go image.
-- Keep `make e2e`, `make docker-e2e`, `make test-env`, and
-  `make test-env-down` as explicit scenario/environment building blocks. They
-  continue to assume or manage exactly what their current names document;
-  parity applies to the two whole-gate options, not these focused targets.
-- Update `docs/testing.md` and `deployments/README.md` to describe both whole
-  options as equivalent, list all six ordered checks, state that either option
-  now needs Docker for the isolated e2e environment, and remove the current
-  difference and its #149 link.
-- Keep both serial steps in `.github/workflows/go.yml`: the host step proves the
-  locally installed toolchain option and the Docker step proves the shipped
-  toolchain image, including its pinned linter. Rename the steps or add a short
-  comment so that purpose is explicit; equivalence does not make either
-  execution substrate untested.
-- The refinement search found no other current gate-content statement needing
-  a write. `AGENTS.md` delegates to `docs/testing.md`; `docs/state.md` records
-  historical closure observations and must not be rewritten as if the new gate
-  had already run. Re-run the search during implementation and change only a
-  newly conflicting current statement.
+- Define `format-check vet lint test build e2e` once, in an internal
+  `go-checks` target used by both options. Enforce serial, fail-fast execution
+  even with `make -j`; reuse existing recipes, `CHECKED_PACKAGES` and
+  `E2E_TEST`.
+- Wrap both options in setup → checks → teardown. Use `test-env` and
+  `test-env-down`; attempt teardown whenever setup was attempted, including
+  partial setup failure. Skip checks if setup fails. Preserve the first
+  non-zero setup/check status; return teardown's status if those succeeded.
+  A toolchain-image failure before setup need not tear down an unstarted env.
+- Keep the existing host proxy/container service URLs. Pass `E2E_TEST` as one
+  command-line assignment to the container's `make go-checks`, e.g.
+  `"E2E_TEST=$(E2E_TEST)"` in the outer recipe. Do not forward the host's
+  `WINCH_E2E_URL` or all of `MAKEFLAGS` into Docker.
+- Install golangci-lint v2.1.6 in `deployments/Dockerfile.toolchain`, matching
+  CI; keep `GOLANGCI_LINT=golangci-lint` usable. Preserve the focused
+  `e2e`, `docker-e2e`, `test-env` and `test-env-down` building blocks.
+- Update `docs/testing.md` and `deployments/README.md` with the shared check
+  sequence, lifecycle and Docker requirement for either whole-gate option;
+  remove the current-difference paragraph and its #149 link.
+- Keep both serial CI executions, named for host-toolchain and shipped-image
+  coverage. Two recurring full runs catch installation drift that this task's
+  one-time parity demonstration cannot cover.
+- Add a lightweight lifecycle regression harness under `test/` using the
+  existing Python unittest runner; its command spies cover the matrix below.
 
 ## Required constraints
 
-- Both options run the identical check list, stated once; a test or `make -n`
-  comparison in the brief's verification shows it.
-- The e2e step never runs in, replaces, or tears down the operator's deployment
-  (`make main-up`): it uses the per-branch test project only.
-- Teardown runs on failure, and the exit status is the first failure's.
-- A teardown failure is returned when setup and checks succeeded; cleanup is
-  not allowed to fail silently.
-- No live provider account is required; CI keeps passing without new secrets.
+- Both options consume the single ordered check list.
+- Test setup and cleanup affect only the branch's test project, never the
+  operator's deployment or the shared proxy; topology is in `deployments/README.md`.
+- Cleanup and failure precedence follow Scope; no failure is silently discarded.
 
 ## Non-goals
 
-Web and control-panel gates, the e2e scenarios' content, making the e2e run
-without any container, changes to the proxy or compose topology, and changing
-the historical verification record in `docs/state.md`.
+Product or web/control-panel changes, scenario content, container-free e2e,
+proxy/Compose topology changes, and rewriting historical `docs/state.md` evidence.
 
 ## Runtime reachability
 
-`make check` and `make test-cycle` from the repository root, and
-`.github/workflows/go.yml`. No product composition root changes.
+`make check`, `make test-cycle`, and `.github/workflows/go.yml`.
 
 ## Write set
 
@@ -101,61 +69,75 @@ the historical verification record in `docs/state.md`.
 - `deployments/README.md`
 - `docs/testing.md`
 - `.github/workflows/go.yml`
+- `test/test_go_gate.py` (lifecycle/command regression harness)
 
 ## Contract surfaces
 
-The meaning of "the Go gate" in `docs/testing.md` and the commands `make check`
-and `make test-cycle`. No product contract.
+The meaning of the Go gate in `docs/testing.md` and the two public make targets.
+No product contract.
 
 ## Demonstration
 
-    $ make -n check
-    $ make -n test-cycle
-    → expect: each expands the same shared ordered check target; the only
-      difference is whether that target runs on the host or in `toolchain`
+After implementation, run each command independently from the repository root:
+
     $ make check
     $ make test-cycle
-    $ branch=$(git rev-parse --abbrev-ref HEAD); project=$(printf '%s' "$branch" |
-        tr 'A-Z' 'a-z' | tr -c 'a-z0-9_-' '-')
-    → expect: each runs format-check, vet, lint, test, build, and e2e in that
-      order and succeeds; after each, `docker compose -f deployments/compose.yml
-      -f deployments/compose.test.yml -p "$project" ps -q` prints nothing
-
-For the failure demonstration, add a temporary, gofmt-formatted Go file in
-`test/e2e` containing an unused unexported function, run each option separately,
-remove the file between runs, and confirm both fail in `lint`. Then run each
-option separately with `E2E_TEST=false`; confirm both return non-zero at `e2e`.
-After every failure, run the `docker compose ... ps -q` command above and expect
-no output. Remove the temporary file before committing.
+    → expect: the shared sequence runs in order; each command succeeds
+    $ branch=$(git rev-parse --abbrev-ref HEAD)
+    $ project=$(printf '%s' "$branch" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9_-' '-')
+    $ WINCH_TEST_PROJECT="$project" docker compose -f deployments/compose.yml \
+        -f deployments/compose.test.yml -p "$project" ps -a -q
+    → expect: no containers after each run (including stopped containers)
 
 ## Verification
 
-- `make -n check` and `make -n test-cycle` show both paths invoking the single
-  ordered Go-check target.
-- `make check` and `make test-cycle` pass independently; after each, the
-  branch-named test project has no containers.
-- Negative case: a temporary unused function under `test/e2e` makes both
-  options fail specifically at lint; `E2E_TEST=false` makes both fail at e2e;
-  all four runs leave the branch-named test project with no containers.
-- Rebuild the toolchain image without cache and verify
-  `golangci-lint version` in it reports v2.1.6 before the Docker-option run.
-- Run `make e2e` and `make docker-e2e` against one environment started by
-  `make test-env`, then run `make test-env-down`.
-- Run `rg "make check|test-cycle|lint" AGENTS.md docs skills deployments
-  .github Makefile` and confirm current descriptions agree. Say which commands
-  could not run in the implementation environment.
+These are implementation acceptance checks, not claims of passing at refinement.
+
+- Compare `make -n check` and `make -n test-cycle`: both invoke `go-checks`.
+  The regression harness must also assert the actual six-command order and
+  fail-fast behavior with `make -j4`.
+- For both public targets, run `python3 -m unittest discover -s test` with
+  spies substituted via `MAKE`, `COMPOSE`, `COMPOSE_TEST` and `COMPOSE_PROXY`.
+  The harness runs the real Makefile wrapper, logs calls, and makes the setup,
+  check and teardown commands return the following injected codes:
+
+  | Setup | Checks | Teardown | Expected calls | Wrapper status |
+  |---|---|---|---|---|
+  | 0 | 0 | 0 | setup, checks, teardown | 0 |
+  | 41 | — | 0 | setup, teardown | 41 |
+  | 41 | — | 43 | setup, teardown | 41 |
+  | 0 | 42 | 0 | setup, checks, teardown | 42 |
+  | 0 | 42 | 43 | setup, checks, teardown | 42 |
+  | 0 | 0 | 43 | setup, checks, teardown | 43 |
+
+  A shell spy records the actual recipe's status: outer GNU make returns 2
+  on recipe failure, which cannot prove precedence. Stub image build success;
+  separately fail it and assert setup/checks were skipped. Spies prove command
+  flow; real runs below prove container integration.
+- Lint injection: add a temporary gofmt-formatted file under `test/e2e` with
+  its package declaration and `func gateLintFailure() {}`. Run each option;
+  expect unused-function lint failure. Remove the file before e2e checks.
+- E2E injection: run `make check E2E_TEST=false` and
+  `make test-cycle E2E_TEST=false`; expect failure at e2e. The Docker command spy
+  must receive one `E2E_TEST=false` argument alongside `go-checks`.
+  After each lint/e2e failure, the Demonstration query must show no containers.
+- Before the successful Docker demonstration, build with
+  `WINCH_TEST_PROJECT="$project" docker compose -f deployments/compose.yml -f deployments/compose.test.yml -p "$project" --profile test build --no-cache toolchain`;
+  run the same Compose prefix with `--profile test run --rm toolchain golangci-lint version`
+  and expect v2.1.6. With one `make test-env`, run `make e2e` and
+  `make docker-e2e`, then `make test-env-down`.
+- Search `rg "make check|test-cycle|lint" AGENTS.md docs skills deployments .github Makefile`;
+  reconcile conflicting current gate descriptions within scope.
 
 ## Acceptance criteria
 
-- [ ] Both options run the same checks, defined in one place in the `Makefile`.
-- [ ] Lint runs inside the Docker option; e2e runs in the host option.
-- [ ] A lint failure and an e2e failure each fail both options, and teardown
-      still occurs; setup/check failure remains the returned status, while a
-      teardown-only failure is not hidden.
-- [ ] `docs/testing.md`, `deployments/README.md` and CI describe the options as
-      equivalent and no longer cite #149 as a current difference; CI exercises
-      both execution substrates.
-- [ ] `make e2e`/`make docker-e2e` against a pre-started environment still work.
+- [ ] Both options run the single shared sequence serially, including Docker
+      lint and host e2e; lint/e2e failures stop both and leave no test containers.
+- [ ] The lifecycle matrix passes, including setup failure, teardown-only
+      failure and competing failures.
+- [ ] The shipped image has the pinned linter; focused e2e commands still work.
+- [ ] Testing/deployment docs describe equivalent options; CI explicitly covers
+      both toolchains and no longer describes #149 as a current difference.
 
 ## Deferrals
 
@@ -163,5 +145,5 @@ None.
 
 ## Traces to
 
-Issue #149 and the review threads on #148; `docs/testing.md`;
+Issue #149 and review threads on #148; `docs/testing.md`;
 `deployments/README.md`; `skills/shared/workplan-model.md` (Phase 0 meta tasks).
