@@ -113,22 +113,19 @@ lifecycle, or provider contract.
 
 ## Demonstration
 
-After the automated gates, from the repository root, start only the branch's
-isolated test environment with `make test-env`.
+After the automated gates, run the sandbox in an isolated environment as
+described in `docs/testing.md` §Demonstrations. Once the session reports
+`Running`, load the attach page; reload it if it was loaded earlier, because the
+fetch is one-shot. Observe **Child status: Running**, the unchanged
+`container-standard` posture and `network-egress` disclosure, and a usable local
+composer. The default fake, launched without `-early-exit`, a transcript, or
+failure injection, blocks reading its open standard input after its startup
+records, so the owned process stays alive for the observation without any
+harness command.
 
-Wait until the session reports `Running`, then load the attach page. Reload it
-if it was loaded earlier, because the fetch is one-shot. Observe
-**Child status: Running**, the unchanged `container-standard` posture and
-`network-egress` disclosure, and a usable local composer. The default fake,
-launched without `-early-exit`, a transcript, or failure injection, blocks
-reading its open standard input after its startup records, so the owned process
-stays alive for the observation without any harness command.
-
-Tear down with `make test-env-down`. This proves that the sandbox owns a live
-fake process and transports the observation through the deployed page; it does
-not prove fake readiness, input delivery, output handling, provider
-compatibility, or exit interpretation. Never use `make main-down` or replace the
-operator's default `code-winch` deployment.
+This proves that the sandbox owns a live fake process and transports the
+observation through the deployed page; it does not prove fake readiness, input
+delivery, output handling, provider compatibility, or exit interpretation.
 
 ## Verification
 
