@@ -47,7 +47,7 @@ Each increment is named for the phase it plans, "Plan Phase 1" to "Plan Phase 7"
 
 | Increment | Phase design | Specific-brief coverage |
 |---|---|---|
-| Plan Phase 1 (order 1) | [P0-001](P0-001-plan-phase-1-sandbox-exchange.md) assigns the authored and independently audited [Phase 1 sandbox-exchange design](../phase-1/README.md) plus a tracked follow-up | [P1-001](../phase-1/P1-001-plan-owned-live-harness-output.md) independently derived [P1-002](../phase-1/P1-002-child-status-presentation.md) for increment 1; [P1-003](../phase-1/P1-003-plan-sandbox-backed-child-status.md) independently derives [P1-004](../phase-1/P1-004-sandbox-backed-child-status.md) for increment 2; [P1-005](../phase-1/P1-005-plan-actual-child-status.md) assigns increment 3's derivation |
+| Plan Phase 1 (order 1) | [P0-001](P0-001-plan-phase-1-sandbox-exchange.md) assigns the authored and independently audited [Phase 1 sandbox-exchange design](../phase-1/README.md) plus a tracked follow-up | [P1-001](../phase-1/P1-001-plan-owned-live-harness-output.md) independently derived [P1-002](../phase-1/P1-002-child-status-presentation.md) for increment 1; [P1-003](../phase-1/P1-003-plan-sandbox-backed-child-status.md) independently derived [P1-004](../phase-1/P1-004-sandbox-backed-child-status.md) for increment 2; [P1-005](../phase-1/P1-005-plan-actual-child-status.md) independently derived [P1-006](../phase-1/P1-006-actual-child-status.md) for increment 3; [P1-007](../phase-1/P1-007-plan-harness-output-area.md) assigns increment 4's derivation |
 | Plan Phase 2 (order 2) | [P0-002](P0-002-plan-phase-2-first-real-vendor.md) assigns design plus tracked follow-up for phase-2 design; **not yet authored** | **Not yet derived** |
 | Plan Phase 3 (order 3) | [P0-003](P0-003-plan-phase-3-structured-views-resume.md) assigns design plus tracked follow-up for phase-3 design; **not yet authored** | **Not yet derived** |
 | Plan Phase 4 (order 4) | [P0-004](P0-004-plan-phase-4-observe-sandboxes.md) assigns design plus tracked follow-up for phase-4 design; **not yet authored** | **Not yet derived** |
@@ -55,11 +55,11 @@ Each increment is named for the phase it plans, "Plan Phase 1" to "Plan Phase 7"
 | Plan Phase 6 (order 6) | [P0-006](P0-006-plan-phase-6-enforce-isolation.md) assigns design plus tracked follow-up for phase-6 design; **not yet authored** | **Not yet derived** |
 | Plan Phase 7 (order 7) | [P0-007](P0-007-plan-phase-7-second-adapter-workflows.md) assigns design plus tracked follow-up for phase-7 design; **not yet authored** | **Not yet derived** |
 
-Coverage remains partial: P1-002 and P1-004 are the first two derived Phase 1
-implementation briefs and await separate refinement and implementation. P1-004
-consumes P1-002. P1-005 assigns the derivation of increment 3; all later
-Phase 1 briefs remain not yet derived, and no later implementation ID has been
-reserved. The other phase designs and specific-brief
+Coverage remains partial: P1-002, P1-004, and P1-006 are the first three derived
+Phase 1 implementation briefs and await separate refinement and implementation.
+P1-004 consumes P1-002, and P1-006 extends P1-004's contract. P1-007 assigns
+the independent derivation of increment 4; all later Phase 1 briefs remain not
+yet derived, and no later implementation ID has been reserved. The other phase designs and specific-brief
 coverage likewise remain pending.
 
 The actual dependency graph and concurrent write warnings are recorded in the workplan index. The task author has updated coverage only; the seven planning boundaries and Phase 0 exit condition are unchanged.
