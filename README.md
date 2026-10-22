@@ -16,6 +16,7 @@ sandbox attach surface. See **Project status** below.
 - [Harness and event contracts](docs/contracts.md)
 - [Sandbox and security model](docs/security.md)
 - [Delivery roadmap](docs/roadmap.md)
+- [Testing and gates](docs/testing.md)
 - [System state](docs/state.md)
 - [Architecture decisions](docs/decisions/README.md)
 - [Workplan control panel](workplan-control-panel/README.md)
@@ -52,21 +53,5 @@ docker compose -f deployments/compose.yml exec sandbox winch status
 docker compose -f deployments/compose.yml down
 ```
 
-The repository gates are:
-
-```sh
-python3 -m unittest discover -s test                        # completion scripts
-cd workplan-control-panel && python3 -m unittest discover -s tests
-make check                                                  # host Go gate
-cd web && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build
-make test-cycle                                             # Docker-only path: test env, gates, e2e, teardown
-```
-
-Host targets need Go 1.24+, npm, and golangci-lint 2.1.6 (`go install
-github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6`); `[docker]`
-targets need only Docker and run in the `toolchain` container. `make check` is
-the host gate CI runs for Go; `make test-cycle` is the Docker path, which also runs the
-composed-image scenarios in an isolated test project named after the current branch,
-and does not run golangci-lint. To run only the scenarios, use `make test-env`, then
-`make e2e` (host Go, through the local proxy) or `make docker-e2e` (toolchain), and
-`make test-env-down` (see `deployments/README.md`).
+The gates, what each needs, and how to run only the scenarios are in
+[`docs/testing.md`](docs/testing.md).

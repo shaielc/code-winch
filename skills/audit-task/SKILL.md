@@ -102,7 +102,11 @@ requiring human disposition; test coverage weaknesses may be Harden; stable
 identity for persisted submissions may be Deferrable if a person assigns it
 downstream.
 
-A check you could not run is a limit of this audit, not a finding against the
+Where the project's CI ran a check at the audited head (`docs/testing.md` lists
+what it runs), cite that job as its result instead of re-running it; spend the
+audit on what CI does not run. A gate that has several options is covered when
+CI ran any one of them. A
+check you could not run is a limit of this audit, not a finding against the
 implementation. Under that check, say what did not run and why, and mark the
 audit **partial**. Merge readiness then waits on a later audit at the same head
 that runs the check, or on a person's recorded acceptance of the gap. Classify

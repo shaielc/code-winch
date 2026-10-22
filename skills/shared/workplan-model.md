@@ -497,9 +497,10 @@ Exact commands and the expected observable result.
 
 ## Verification
 
+Task-specific checks only; the repository gates are in `docs/testing.md`.
+
 - Standing scenario suite passes against <profile/substrate>.
 - <Focused automated tests specific to this task.>
-- <Repository format, lint, unit-test, and build checks affected.>
 
 ## Acceptance criteria
 
