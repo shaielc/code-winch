@@ -18,7 +18,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	handler, err := attach.New(config.staticDir, config.posture)
+	handler, err := attach.New(config.staticDir, attach.Session{
+		Posture:     config.posture,
+		ChildStatus: attach.ChildDown,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}

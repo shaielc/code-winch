@@ -42,6 +42,72 @@ test("shows effective and unenforced posture", async () => {
   expect(screen.getByText(/not enforced by this profile/i)).toBeInTheDocument();
 });
 
+test("shows Down only after the sandbox reports the exact supported status", async () => {
+  globalThis.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      profile: "container-standard",
+      unenforcedControls: ["network-egress"],
+      childStatus: "Down",
+    }),
+  });
+  render(<App />);
+
+  const region = screen.getByRole("region", { name: "Child status" });
+  expect(region).toHaveTextContent(/^Child statusUnknown$/);
+  expect(
+    await screen.findByText("Down", { selector: "p" }),
+  ).toBeInTheDocument();
+  expect(region).toHaveTextContent(/^Child statusDown$/);
+  expect(region).not.toHaveTextContent(/Running|ready|fake|exit/i);
+});
+
+test.each([
+  ["missing", undefined],
+  ["running", "Running"],
+  ["exited", "Exited"],
+  ["wrong case", "down"],
+])("keeps child status Unknown for a %s status", async (_name, childStatus) => {
+  globalThis.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      profile: "container-standard",
+      unenforcedControls: ["network-egress"],
+      ...(childStatus === undefined ? {} : { childStatus }),
+    }),
+  });
+  render(<App />);
+
+  expect(await screen.findByText("container-standard")).toBeInTheDocument();
+  const region = screen.getByRole("region", { name: "Child status" });
+  expect(region).toHaveTextContent(/^Child statusUnknown$/);
+  expect(region).not.toHaveTextContent(/Down|Running|ready|fake|exit/i);
+});
+
+test.each([
+  [
+    "invalid JSON",
+    { ok: true, json: async () => Promise.reject(new Error("invalid JSON")) },
+  ],
+  [
+    "rejected response",
+    { ok: false, json: async () => ({ childStatus: "Down" }) },
+  ],
+])(
+  "request failure from %s leaves child status Unknown",
+  async (_name, response) => {
+    globalThis.fetch = vi.fn().mockResolvedValue(response);
+    render(<App />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Sandbox posture is unavailable.",
+    );
+    const region = screen.getByRole("region", { name: "Child status" });
+    expect(region).toHaveTextContent(/^Child statusUnknown$/);
+    expect(region).not.toHaveTextContent(/Down|Running|ready|fake|exit/i);
+  },
+);
+
 test("shows a submitted message as local without an ordinal", () => {
   globalThis.fetch = vi.fn().mockImplementation(() => new Promise(() => {}));
   const { container } = render(<App />);
