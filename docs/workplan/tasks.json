@@ -161,7 +161,7 @@
       "title": "Report actual child status",
       "phase": 1,
       "phase_name": "Sandbox exchange",
-      "status": "pending",
+      "status": "in_progress",
       "depends_on": [
         "P1-004"
       ],
