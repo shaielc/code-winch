@@ -174,7 +174,7 @@
       "title": "Plan Phase 1 increment 4: harness output area",
       "phase": 1,
       "phase_name": "Sandbox exchange",
-      "status": "pending",
+      "status": "in_progress",
       "depends_on": [
         "P0-001"
       ],
