@@ -33,16 +33,24 @@ under any `/{proxy/}+sandbox/` prefix. A site-specific, gitignored
 first copy found in this worktree, the main worktree, or
 `${CODE_WINCH_CONFIG_DIR:-/var/code-winch}/deployments/`.
 
-- `make test-cycle` is the whole path and needs only Docker: it starts the test
-  environment, runs the format, vet, unit-test, and build gates plus the e2e scenarios
-  inside the `toolchain` service, and always tears the environment down.
+- `make test-cycle` is the whole Docker path: it starts the test environment,
+  runs the shared format, vet, lint, unit/contract-test, build, and e2e check
+  list inside the `toolchain` service, and always tears the environment down.
+  The image pins golangci-lint 2.1.6. This is equivalent to the host Go gate.
+- `make host-test-env` is the Docker-free path for the standing scenarios and
+  manual demonstrations. It builds the web assets and Go binaries, then starts
+  a loopback-only sandbox at `http://127.0.0.1:7081`. Run `make check` for the
+  complete shared Go check list (or `make e2e` for scenarios alone), and finish
+  with `make host-test-env-down`. The PID and log live in a repository-specific
+  directory under `/tmp`; set `HOST_TEST_PORT` and `WINCH_E2E_URL` together to
+  choose another endpoint.
 - `make test-env` starts the proxy if it is not running (never recreating a running one;
   `make proxy-down` first to apply proxy changes), then the test environment, and checks that
   the sandbox is healthy, runs as a non-root user, and that the production and proxy
   compose files pin the published host IP to `127.0.0.1`. `make test-env-down` removes
   this branch's environment and leaves the shared proxy; `make proxy-down` removes it.
 - `make e2e` runs the scenarios with the Go wherever make runs. On the host it targets
-  `http://127.0.0.1:$PROXY_PORT/<project>/sandbox`; override with `WINCH_E2E_URL`.
+  the host test sandbox at `http://127.0.0.1:7081`; override with `WINCH_E2E_URL`.
   `make docker-e2e` runs them in the `toolchain` service on the test network. Neither
   starts or stops anything.
 
