@@ -58,8 +58,11 @@ against that substrate as well as the fake profile.
 
 `.github/workflows/` runs the gates:
 
-- `go.yml`: the completion-script tests, the Go gate in both options
-  (`make check` and `make test-cycle`), on pushes and pull requests.
+- `go.yml`: the completion-script tests, then the Go gate in both options, on
+  pushes and pull requests. The host option starts the host test sandbox
+  (`make host-test-env`), runs `make check`, and always stops the sandbox
+  (`make host-test-env-down`); the Docker option is `make test-cycle`. The job
+  sets up Node because `make host-test-env` builds the attach page.
 - `web.yml`: the web gate, on pull requests and pushes to `main`.
 - `control-panel.yml`: the control-panel tests, when files under
   `workplan-control-panel/` change.
