@@ -91,3 +91,8 @@ Label predicted results for new code separately from observations at HEAD.
 Change only this brief, commit it on the task branch before implementation, and
 hand it to a different implementer. Preserve tracker statuses. Report unresolved
 phase boundaries or missing prerequisite behavior rather than absorbing them.
+
+When a review round moves a boundary, write where it now lies into the brief —
+what the task includes and what its implementer decides — and report any design
+line it contradicts to the phase author. The next author reads the brief, not
+the review thread.

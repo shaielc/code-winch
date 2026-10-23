@@ -16,7 +16,9 @@ Audit the requested commit independently of its refiner and implementer.
 For a planning shape, judge artifact acceptance and handoff using the model's
 planning criteria and the assigned author operation's requirements. Runtime
 reachability and target-capability scenarios are implementation criteria;
-planning completion does not certify the predicted behavior.
+planning completion does not certify the predicted behavior. When the artifact
+is a brief, also compare its requirements with the parent brief and the decided
+increment: one that neither states nor implies is scope creep, and a finding.
 
 Before recording any finding, Harden included, check whether the model, the
 skills, or `AGENTS.md` already settle the concern, and cite the rule if they do.
