@@ -30,8 +30,20 @@ jobs:
         with:
           version: v2.1.6
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Start host test sandbox
+        run: make host-test-env
+
       - name: Run repository checks
         run: make check
+
+      - name: Stop host test sandbox
+        if: always()
+        run: make host-test-env-down
 
       - name: Run composed sandbox scenario
         run: make test-cycle
