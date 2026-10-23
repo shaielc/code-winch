@@ -85,8 +85,7 @@ host-test-env:
 		exit 0; \
 	fi; \
 	rm -f '$(HOST_TEST_PID)'; \
-	cd web && npm ci --no-audit --no-fund && npm run build; \
-	cd ..; \
+	(cd web && npm ci --no-audit --no-fund && npm run build); \
 	$(MAKE) build; \
 	WINCH_SANDBOX_ADDR=127.0.0.1:$(HOST_TEST_PORT) WINCH_SANDBOX_STATIC_DIR='$(CURDIR)/web/dist' \
 		nohup '$(CURDIR)/$(BUILD_DIR)/winch-sandbox' >'$(HOST_TEST_LOG)' 2>&1 & \
