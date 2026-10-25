@@ -71,8 +71,9 @@ Meta tasks are:
   revision first.
 - **Updating the architecture** — a revised design-set document or ADR, with the
   affected phase designs reconciled.
-- **Repository toolchain and gates** — the `Makefile`, toolchain image, CI and
-  testing documentation, which are not the product.
+- **Repository toolchain and gates** — the `Makefile`, toolchain image, CI,
+  testing documentation and the workplan control panel (`workplan-control-panel/`),
+  which are not the product.
 
 Deriving briefs from an increment a phase has already decided is that phase's
 own planning task, not Phase 0. A design update that travels with an

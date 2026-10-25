@@ -23,7 +23,7 @@ Sources: [roadmap](../../roadmap.md), [state](../../state.md), [architecture](..
 | Converting an implementation-scope issue into phase tasks | Phase 0 meta task assigning derivation; the brief lands in the owning phase and takes its ID from that phase's own counter |
 | Architecture and design-set updates (`docs/architecture.md`, `contracts.md`, `security.md`, `code-structure.md`, `roadmap.md`, ADRs) | Phase 0 meta task, with the affected phase designs and briefs reconciled; an update that travels with an implementation task's own contract change stays in that task |
 | Product implementation and product code changes | Respective implementation phases, never Phase 0 |
-| Repository toolchain and gate changes (Makefile, toolchain image, CI, `docs/testing.md`) | Phase 0 meta task; the brief lands here and takes a Phase 0 ID. Issue #149 is [P0-008](P0-008-align-go-gate-options.md) |
+| Repository toolchain and gate changes (Makefile, toolchain image, CI, `docs/testing.md`, the workplan control panel in `workplan-control-panel/`) | Phase 0 meta task; the brief lands here and takes a Phase 0 ID. Issue #149 is [P0-008](P0-008-align-go-gate-options.md); the control panel's stage-branch, pull-request, review/audit and return automation is [P0-009](P0-009-dispatch-on-stage-branch.md) to [P0-012](P0-012-return-reports-to-implementing-agent.md) |
 | Revisions and issue-resolution follow-ups | Route through Phase 0 planning/coverage and the relevant phase author; do not silently change scope |
 
 Phase 0 IDs count on their own (`P0-<NNN>`); see [Task IDs](../README.md#task-ids). Only meta tasks are Phase 0 tasks. A phase's own planning task, which derives briefs from an increment that phase has decided, belongs to that phase and shares its sequence with the briefs it derives.
@@ -57,6 +57,8 @@ Each increment is named for the phase it plans, "Plan Phase 1" to "Plan Phase 7"
 | Plan Phase 7 (order 7) | [P0-007](P0-007-plan-phase-7-second-adapter-workflows.md) assigns design plus tracked follow-up for phase-7 design; **not yet authored** | **Not yet derived** |
 
 Issue [#149](https://github.com/shaielc/code-winch/issues/149) (Go gate option parity) is repository toolchain work, which Phase 0 owns; [P0-008](P0-008-align-go-gate-options.md) is its derived brief and is outside the seven-increment planning handoff order.
+
+The workplan control panel is contributor tooling, not the product, so its changes are the same kind of Phase 0 meta task. Closing the manual Refine → pull request → review/audit → return loop is assigned to four serial briefs outside the seven-increment handoff order: [P0-009](P0-009-dispatch-on-stage-branch.md) creates and dispatches on the `<stage>/<ID>` branch; [P0-010](P0-010-publish-codex-stage-pull-request.md) publishes a finished Codex stage as a pull request; [P0-011](P0-011-start-review-or-audit-on-stage-pr.md) starts the review-refinement or audit session on it; [P0-012](P0-012-return-reports-to-implementing-agent.md) returns the report to the implementing agent. Each takes a `contract` edge on its predecessor. [`codex-interfaces.md`](../../../workplan-control-panel/codex-interfaces.md) records what the Codex CLI can and cannot supply, which bounds their design.
 
 Coverage remains partial: P1-002, P1-004, and P1-006 are the first three derived
 Phase 1 implementation briefs. P1-002 and P1-004 are implemented; P1-006 awaits
