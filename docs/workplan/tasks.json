@@ -192,6 +192,56 @@
       "owner": null,
       "blocked_reason": null,
       "brief": "phase-0/P0-008-align-go-gate-options.md"
+    },
+    {
+      "id": "P0-009",
+      "title": "Dispatch Refine and Implement on a panel-created stage branch",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-009-dispatch-on-stage-branch.md"
+    },
+    {
+      "id": "P0-010",
+      "title": "Publish a finished Codex stage as a pull request",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [
+        "P0-009"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-010-publish-codex-stage-pull-request.md"
+    },
+    {
+      "id": "P0-011",
+      "title": "Start the review or audit session when a stage pull request opens",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [
+        "P0-010"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-011-start-review-or-audit-on-stage-pr.md"
+    },
+    {
+      "id": "P0-012",
+      "title": "Return review and audit reports to the implementing agent",
+      "phase": 0,
+      "phase_name": "Plan the implementation phases",
+      "status": "pending",
+      "depends_on": [
+        "P0-011"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-0/P0-012-return-reports-to-implementing-agent.md"
     }
   ]
 }
