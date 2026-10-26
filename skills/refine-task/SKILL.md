@@ -76,7 +76,9 @@ Then make the brief concrete, in the sections it already has:
 - **Acceptance criteria**, **Verification**, and **Demonstration** — the
   results of the criteria and demonstration checks, and the test that will show
   each criterion. Verification lists only checks specific to this task, in proportion to
-  the Objective and runnable where audits run; the repository gates are in
+  the Objective and runnable where audits run. Do not require the same check
+  through several equivalent options unless the difference between them is the
+  task's point; the repository gates are in
   `docs/testing.md`.
 - **Deferrals** — rows only for owners that already exist in `tasks.json`. Have
   a separate task author derive a missing owner before adding its row.

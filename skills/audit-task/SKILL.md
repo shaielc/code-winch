@@ -34,9 +34,8 @@ operation — is a plan defect in the brief, not a finding against the work.
    `tasks.json`. A `completed` status is a claim: if the type, contract, or
    behavior the edge names is missing at HEAD, the dependency is not done. Stop
    and report that rather than building the missing piece inside this task.
-4. **Read the Write set and Contract surfaces.** The write set forecasts which
-   files the change touches, so tasks in flight can predict a rebase; it is not
-   a boundary. The contract surfaces are what only this task may redefine.
+4. **Read the Contract surfaces.** They are what only this task may redefine.
+   The write set is a forecast for planning, not a boundary or a check.
 5. **Run the demonstration commands as they stand.** Seeing the current behavior
    before the change is what makes the change observable afterwards.
 
@@ -69,9 +68,7 @@ output, or a `file:line`. A claim with neither is unmet.
 4. **Verification** — every check the brief lists exists and passes now, not
    only when the pull request merged.
 5. **Contract surfaces** — the change touched no contract the brief does not
-   declare, or names and justifies each one it did. List the files written
-   outside the write set for the plan's write-collision report; they are not a
-   deviation to judge.
+   declare, or names and justifies each one it did.
 6. **Deferrals** — each TODO, stub, unimplemented branch, and unreachable error
    path the task introduced carries an ID that exists in `tasks.json`. Search
    the diff for `TODO`, `unimplemented`, "for now", "later", and "subsequent
@@ -102,10 +99,11 @@ requiring human disposition; test coverage weaknesses may be Harden; stable
 identity for persisted submissions may be Deferrable if a person assigns it
 downstream.
 
-Where the project's CI ran a check at the audited head (`docs/testing.md` lists
-what it runs), cite that job as its result instead of re-running it; spend the
-audit on what CI does not run. A gate that has several options is covered when
-CI ran any one of them. A
+Where a result for a check already exists at the audited head, cite it instead
+of re-running it, and spend the audit on what no existing result covers. CI is
+one example (`docs/testing.md` lists what it runs). When a check can be run
+through several options, one passing option covers it, unless the brief
+explicitly requires another. A
 check you could not run is a limit of this audit, not a finding against the
 implementation. Under that check, say what did not run and why, and mark the
 audit **partial**. Merge readiness then waits on a later audit at the same head

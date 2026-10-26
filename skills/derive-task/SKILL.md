@@ -47,7 +47,9 @@ product constraints separately from proposed implementation approaches.
 Provide reachability, concrete write forecasts, owned contract surfaces,
 acceptance criteria, verification, and a credible manual demonstration.
 Verification names the checks specific to this task; the repository gates are in
-`docs/testing.md`, so point there and do not restate them.
+`docs/testing.md`, so point there and do not restate them. It does not require
+the same check through several equivalent options unless their difference is the
+task's point.
 For a planning shape, use planning outputs and artifact review in place of
 runtime reachability and demonstrations of the target product capability.
 

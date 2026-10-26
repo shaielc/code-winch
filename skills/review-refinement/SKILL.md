@@ -18,7 +18,7 @@ with evidence: a command with its observed output, or a `file:line`.
 3. **Did it increase scope?** List every addition to Scope, Write set, Contract
    surfaces, Acceptance criteria, and Deferrals that the original Objective does
    not already imply. A prescribed mechanism, added lifecycle behavior, or added
-   verification is an addition even when it adds no capability. Name any idea a
+   verification, including one check repeated across equivalent options, is an addition even when it adds no capability. Name any idea a
    person rejected that the refined brief still mentions.
 4. **What value does it add, and what cost?** Value: what an implementer gains
    from the refined brief. Cost: everything the refinement adds beyond that,

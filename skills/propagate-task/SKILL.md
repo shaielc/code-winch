@@ -66,8 +66,9 @@ is not permission to skip a new hardening finding because a task looks related.
 
 Post the ledger as one comment on the source task PR (task branch → default
 branch): each finding with its source link, classification, verdict, and task
-or issue destination, plus the reconstructed stack. On reruns, edit that
-comment rather than adding another.
+or issue destination, plus the reconstructed stack and the files the merged
+implementation wrote outside the brief's write set, for the plan's
+write-collision report. On reruns, edit that comment rather than adding another.
 
 ## Open the propagation PR
 
