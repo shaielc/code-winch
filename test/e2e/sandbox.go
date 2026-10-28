@@ -18,7 +18,7 @@ func sandboxURL(t *testing.T) string {
 	t.Helper()
 	url := os.Getenv("WINCH_E2E_URL")
 	if url == "" {
-		t.Fatal("WINCH_E2E_URL is not set: run `make e2e` (through the proxy), `make docker-e2e` (in the toolchain), or `make test-cycle`")
+		t.Fatal("WINCH_E2E_URL is not set: run `make e2e` (after `make host-test-env`), `make docker-e2e` (in the toolchain), or `make test-cycle`")
 	}
 	return url
 }
@@ -28,7 +28,7 @@ func get(t *testing.T, url string) response {
 	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{Proxy: nil}}
 	resp, err := client.Get(url)
 	if err != nil {
-		t.Fatalf("GET %s: %v\nis the test environment up? start it with `make test-env`", url, err)
+		t.Fatalf("GET %s: %v\nis the test environment up? start it with `make host-test-env` (host) or `make test-env` (Docker)", url, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)

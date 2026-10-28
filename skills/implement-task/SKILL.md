@@ -27,9 +27,8 @@ derive, refine, implement, and audit.
    `tasks.json`. A `completed` status is a claim: if the type, contract, or
    behavior the edge names is missing at HEAD, the dependency is not done. Stop
    and report that rather than building the missing piece inside this task.
-4. **Read the Write set and Contract surfaces.** The write set forecasts which
-   files the change touches, so tasks in flight can predict a rebase; it is not
-   a boundary. The contract surfaces are what only this task may redefine.
+4. **Read the Contract surfaces.** They are what only this task may redefine.
+   The write set is a forecast for planning, not a boundary or a check.
 5. **Run the demonstration commands as they stand.** Seeing the current behavior
    before the change is what makes the change observable afterwards.
 
@@ -67,9 +66,7 @@ fake does not prove. Its existing dialect and controls do not add product scope.
 Scope does not ask for, or its Non-goals exclude, is scope creep. Changing a
 contract the brief does not declare is the more serious deviation — another
 task owns that surface and is working against the meaning you changed. Report
-it rather than absorbing it. Files written outside the write set are neither:
-list them in the pull request so the plan's write-collision report can be
-updated.
+it rather than absorbing it.
 
 **Update the design set with contract changes.** An API path, event or protocol
 schema, port signature, or migration that changes takes its design document
@@ -111,8 +108,8 @@ whatever happened.
 
 - The pull request body contains `Task: <ID>` and no other task ID.
 - Report what you ran, what the demonstration showed, every deferral with its
-  owning task ID, any change to an undeclared contract surface with its reason,
-  and the files written outside the write set.
+  owning task ID, and any change to an undeclared contract surface with its
+  reason.
 - Leave status fields in `docs/workplan/tasks.json` alone. Automation stamps
   `completed` when the pull request is approved.
 

@@ -63,16 +63,23 @@ Then make the brief concrete, in the sections it already has:
 
 - **Scope** — implementation instructions written against the code at HEAD:
   where the code lives, how it connects to what exists, and the order where
-  order matters, with a short reason for each judgment call. Keep these
+  order matters, with a short reason for each judgment call. State outcomes, not
+  internal mechanisms, unless a design document or contract fixes the mechanism;
+  the implementer chooses the rest. Keep these
   instructions inside the decided increment. A needed boundary or
   ownership change goes to the phase author and task author before refinement
   resumes; do not ask implementation to invent another task.
-- **Non-goals** — what the refinement explicitly excludes.
+- **Non-goals** — what the refinement explicitly excludes. An idea a person
+  rejected is deleted from the brief, not kept as a negative requirement or a
+  Non-goal.
 - **Write set** — the forecast, updated from the concrete Scope.
 - **Acceptance criteria**, **Verification**, and **Demonstration** — the
   results of the criteria and demonstration checks, and the test that will show
-  each criterion. Verification lists only checks specific to this task; the
-  repository gates are in `docs/testing.md`.
+  each criterion. Verification lists only checks specific to this task, in proportion to
+  the Objective and runnable where audits run. Do not require the same check
+  through several equivalent options unless the difference between them is the
+  task's point; the repository gates are in
+  `docs/testing.md`.
 - **Deferrals** — rows only for owners that already exist in `tasks.json`. Have
   a separate task author derive a missing owner before adding its row.
 
