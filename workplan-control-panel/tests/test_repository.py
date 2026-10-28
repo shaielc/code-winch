@@ -97,6 +97,20 @@ class TaskBranchTests(GitRepositoryFixture, unittest.TestCase):
             git(self.origin, "rev-parse", "task/P0-001^"), git(self.origin, "rev-parse", "main")
         )
 
+    def test_stage_branches_are_new_and_task_expiry_can_delete_all_of_them(self):
+        clone = self.clone("worker")
+        self.start(clone)
+        base = repository.task_head(clone, "P0-001")
+        for stage in ("refine", "implement"):
+            branch = repository.stage_branch(stage, "P0-001", 1)
+            repository.create_stage_branch(clone, "origin", branch, base)
+            self.assertEqual(git(self.origin, "rev-parse", branch), base)
+            with self.assertRaises(ValueError):
+                repository.create_stage_branch(clone, "origin", branch, base)
+        repository.delete_stage_branches(clone, "origin", "P0-001")
+        self.assertEqual(git(self.origin, "for-each-ref", "--format=%(refname)",
+                             "refs/heads/refine", "refs/heads/implement"), "")
+
 
 class RebaseTests(GitRepositoryFixture, unittest.TestCase):
     PULL = {"number": 7, "url": "https://example/pr/7", "headRefName": "impl"}

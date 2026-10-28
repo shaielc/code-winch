@@ -154,19 +154,38 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
                 self.assertEqual(result['status'], 'submitted')
                 self.assertTrue(self.panel.stage('P0-001', stage)['reused'])
                 self.assertIn('--branch', submitted[-1])
-                self.assertEqual(submitted[-1][-2], 'task/P0-001')
+                self.assertEqual(submitted[-1][-2], f'{stage}/P0-001-1')
                 self.assertTrue(submitted[-1][-1].startswith(prefix))
                 unwrapped = ' '.join(submitted[-1][-1].split())
-                self.assertIn('new branch from `task/P0-001`', unwrapped)
-                self.assertIn('base is `task/P0-001`', unwrapped)
+                self.assertIn(f'`{stage}/P0-001-1`', unwrapped)
+                self.assertNotIn('Include `Task:', unwrapped)
         self.assertEqual(len(submitted), 2)
+        stages = self.panel.snapshot()['state']['tasks']['P0-001']['stages']
+        base = git(self.origin, 'rev-parse', 'task/P0-001')
+        for stage in ('refine', 'implement'):
+            self.assertEqual(git(self.origin, 'rev-parse', f'{stage}/P0-001-1'), base)
+            self.assertEqual(stages[stage][0]['branch'], f'{stage}/P0-001-1')
+            self.assertEqual(stages[stage][0]['base'], base)
         page = render(self.panel.tracker(), self.panel.snapshot()['state'], '', False)
         # Each stage is one control per view — the table's and the tree's — and opens the
         # conversation its dispatch returned, pointed at the view that serves it.
         for number in (1, 2):
             self.assertEqual(
                 page.count(f'data-state="open" href="https://chatgpt.com/remote/task_e_{number}"'), 2)
+        for stage in ('refine', 'implement'):
+            self.assertEqual(page.count(f'>{stage}/P0-001-1</small>'), 2)
         self.assertNotIn('clipboard', page)
+
+    def test_failed_stage_branch_push_submits_nothing_and_records_no_attempt(self):
+        self.panel.sync()
+        with patch.object(repository, 'create_stage_branch', side_effect=OSError('rejected')), \
+                patch.object(codex, 'submit') as submit:
+            with self.assertRaises(TaskError) as error:
+                self.panel.stage('P0-001', 'implement')
+        self.assertEqual(error.exception.status, 502)
+        self.assertIn('P0-001 could not create and push', str(error.exception))
+        submit.assert_not_called()
+        self.assertEqual(self.panel.snapshot()['state']['tasks']['P0-001']['stages']['implement'], [])
 
     def test_rebase_moves_the_task_onto_main_and_reopens_its_stages(self):
         self.panel.sync()
@@ -339,6 +358,7 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
         attempts = self.panel.snapshot()['state']['tasks']['P0-001']['stages']['refine']
         self.assertEqual([a['status'] for a in attempts], ['expired', 'submitted'])
         self.assertEqual([a['task_url'] for a in attempts], urls)
+        self.assertEqual([a['branch'] for a in attempts], ['refine/P0-001-1', 'refine/P0-001-2'])
         self.assertEqual({a['head'] for a in attempts}, {attempts[0]['head']})
         # Both conversations survive the retirement: the icon opens the newest, and the
         # retired one stays reachable from that stage's right-click menu.
@@ -381,6 +401,7 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
         attempts = self.panel.snapshot()['state']['tasks']['P0-001']['stages']['refine']
         self.assertEqual([a['status'] for a in attempts], ['submitted', 'submitted'])
         self.assertEqual(len({a['head'] for a in attempts}), 2)
+        self.assertEqual([a['branch'] for a in attempts], ['refine/P0-001-1', 'refine/P0-001-2'])
 
     def test_expire_respects_lock_and_completed_tracker(self):
         self.panel.sync()
