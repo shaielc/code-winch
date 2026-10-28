@@ -310,6 +310,7 @@ class TaskScheduler:
             if not record or task["status"] == "completed" or record.get("status") == "completed":
                 raise TaskError(409, "This task has no active local reservation to expire")
             try:
+                repository.delete_stage_branches(self.clone, "origin", task_id)
                 repository.delete_task_branch(self.clone, "origin", task_id)
             except (OSError, subprocess.SubprocessError) as error:
                 raise TaskError(502, f"{task_id} was not expired: its branch could not be deleted. "
@@ -362,9 +363,7 @@ class TaskScheduler:
             state = task_state.load_state(self.state_file)
             task, record = self.task(task_id, state)
             template = prompts.load(stage)
-            branch = repository.task_branch(task_id)
             fields = {key: task[key] for key in ("id", "title", "brief")}
-            fields.update(branch=branch)
             # The audited revision is the pull request's head, not the task branch's.
             pull = None
             if stage == "audit":
@@ -390,9 +389,15 @@ class TaskScheduler:
             if latest:
                 raise TaskError(409, "The previous submission has an uncertain outcome; "
                                 f"check {service}, then expire the {stage} stage to submit again")
+            branch = repository.task_branch(task_id)
+            if stage != "audit":
+                branch = repository.stage_branch(stage, task_id, len(attempts) + 1)
+                fields.update(branch=branch)
             prompt = template.substitute(fields)
             attempts.append({"status": "submitting", "head": head,
                              "updated_at": datetime.now(UTC).isoformat()})
+            if stage != "audit":
+                attempts[-1].update(branch=branch, base=head)
             if pull:
                 attempts[-1]["pull_request"] = pull["url"]
             task_state.write_json(self.state_file, state)
@@ -400,6 +405,13 @@ class TaskScheduler:
                 if pull:
                     url = claude.fire(self.audit_routine_url, self.audit_routine_token, prompt)
                 else:
+                    try:
+                        repository.create_stage_branch(self.clone, "origin", branch, head)
+                    except (OSError, ValueError, subprocess.SubprocessError) as error:
+                        attempts.pop()
+                        task_state.write_json(self.state_file, state)
+                        raise TaskError(502, f"{task_id} could not create and push its {stage} "
+                                        "stage branch; no Codex task was submitted") from error
                     url = codex.submit(self.clone, self.environment, branch, prompt)
             except claude.RoutineError as error:
                 # The routine answered with a refusal, so nothing started.

@@ -63,6 +63,31 @@ def task_branch(task_id: str) -> str:
     return f"task/{task_id}"
 
 
+def stage_branch(stage: str, task_id: str, number: int) -> str:
+    return f"{stage}/{task_id}-{number}"
+
+
+def create_stage_branch(clone: Path, remote: str, branch: str, base: str) -> None:
+    """Push a new stage branch at the recorded task tip without rewriting an old one."""
+    ref = f"refs/heads/{branch}"
+    if github_run("git", "ls-remote", "--heads", remote, ref, cwd=clone):
+        raise ValueError(f"stage branch {branch} already exists")
+    github_run("git", "push", remote, f"{base}:{ref}", cwd=clone)
+
+
+def delete_stage_branches(clone: Path, remote: str, task_id: str) -> None:
+    """Delete every numbered Refine and Implement branch owned by a task."""
+    output = github_run("git", "ls-remote", "--heads", remote,
+                        f"refs/heads/refine/{task_id}-*",
+                        f"refs/heads/implement/{task_id}-*", cwd=clone)
+    refs = [line.split("\t", 1)[1] for line in output.splitlines() if "\t" in line]
+    if refs:
+        github_run("git", "push", "--quiet", remote, "--delete", *refs, cwd=clone)
+    for ref in refs:
+        run("git", "update-ref", "-d", f"refs/remotes/{remote}/{ref.removeprefix('refs/heads/')}",
+            cwd=clone)
+
+
 def ensure_task_branch(clone: Path, remote: str, base: str, task_id: str,
                        base_commit: str | None = None) -> None:
     """Create the task branch on the remote from the base branch unless it exists."""
