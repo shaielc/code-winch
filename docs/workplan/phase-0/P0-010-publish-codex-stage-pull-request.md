@@ -2,7 +2,7 @@
 
 **Phase:** 0 — Plan the implementation phases
 **Shape:** capability
-**Dependencies:** P0-009 (contract: publishes onto the `<stage>/<ID>` branch and extends the stage attempt record that P0-009 defines)
+**Dependencies:** P0-009 (contract: publishes onto the `<stage>/<ID>-<N>` branch and extends the stage attempt record that P0-009 defines)
 
 Second of four control-panel automation tasks (P0-009 to P0-012). This is a
 Phase 0 meta task because the control panel is repository tooling, not the
@@ -12,10 +12,13 @@ the panel, reached by its API, UI and a background check.
 ## Objective
 
 When a Refine or Implement Codex task finishes, its changes are on
-`<stage>/<ID>` and a pull request into `task/<ID>` is open, without anyone
+`<stage>/<ID>-<N>` and a pull request into `task/<ID>` is open, without anyone
 opening Codex's web UI.
 
 ## Scope
+
+Use the stage attempt's recorded branch from P0-009 for publication and retries;
+do not reconstruct a fixed branch name or allocate another number.
 
 `codex cloud exec` returns only a task URL. The CLI can report a task's status
 and print its unified diff, but it cannot read the agent's messages or session
@@ -31,8 +34,8 @@ refiner to confirm against code at dispatch:
   newline, and apply it in a temporary worktree at the stage branch's tip. The
   panel's own clone is never the apply target.
 - Make one commit authored by the panel, with subject `<ID>: <Refine|Implement>
-  <task title>` and body `Task: <ID>`, push it to `<stage>/<ID>`, then open the
-  pull request with `gh pr create --base task/<ID> --head <stage>/<ID> --fill`.
+  <task title>` and body `Task: <ID>`, push it to `<stage>/<ID>-<N>`, then open the
+  pull request with `gh pr create --base task/<ID> --head <stage>/<ID>-<N> --fill`.
   A pull request already open for that head is reused, not duplicated.
 - Record on the stage attempt the Codex task id, outcome, published tip, and
   pull request number and URL. Show the stage as running, published, failed or
@@ -84,7 +87,7 @@ retry route is part of its HTTP API and the UI.
 
 The stage attempt's completion and publication fields; the publish-retry route;
 the commit-message convention (`<ID>: …`, body `Task: <ID>`); the identity of a
-stage pull request (head `<stage>/<ID>`, base `task/<ID>`). P0-011 and P0-012
+stage pull request (head `<stage>/<ID>-<N>`, base `task/<ID>`). P0-011 and P0-012
 consume these.
 
 ## Demonstration
@@ -93,9 +96,9 @@ Against a local bare remote, a fake `codex` on `PATH` that reports `pending`
 then `ready` and prints a fixed diff, and a stubbed `gh`:
 
     $ POST /api/tasks/<ID>/refine, then wait for the fake to report ready
-    → expect: refine/<ID> on origin has one new commit on top of task/<ID> with
+    → expect: refine/<ID>-<N> on origin has one new commit on top of task/<ID> with
       subject "<ID>: Refine <title>"; `gh pr create --base task/<ID> --head
-      refine/<ID> --fill` was called once; the stage cell shows published
+      refine/<ID>-<N> --fill` was called once; the stage cell shows published
     $ the fake reports error
     → expect: nothing pushed; the stage cell shows failed with a reason
     $ the fake's diff also edits tasks.json (Refine)
@@ -117,7 +120,7 @@ Optionally, with a real Codex environment, confirm `codex cloud list --json` and
 
 ## Acceptance criteria
 
-- [ ] A finished Codex task is published to `<stage>/<ID>` as one panel-authored
+- [ ] A finished Codex task is published to `<stage>/<ID>-<N>` as one panel-authored
       commit and a pull request into `task/<ID>` opened with `--fill`, with no
       operator action.
 - [ ] `error`, empty-diff, non-applying and out-of-bounds outcomes are recorded
