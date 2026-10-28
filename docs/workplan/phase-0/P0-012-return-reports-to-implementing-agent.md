@@ -18,9 +18,13 @@ the same pull request.
 
 ## Scope
 
+A report return continues the reviewed attempt on its recorded branch and pull
+request. It does not allocate a new numbered branch; fresh stage submissions
+and retries after expiry are the P0-009 path.
+
 A finished Codex Cloud task cannot receive a follow-up turn (the CLI has no
 command for it; upstream issue openai/codex#24777 is open), so "pass it back"
-means a new task on `<stage>/<ID>`, a new conversation with the report in its
+means a new task on `<stage>/<ID>-<N>`, a new conversation with the report in its
 prompt. Proposed approach, for the refiner to confirm against code at dispatch:
 
 - **Listen to pull-request changes.** Extend the Actions route that already
@@ -38,7 +42,7 @@ prompt. Proposed approach, for the refiner to confirm against code at dispatch:
   `skills/audit-task/SKILL.md` leaves Defect and Deferrable dispositions to a
   person, and the stage shows that a person is needed. A review-refinement
   report is returned whole.
-- **Send it.** Start `codex cloud exec --branch <stage>/<ID>` with a fixed
+- **Send it.** Start `codex cloud exec --branch <stage>/<ID>-<N>` with a fixed
   instruction plus the report, framed as untrusted data and bounded in size. Its
   result is published by P0-010, which pushes a new head and so restarts the
   reviewer through P0-011.
@@ -97,7 +101,7 @@ Against a local bare remote, a stubbed `gh`, and a fake `codex`, with a stage
 pull request already published and a session started by the P0-011 path:
 
     $ deliver an audit report "Not Complete" for the current head
-    → expect: one codex task on implement/<ID> whose prompt carries the Blocking
+    → expect: one codex task on implement/<ID>-<N> whose prompt carries the Blocking
       findings; the stage shows returned (round 1)
     $ deliver the same event again
     → expect: nothing new
