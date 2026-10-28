@@ -13,7 +13,7 @@ behavior to the panel, reached by its HTTP API and UI.
 
 ## Objective
 
-Launching Refine or Implement for a task pushes `refine/<ID>` or `implement/<ID>`
+Launching Refine or Implement for a task pushes `refine/<ID>-<N>` or `implement/<ID>-<N>`
 from the current `task/<ID>` tip and runs the Codex Cloud task on that branch,
 so every stage's work has a branch the panel owns.
 
@@ -24,20 +24,23 @@ pull request, which in Codex Cloud means a person clicks "Create PR" in
 Codex's web UI. Proposed approach, for the refiner to confirm against code at
 dispatch:
 
-- Before dispatch, create and push `<stage>/<ID>` at the task branch's tip,
+- Before dispatch, create and push `<stage>/<ID>-<N>` at the task branch's tip,
   following the existing task-branch helper in `integrations/repository.py`,
   and pass it to `codex cloud exec --branch`.
 - Record the stage branch and the task-branch tip it was created from on the
   stage attempt, beside the `head` the attempt is already scoped to.
 - Rewrite `prompts/refine.md` so the agent refines the brief and commits it on
-  the prepared `refine/<ID>` branch, without creating a branch or opening a
+  the prepared `refine/<ID>-<N>` branch, without creating a branch or opening a
   pull request. Rewrite `prompts/implement.md` so the agent changes files only:
   no branch, commit or pull request. Update the prompt tests that assert the
   old wording.
-- A stage that reopens after the task tip moves, or after expiry, starts from
-  the new tip. A stale stage branch with no open pull request is replaced.
-- Expiring a task deletes its stage branches, as it already deletes the task
-  branch. Rebase keeps carrying stage branches that have open pull requests.
+- Number branches per task and stage, starting at 1. Every fresh submission,
+  including after the task tip moves or the stage expires, increments the
+  number and starts from the current task tip, regardless of open pull
+  requests. Preserve earlier stage branches and their pull requests. A duplicate
+  request with a live attempt at the same task tip returns that attempt instead.
+- Expiring a task deletes all its numbered stage branches, as it already
+  deletes the task branch. Rebase keeps carrying stage branches that have open pull requests.
 - Show the stage branch in the stage cell and tree view.
 
 ## Required constraints
@@ -76,8 +79,9 @@ Implement controls, in the panel started by `python3 -m control_panel` or
 
 ## Contract surfaces
 
-The stage-branch name `<stage>/<ID>`; the stage attempt record's branch and base
-fields; the Refine and Implement prompts' instructions about branches and pull
+The stage-branch name `<stage>/<ID>-<N>`, where N increments per task and stage;
+the recorded branch is the handoff to publication, review and report returns;
+the stage attempt record's branch and base fields; the Refine and Implement prompts' instructions about branches and pull
 requests; the panel README's description of the flow. P0-010, P0-011 and P0-012
 consume these.
 
@@ -86,16 +90,21 @@ consume these.
 Against a local bare remote with a fake `codex` on `PATH`, as the panel tests do:
 
     $ POST /api/tasks/<ID>/refine
-    → expect: origin has refine/<ID> at the same commit as task/<ID>; the fake
-      codex received `--branch refine/<ID>`; the prompt has no instruction to
+    → expect: origin has refine/<ID>-1 at the same commit as task/<ID>; the fake
+      codex received `--branch refine/<ID>-1`; the prompt has no instruction to
       create a branch or open a pull request
     $ POST /api/tasks/<ID>/refine        (same tip)
     → expect: the existing submission is returned; no second branch or task
+    $ move task/<ID>, then POST /api/tasks/<ID>/refine
+    → expect: refine/<ID>-2 starts at the new task tip; refine/<ID>-1 and any
+      open pull request are unchanged
+    $ expire Refine, then POST /api/tasks/<ID>/refine at the same task tip
+    → expect: refine/<ID>-3 starts at that tip; earlier branches are unchanged
     $ make the branch push fail, then POST /api/tasks/<ID>/implement
     → expect: an error naming the task and operation; no codex task recorded
 
 Optionally, with a real Codex environment: the dispatched task opens on
-`refine/<ID>` and its diff is against that branch's tip.
+`refine/<ID>-<N>` and its diff is against that branch's tip.
 
 ## Verification
 
@@ -108,15 +117,18 @@ Optionally, with a real Codex environment: the dispatched task opens on
 
 ## Acceptance criteria
 
-- [ ] Refine and Implement each push `<stage>/<ID>` from the current task tip
+- [ ] Refine and Implement each push `<stage>/<ID>-<N>` from the current task tip
       before dispatch and pass it to `codex cloud exec --branch`.
 - [ ] The stage attempt records the branch and the task tip it started from.
 - [ ] The Refine prompt requires committing the refined brief on the prepared
-      `refine/<ID>` branch, without creating a branch or opening a pull request.
+      `refine/<ID>-<N>` branch, without creating a branch or opening a pull request.
       The Implement prompt no longer asks the agent to branch, commit or open
       a pull request.
-- [ ] A relaunch after the task tip moved starts from the new tip; an open
-      stage pull request's branch is not rewritten.
+- [ ] A relaunch after the task tip moved, or after stage expiry at the same
+      tip, uses the next numbered branch from the current task tip, whether or
+      not an earlier branch has an open pull request. Earlier branches and pull
+      requests are preserved. A duplicate request with a live attempt at the
+      same tip returns it without creating another branch.
 - [ ] Expiring the task removes its stage branches; Rebase still replays open
       stage pull requests onto the rewritten task branch.
 - [ ] A failed branch push leaves no submission recorded.
