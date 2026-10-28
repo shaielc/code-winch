@@ -96,7 +96,9 @@ concurrent operations return 409.
 
 Before Refine or Implement dispatch, the panel pushes a numbered stage branch from the
 current task tip (`refine/<ID>-<N>` or `implement/<ID>-<N>`) and tells Codex to work there.
-Fresh submissions increment N even after expiry; task expiry deletes all of its numbered
+N is one above the highest number held by any recorded attempt or any remote branch of that
+stage, so a push that landed despite an error, or a lost record, never makes a retry collide;
+a failed push keeps its attempt, set aside as expired. Task expiry deletes all of its numbered
 stage branches. Repeating a submitted stage at the same task-branch revision returns its
 existing URL rather than launching a second cloud task or branch. The branch revision scopes that:
 once a stage's pull request merges into the task branch, the tip moves and the stage

@@ -105,8 +105,9 @@ class TaskBranchTests(GitRepositoryFixture, unittest.TestCase):
             branch = repository.stage_branch(stage, "P0-001", 1)
             repository.create_stage_branch(clone, "origin", branch, base)
             self.assertEqual(git(self.origin, "rev-parse", branch), base)
-            with self.assertRaises(ValueError):
+            with self.assertRaises(repository.StageBranchExists):
                 repository.create_stage_branch(clone, "origin", branch, base)
+        self.assertEqual(repository.remote_stage_numbers(clone, "origin", "refine", "P0-001"), [1])
         repository.delete_stage_branches(clone, "origin", "P0-001")
         self.assertEqual(git(self.origin, "for-each-ref", "--format=%(refname)",
                              "refs/heads/refine", "refs/heads/implement"), "")

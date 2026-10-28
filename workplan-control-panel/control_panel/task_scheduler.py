@@ -356,6 +356,25 @@ class TaskScheduler:
             task_state.write_json(self.state_file, state)
             return {"expired": task_id, "stage": stage, "head": head}
 
+    @staticmethod
+    def set_aside(attempt: dict[str, Any], reason: str) -> None:
+        attempt.update(status="expired", updated_at=datetime.now(UTC).isoformat(), error=reason)
+
+    def stage_attempt(self, attempts, stage: str, task_id: str, head: str) -> dict[str, Any]:
+        """A submitting attempt on the next free branch number.
+
+        The number is above every one the remote holds and every one an attempt recorded, so
+        neither a lost record nor a push that landed despite an error can hand it out twice.
+        Attempts recorded before this carry a branch named the same way, or none; the attempt
+        count is a floor for those that carry none.
+        """
+        taken = [repository.stage_branch_number(a.get("branch", ""), stage, task_id) for a in attempts]
+        numbers = [n for n in taken if n is not None]
+        numbers += repository.remote_stage_numbers(self.clone, "origin", stage, task_id)
+        number = max(numbers + [len(attempts)]) + 1
+        return {"status": "submitting", "head": head, "updated_at": datetime.now(UTC).isoformat(),
+                "branch": repository.stage_branch(stage, task_id, number), "base": head}
+
     def stage(self, task_id: str, stage: str, pr_number: int | None = None):
         if stage not in ("refine", "implement", "audit"):
             raise TaskError(404, "Unknown stage")
@@ -389,15 +408,18 @@ class TaskScheduler:
             if latest:
                 raise TaskError(409, "The previous submission has an uncertain outcome; "
                                 f"check {service}, then expire the {stage} stage to submit again")
-            branch = repository.task_branch(task_id)
-            if stage != "audit":
-                branch = repository.stage_branch(stage, task_id, len(attempts) + 1)
-                fields.update(branch=branch)
-            prompt = template.substitute(fields)
-            attempts.append({"status": "submitting", "head": head,
-                             "updated_at": datetime.now(UTC).isoformat()})
-            if stage != "audit":
-                attempts[-1].update(branch=branch, base=head)
+            if stage == "audit":
+                prompt = template.substitute(fields)
+                attempts.append({"status": "submitting", "head": head,
+                                 "updated_at": datetime.now(UTC).isoformat()})
+            else:
+                # Reserve a number no attempt or remote branch already holds, and keep that
+                # attempt on record whatever the push does, so its number is never reused.
+                try:
+                    attempts.append(self.stage_attempt(attempts, stage, task_id, head))
+                except (OSError, ValueError, subprocess.SubprocessError) as error:
+                    raise TaskError(502, f"{task_id} could not list its {stage} stage branches; "
+                                    "no Codex task was submitted") from error
             if pull:
                 attempts[-1]["pull_request"] = pull["url"]
             task_state.write_json(self.state_file, state)
@@ -405,13 +427,29 @@ class TaskScheduler:
                 if pull:
                     url = claude.fire(self.audit_routine_url, self.audit_routine_token, prompt)
                 else:
-                    try:
-                        repository.create_stage_branch(self.clone, "origin", branch, head)
-                    except (OSError, ValueError, subprocess.SubprocessError) as error:
-                        attempts.pop()
-                        task_state.write_json(self.state_file, state)
-                        raise TaskError(502, f"{task_id} could not create and push its {stage} "
-                                        "stage branch; no Codex task was submitted") from error
+                    while True:
+                        try:
+                            repository.create_stage_branch(self.clone, "origin", attempts[-1]["branch"], head)
+                            break
+                        except repository.StageBranchExists:
+                            # Someone holds this number on the remote: remember it and move on.
+                            self.set_aside(attempts[-1], "stage branch already existed")
+                            try:
+                                attempts.append(self.stage_attempt(attempts, stage, task_id, head))
+                            except (OSError, ValueError, subprocess.SubprocessError) as error:
+                                task_state.write_json(self.state_file, state)
+                                raise TaskError(502, f"{task_id} could not list its {stage} stage "
+                                                "branches; no Codex task was submitted") from error
+                            task_state.write_json(self.state_file, state)
+                        except (OSError, ValueError, subprocess.SubprocessError) as error:
+                            # The push may have landed before the error, so the attempt and its
+                            # branch number stay on record; it is set aside, not deleted.
+                            self.set_aside(attempts[-1], "stage branch push failed")
+                            task_state.write_json(self.state_file, state)
+                            raise TaskError(502, f"{task_id} could not create and push its {stage} "
+                                            "stage branch; no Codex task was submitted") from error
+                    branch = attempts[-1]["branch"]
+                    prompt = template.substitute({**fields, "branch": branch})
                     url = codex.submit(self.clone, self.environment, branch, prompt)
             except claude.RoutineError as error:
                 # The routine answered with a refusal, so nothing started.

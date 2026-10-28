@@ -67,11 +67,31 @@ def stage_branch(stage: str, task_id: str, number: int) -> str:
     return f"{stage}/{task_id}-{number}"
 
 
+class StageBranchExists(ValueError):
+    """The numbered stage branch is already on the remote, so its number is taken."""
+
+
+def stage_branch_number(branch: str, stage: str, task_id: str) -> int | None:
+    """The number in `<stage>/<ID>-<N>`, or None for any other name."""
+    prefix = f"{stage}/{task_id}-"
+    suffix = branch.removeprefix(prefix) if branch.startswith(prefix) else ""
+    return int(suffix) if suffix.isdigit() else None
+
+
+def remote_stage_numbers(clone: Path, remote: str, stage: str, task_id: str) -> list[int]:
+    """Numbers of the stage branches the remote holds for this task, whoever pushed them."""
+    output = github_run("git", "ls-remote", "--heads", remote,
+                        f"refs/heads/{stage}/{task_id}-*", cwd=clone)
+    refs = (line.split("\t", 1)[1] for line in output.splitlines() if "\t" in line)
+    numbers = (stage_branch_number(ref.removeprefix("refs/heads/"), stage, task_id) for ref in refs)
+    return [number for number in numbers if number is not None]
+
+
 def create_stage_branch(clone: Path, remote: str, branch: str, base: str) -> None:
     """Push a new stage branch at the recorded task tip without rewriting an old one."""
     ref = f"refs/heads/{branch}"
     if github_run("git", "ls-remote", "--heads", remote, ref, cwd=clone):
-        raise ValueError(f"stage branch {branch} already exists")
+        raise StageBranchExists(f"stage branch {branch} already exists")
     github_run("git", "push", remote, f"{base}:{ref}", cwd=clone)
 
 

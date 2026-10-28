@@ -176,7 +176,7 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
             self.assertEqual(page.count(f'>{stage}/P0-001-1</small>'), 2)
         self.assertNotIn('clipboard', page)
 
-    def test_failed_stage_branch_push_submits_nothing_and_records_no_attempt(self):
+    def test_failed_stage_branch_push_submits_nothing_and_keeps_the_attempt_set_aside(self):
         self.panel.sync()
         with patch.object(repository, 'create_stage_branch', side_effect=OSError('rejected')), \
                 patch.object(codex, 'submit') as submit:
@@ -185,7 +185,87 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
         self.assertEqual(error.exception.status, 502)
         self.assertIn('P0-001 could not create and push', str(error.exception))
         submit.assert_not_called()
-        self.assertEqual(self.panel.snapshot()['state']['tasks']['P0-001']['stages']['implement'], [])
+        attempts = self.panel.snapshot()['state']['tasks']['P0-001']['stages']['implement']
+        self.assertEqual([(a['status'], a['branch']) for a in attempts],
+                         [('expired', 'implement/P0-001-1')])
+
+    def test_push_that_lands_then_errors_does_not_poison_the_retry(self):
+        self.panel.sync()
+        real = repository.create_stage_branch
+
+        def lands_then_errors(*args):
+            real(*args)
+            raise OSError('connection reset after the ref was created')
+        with patch.object(repository, 'create_stage_branch', side_effect=lands_then_errors), \
+                patch.object(codex, 'submit') as submit:
+            with self.assertRaises(TaskError):
+                self.panel.stage('P0-001', 'implement')
+        submit.assert_not_called()
+        base = git(self.origin, 'rev-parse', 'task/P0-001')
+        self.assertEqual(git(self.origin, 'rev-parse', 'implement/P0-001-1'), base)
+        with patch.object(codex, 'submit', return_value='https://example/codex/2') as submit:
+            result = self.panel.stage('P0-001', 'implement')
+        self.assertEqual((result['status'], result['branch']), ('submitted', 'implement/P0-001-2'))
+        self.assertEqual(submit.call_args.args[2], 'implement/P0-001-2')
+        self.assertIn('`implement/P0-001-2`', ' '.join(submit.call_args.args[3].split()))
+        attempts = self.panel.snapshot()['state']['tasks']['P0-001']['stages']['implement']
+        self.assertEqual([(a['status'], a['branch']) for a in attempts],
+                         [('expired', 'implement/P0-001-1'), ('submitted', 'implement/P0-001-2')])
+        # The earlier ref is still on the remote; expiring the task clears every one.
+        self.assertEqual(git(self.origin, 'rev-parse', 'implement/P0-001-1'), base)
+        self.panel.expire('P0-001')
+        self.assertEqual(git(self.origin, 'for-each-ref', '--format=%(refname)', 'refs/heads/implement'), '')
+
+    def test_lost_attempt_history_takes_the_next_number_above_the_remote_branches(self):
+        self.panel.sync()
+        base = git(self.origin, 'rev-parse', 'task/P0-001')
+        for number in (1, 4):
+            git(self.origin, 'branch', f'refine/P0-001-{number}', base)
+        git(self.origin, 'branch', 'refine/P0-001-notanumber', base)
+        git(self.origin, 'branch', 'refine/P0-0011-9', base)
+        with patch.object(codex, 'submit', return_value='https://example/codex/5') as submit:
+            result = self.panel.stage('P0-001', 'refine')
+        self.assertEqual(result['branch'], 'refine/P0-001-5')
+        self.assertEqual(submit.call_args.args[2], 'refine/P0-001-5')
+
+    def test_a_branch_that_appears_after_the_listing_is_recorded_and_skipped(self):
+        self.panel.sync()
+        base = git(self.origin, 'rev-parse', 'task/P0-001')
+        listed = repository.remote_stage_numbers
+
+        def stale_listing(*args):
+            numbers = listed(*args)
+            # Only the first listing is stale; the branch lands just after it.
+            if 'implement/P0-001-1' not in git(self.origin, 'branch', '--list', 'implement/*'):
+                git(self.origin, 'branch', 'implement/P0-001-1', base)
+            return numbers
+        with patch.object(repository, 'remote_stage_numbers', side_effect=stale_listing), \
+                patch.object(codex, 'submit', return_value='https://example/codex/2'):
+            result = self.panel.stage('P0-001', 'implement')
+        self.assertEqual(result['branch'], 'implement/P0-001-2')
+        attempts = self.panel.snapshot()['state']['tasks']['P0-001']['stages']['implement']
+        self.assertEqual([(a['status'], a['branch']) for a in attempts],
+                         [('expired', 'implement/P0-001-1'), ('submitted', 'implement/P0-001-2')])
+
+    def test_attempts_recorded_before_numbering_changed_still_render_and_count(self):
+        self.panel.sync()
+        state = task_state.load_state(self.panel.state_file)
+        head = repository.task_head(self.panel.clone, 'P0-001')
+        # Older records: one with no branch at all, and an expired one with a bare branch.
+        state['tasks']['P0-001']['stages'] = {'implement': [
+            {'status': 'expired', 'head': 'old', 'task_url': 'https://chatgpt.com/codex/cloud/tasks/a',
+             'updated_at': '2026-01-01T00:00:00+00:00'},
+            {'status': 'submitted', 'head': 'older', 'branch': 'implement/P0-001-2',
+             'task_url': 'https://chatgpt.com/codex/cloud/tasks/b',
+             'updated_at': '2026-01-02T00:00:00+00:00'}]}
+        task_state.write_json(self.panel.state_file, state)
+        snapshot = self.panel.snapshot()
+        page = render(snapshot['tracker'], snapshot['state'], '', False)
+        self.assertIn('implement/P0-001-2', page)
+        with patch.object(codex, 'submit', return_value='https://example/codex/9'):
+            result = self.panel.stage('P0-001', 'implement')
+        self.assertEqual(result['branch'], 'implement/P0-001-3')
+        self.assertEqual(git(self.origin, 'rev-parse', 'implement/P0-001-3'), head)
 
     def test_rebase_moves_the_task_onto_main_and_reopens_its_stages(self):
         self.panel.sync()
