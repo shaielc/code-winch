@@ -14,11 +14,16 @@ import (
 
 func fixture(t *testing.T, posture attach.Posture, childStatus attach.ChildStatus) http.Handler {
 	t.Helper()
+	return fixtureWithSession(t, attach.Session{Posture: posture, ChildStatus: childStatus})
+}
+
+func fixtureWithSession(t *testing.T, session attach.Session) http.Handler {
+	t.Helper()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("Attach page"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	handler, err := attach.New(dir, attach.Session{Posture: posture, ChildStatus: childStatus})
+	handler, err := attach.New(dir, session)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,12 +47,26 @@ func TestEndpointContracts(t *testing.T) {
 }
 
 func TestSessionSerializesSuppliedChildStatus(t *testing.T) {
-	handler := fixture(t, attach.DefaultPosture(), attach.ChildStatus("observed-value"))
+	for _, status := range []attach.ChildStatus{attach.ChildDown, attach.ChildRunning, attach.ChildExited} {
+		handler := fixture(t, attach.DefaultPosture(), status)
+		request := httptest.NewRequest(http.MethodGet, "/api/session", nil)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if !strings.Contains(response.Body.String(), `"childStatus":"`+string(status)+`"`) {
+			t.Fatalf("session did not retain supplied child status: %q", response.Body.String())
+		}
+	}
+}
+
+func TestSessionReadsCurrentChildStatus(t *testing.T) {
+	status := attach.ChildRunning
+	handler := fixtureWithSession(t, attach.Session{Posture: attach.DefaultPosture(), ChildStatusSource: func() attach.ChildStatus { return status }})
+	status = attach.ChildExited
 	request := httptest.NewRequest(http.MethodGet, "/api/session", nil)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if !strings.Contains(response.Body.String(), `"childStatus":"observed-value"`) {
-		t.Fatalf("session did not retain supplied child status: %q", response.Body.String())
+	if !strings.Contains(response.Body.String(), `"childStatus":"Exited"`) {
+		t.Fatalf("session copied startup status: %q", response.Body.String())
 	}
 }
 

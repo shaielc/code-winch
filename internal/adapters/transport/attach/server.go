@@ -29,7 +29,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/healthz":
 		writeJSON(w, map[string]string{"service": "winch-sandbox", "status": "ok"})
 	case "/api/session":
-		writeJSON(w, s.session)
+		writeJSON(w, s.session.current())
 	default:
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
 			w.Header().Set("Content-Type", "application/json")
