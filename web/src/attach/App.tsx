@@ -15,8 +15,8 @@ export function App() {
       })
       .then((payload) => {
         if (isSessionPosture(payload)) setPosture(payload);
-        if (isObject(payload) && payload.childStatus === "Down") {
-          setChildStatus("Down");
+        if (isObject(payload) && isChildStatus(payload.childStatus)) {
+          setChildStatus(payload.childStatus);
         }
       })
       .catch(() => setError(true));
@@ -60,6 +60,10 @@ export function App() {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isChildStatus(value: unknown): value is "Down" | "Running" | "Exited" {
+  return value === "Down" || value === "Running" || value === "Exited";
 }
 
 function isSessionPosture(value: unknown): value is SessionPosture {

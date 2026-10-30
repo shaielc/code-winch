@@ -42,31 +42,33 @@ test("shows effective and unenforced posture", async () => {
   expect(screen.getByText(/not enforced by this profile/i)).toBeInTheDocument();
 });
 
-test("shows Down only after the sandbox reports the exact supported status", async () => {
-  globalThis.fetch = vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => ({
-      profile: "container-standard",
-      unenforcedControls: ["network-egress"],
-      childStatus: "Down",
-    }),
-  });
-  render(<App />);
+test.each(["Down", "Running", "Exited"])(
+  "shows %s only after the sandbox reports the exact supported status",
+  async (childStatus) => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        profile: "container-standard",
+        unenforcedControls: ["network-egress"],
+        childStatus,
+      }),
+    });
+    render(<App />);
 
-  const region = screen.getByRole("region", { name: "Child status" });
-  expect(region).toHaveTextContent(/^Child statusUnknown$/);
-  expect(
-    await screen.findByText("Down", { selector: "p" }),
-  ).toBeInTheDocument();
-  expect(region).toHaveTextContent(/^Child statusDown$/);
-  expect(region).not.toHaveTextContent(/Running|ready|fake|exit/i);
-});
+    const region = screen.getByRole("region", { name: "Child status" });
+    expect(region).toHaveTextContent(/^Child statusUnknown$/);
+    expect(
+      await screen.findByText(childStatus, { selector: "p" }),
+    ).toBeInTheDocument();
+    expect(region).toHaveTextContent(`Child status${childStatus}`);
+    expect(region).not.toHaveTextContent(/ready|fake/i);
+  },
+);
 
 test.each([
   ["missing", undefined],
-  ["running", "Running"],
-  ["exited", "Exited"],
   ["wrong case", "down"],
+  ["unsupported", "Started"],
 ])("keeps child status Unknown for a %s status", async (_name, childStatus) => {
   globalThis.fetch = vi.fn().mockResolvedValue({
     ok: true,

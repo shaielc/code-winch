@@ -236,12 +236,19 @@ contains the native result and its documented interpretation. It does not imply
 a run state machine, retry, or a new attempt in the same sandbox. Delivery is
 refused when the harness is unavailable whether or not exit reporting exists.
 
+**Child status reports owned-process observation.** `GET /api/session` includes
+the case-sensitive `childStatus` member. `Down` means the sandbox owns no child;
+`Running` means its owned child started and no exit has yet been observed; and
+`Exited` means that exact child's exit has been observed. These values do not
+claim health, readiness, input availability, provider semantics, or interpret
+the native exit result.
+
 **The surface states its posture.** It reports the sandbox profile in force and
 what that profile does not isolate, so a caller cannot be misled about effective
 isolation — threat T02 in [the security model](security.md#3-threat-and-mitigation-register).
 The standalone surface exposes `GET /healthz` as
 `{"service":"winch-sandbox","status":"ok"}` and `GET /api/session` as
-`{"profile": string, "unenforcedControls": string[], "childStatus":"Down"}`.
+`{"profile": string, "unenforcedControls": string[], "childStatus":"Down" | "Running" | "Exited"}`.
 The unenforced-controls array is non-empty; for `container-standard` it includes
 `network-egress`. `Down` is the only child-status value in this increment and is
 an affirmative observation supplied by the no-child sandbox composition; a

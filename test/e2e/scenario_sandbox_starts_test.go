@@ -11,7 +11,7 @@ func TestSandboxStarts(t *testing.T) {
 	base := sandboxURL(t)
 
 	assertJSON(t, get(t, base+"/healthz"), "{\"service\":\"winch-sandbox\",\"status\":\"ok\"}\n")
-	assertJSON(t, get(t, base+"/api/session"), "{\"profile\":\"container-standard\",\"unenforcedControls\":[\"network-egress\"],\"childStatus\":\"Down\"}\n")
+	assertJSON(t, get(t, base+"/api/session"), "{\"profile\":\"container-standard\",\"unenforcedControls\":[\"network-egress\"],\"childStatus\":\"Running\"}\n")
 
 	page := get(t, base+"/")
 	if page.status != http.StatusOK || !strings.HasPrefix(page.contentType, "text/html") || !strings.Contains(page.body, "Sandbox attach") {

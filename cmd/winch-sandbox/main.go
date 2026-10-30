@@ -18,9 +18,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	child := newChildOwner(shippedFakeHarness(), "-run-id", "sandbox")
+	if err := child.Start(); err != nil {
+		log.Fatal("fake harness failed to start")
+	}
 	handler, err := attach.New(config.staticDir, attach.Session{
-		Posture:     config.posture,
-		ChildStatus: attach.ChildDown,
+		Posture:           config.posture,
+		ChildStatus:       attach.ChildDown,
+		ChildStatusSource: child.Status,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -32,6 +37,7 @@ func main() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		child.Stop(shutdown)
 		_ = server.Shutdown(shutdown)
 	}()
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
