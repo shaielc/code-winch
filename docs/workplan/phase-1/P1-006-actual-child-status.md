@@ -26,18 +26,31 @@ same wire and presentation surface.
 
 ## Scope
 
-- Launch the shipped fake harness as a child owned by `winch-sandbox`, retain
-  the process handle, and observe that exact process's exit through a
-  concurrency-safe status observation. Do not scan the host process table or
-  infer status from output, browser timing, `/healthz`, or a PID without the
-  owned handle.
-- A failed start cannot produce `Running`. Clean up the owned child on sandbox
-  shutdown within the existing bounded shutdown path. This increment does not
-  parse, retain, publish, or display child output or accept input.
-- Extend P1-004's session status source so each request reads the current owned
-  process observation rather than a construction-time string. Preserve the
-  one-shot browser fetch: a load or reload observes one authoritative session
-  response; no polling, streaming, or browser-side inference is added.
+- Add a focused process owner under `cmd/winch-sandbox` and construct it before
+  the HTTP handler. Start the sibling `fake-harness` executable with a non-empty
+  fixture run ID, retain the command it starts, keep the child's standard input
+  open so the default fixture remains alive, and wait for that exact child.
+  Resolve the sibling from the running `winch-sandbox` executable directory:
+  the image installs both in `/usr/local/bin`, while `make host-test-env` builds
+  both in `bin/`; this single shipped profile needs no new configuration key.
+- Publish status from the owner through a concurrency-safe read: it is `Down`
+  before a successful `Start`, becomes `Running` only after `Start` succeeds,
+  and becomes `Exited` only after waiting on that same command returns. A start
+  error must abort sandbox startup without publishing `Running`. Do not scan
+  the host process table or infer state from output, browser timing,
+  `/healthz`, or a bare PID.
+- Keep child output out of logs and responses because output transport is a
+  later increment. On sandbox shutdown, close the retained input and signal
+  the owned child, then wait for it inside the same five-second bounded
+  shutdown path used by the HTTP server; cleanup must neither orphan the child
+  nor wait without a bound. This increment does not parse, retain, publish, or
+  display child output or accept operator input.
+- Change the attach server's session dependency from a copied `Session` to a
+  small current-session source, and have `/api/session` call it for every
+  request. The composition root supplies the fixed posture plus the owner's
+  current status. Preserve the one-shot browser fetch: a load or reload
+  observes one authoritative response; no polling, streaming, or browser-side
+  inference is added.
 - Extend the P1-004 React validation to accept exact `Running` and `Exited`
   values while retaining exact `Down` and the `Unknown` fallback for pending,
   failed, malformed, missing, or unsupported values. Preserve the child-status
@@ -80,13 +93,22 @@ current observation, and the existing one-shot fetch renders it at the branch
 proxy attach URL. No provider account, auxiliary service, new public endpoint,
 or host process scan is required.
 
+At HEAD, `cmd/winch-sandbox/main.go` constructs one immutable `attach.Session`
+with `ChildDown`; `attach.Server` stores that value and returns it unchanged.
+`deployments/Dockerfile` and `make host-test-env` both place `fake-harness`
+beside `winch-sandbox`, and the fake blocks on its open standard input unless
+an exit/failure control is selected. Those observations make the sibling
+executable and retained input the concrete maintained paths.
+
 ## Write set
 
 - `cmd/winch-sandbox/main.go`
-- one focused process-owner implementation and test under `cmd/winch-sandbox/`
+- `cmd/winch-sandbox/child.go`
+- `cmd/winch-sandbox/child_test.go`
 - `internal/adapters/transport/attach/session.go`
 - `internal/adapters/transport/attach/server.go`
 - `test/contract/attach/session_test.go`
+- `test/e2e/scenario_sandbox_starts_test.go`
 - `web/src/attach/App.tsx`
 - `web/src/attach/App.test.tsx`
 - `docs/contracts.md`
@@ -113,15 +135,25 @@ lifecycle, or provider contract.
 
 ## Demonstration
 
-After the automated gates, run the sandbox in an isolated environment as
-described in `docs/testing.md` §Demonstrations. Once the session reports
-`Running`, load the attach page; reload it if it was loaded earlier, because the
-fetch is one-shot. Observe **Child status: Running**, the unchanged
-`container-standard` posture and `network-egress` disclosure, and a usable local
-composer. The default fake, launched without `-early-exit`, a transcript, or
-failure injection, blocks reading its open standard input after its startup
-records, so the owned process stays alive for the observation without any
-harness command.
+After the automated gates, use the repository's isolated host demonstration
+environment (or the equivalent `make test-env` branch-proxy path when Docker is
+the selected gate):
+
+    $ make host-test-env
+    $ curl -fsS http://127.0.0.1:7081/api/session
+    → expect: one JSON response containing `"childStatus":"Running"`,
+      `"profile":"container-standard"`, and `"unenforcedControls":["network-egress"]`
+    $ python3 -m webbrowser http://127.0.0.1:7081/
+    → expect: the loaded page shows **Child status: Running**, the unchanged
+      posture and network-egress disclosure, and a usable local composer
+    $ make host-test-env-down
+    → expect: the sandbox and its owned fake process are gone
+
+Reload the page if it was open before startup because the fetch is one-shot.
+The default fake, launched without `-early-exit`, a transcript, or failure
+injection, blocks reading its retained standard input after its startup records,
+so `Running` remains observable without a harness command. Record the endpoint,
+page, composer, and teardown observations separately.
 
 This proves that the sandbox owns a live fake process and transports the
 observation through the deployed page; it does not prove fake readiness, input
@@ -134,17 +166,23 @@ specific to this task:
 
 - Process-owner tests cover successful launch reporting `Running`, a start
   failure never reporting `Running`, and an exited child eventually reporting
-  `Exited`.
+  `Exited`, plus bounded cleanup reaping a live child. Use a test helper process,
+  not timing assumptions about the production fake, for deterministic state
+  transitions.
 - The attach contract tests cover exact `Down`, `Running`, and `Exited` wire
   values while preserving posture, method rejection, and unknown-API behavior.
-- `go test ./cmd/winch-sandbox` proves the server reads the live status source
-  rather than a copied startup value.
+- `go test ./cmd/winch-sandbox ./internal/adapters/transport/attach ./test/contract/attach`
+  covers process state transitions, per-request status reads, cleanup, and the
+  additive wire contract.
 - `npm test -- --run src/attach/App.test.tsx` from `web/` covers exact
   `Down`/`Running`/`Exited` presentation and `Unknown` on pending, request
   failure, invalid JSON, missing status, and unsupported values, with posture
   and composer assertions kept green.
 - The per-branch demonstration above, with endpoint, page, posture, composer,
   and teardown observations recorded separately.
+- The standing `test/e2e` scenario expects the composed sandbox session to
+  report `Running`, so both host `make check` and Docker `make test-cycle`
+  exercise the newly real child substrate through the existing entrypoint.
 
 The fake-child tests establish deterministic process ownership and state
 transitions, not compatibility with a real vendor CLI.
@@ -152,7 +190,8 @@ transitions, not compatibility with a real vendor CLI.
 ## Acceptance criteria
 
 - [ ] The maintained sandbox launches and owns the shipped fake and cleans it
-      up; a failed start cannot produce `Running`.
+      up within the bounded shutdown path; a failed start aborts startup and
+      cannot produce `Running`, and child output is not logged or returned.
 - [ ] A concurrency-safe observation reports `Running` only after successful
       start and before observed exit, then `Exited` after `Wait` returns,
       without host process scans, browser inference, output inference, or
@@ -165,7 +204,8 @@ transitions, not compatibility with a real vendor CLI.
       data while preserving posture and the local composer.
 - [ ] The default fake configuration keeps `Running` observable without input
       commands or output handling, and automated tests cover successful launch,
-      failed launch, observed exit, wire values, and React validation.
+      failed launch, observed exit, bounded cleanup, live per-request wire
+      values, the standing scenario, and React validation.
 - [ ] The branch-isolated hand check observes `Running` at the endpoint and on
       the loaded/reloaded page, retains posture/composer behavior, tears down
       its own environment, and states the limits of fake-process evidence.
