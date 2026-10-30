@@ -183,6 +183,31 @@
       "brief": "phase-1/P1-007-plan-harness-output-area.md"
     },
     {
+      "id": "P1-008",
+      "title": "Present the harness output area",
+      "phase": 1,
+      "phase_name": "Sandbox exchange",
+      "status": "pending",
+      "depends_on": [],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/P1-008-harness-output-area.md"
+    },
+    {
+      "id": "P1-009",
+      "title": "Plan Phase 1 increment 5: first live child output",
+      "phase": 1,
+      "phase_name": "Sandbox exchange",
+      "status": "pending",
+      "depends_on": [
+        "P1-005",
+        "P1-007"
+      ],
+      "owner": null,
+      "blocked_reason": null,
+      "brief": "phase-1/P1-009-plan-first-live-child-output.md"
+    },
+    {
       "id": "P0-008",
       "title": "Align the host and Docker Go gate options",
       "phase": 0,
