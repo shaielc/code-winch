@@ -17,6 +17,9 @@ request's current head, with no button press.
 
 ## Scope
 
+Use the published attempt's recorded branch and pull request from P0-010 to
+identify its stage; multiple numbered attempts may have open pull requests.
+
 Audit is today a button that fires a Claude routine with a prompt naming one
 pull request. Review-refinement has a skill (`skills/review-refinement/SKILL.md`)
 and no panel stage. Proposed approach, for the refiner to confirm against code
@@ -24,7 +27,7 @@ at dispatch:
 
 - When P0-010 publishes a stage pull request, or pushes a new head to one,
   start the matching session once for that head: `review-refinement` for
-  `refine/<ID>`, `audit` for `implement/<ID>`. A head that already has a live
+  `refine/<ID>-<N>`, `audit` for `implement/<ID>-<N>`. A head that already has a live
   session is not started again.
 - Add the review-refinement stage with its prompt, record, route and UI
   control, beside Audit. Pick a stage name that does not collide with the
@@ -35,7 +38,7 @@ at dispatch:
   and the README) or widen the existing routine's prompt, and say which.
 - Make the pull request selection explicit. The automatic start passes the pull
   request it just published. The manual Audit control prefers the
-  `implement/<ID>` pull request, because an open Refine pull request on the same
+  `implement/<ID>-<N>` pull request, because an open Refine pull request on the same
   base would otherwise defeat its "exactly one candidate" rule.
 - Both prompts require the report's first line to be
   `Report: <review-refinement|audit> <ID> <head-sha>`; an audit report also states
@@ -92,10 +95,10 @@ audit targets. P0-012 consumes the header and the sessions started here.
 Against a local HTTP stub for the routine (as `tests/test_claude.py` does) and a
 published stage pull request recorded by the P0-010 path:
 
-    $ publish a refine/<ID> pull request
+    $ publish a refine/<ID>-<N> pull request
     → expect: one routine request naming <ID>, the pull request and its head;
       the stage cell links the session
-    $ publish an implement/<ID> pull request while refine/<ID> is open
+    $ publish an implement/<ID>-<N> pull request while refine/<ID>-<N> is open
     → expect: the audit request names the implement pull request, not the refine one
     $ push a new head to the same pull request
     → expect: one new session for the new head, none for the old
