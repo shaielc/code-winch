@@ -9,7 +9,7 @@ This is a new planning workplan. The previous plan was closed; no former pending
 | Phase | Roadmap milestone | Design | Brief coverage |
 |---|---|---|---|
 | [0](phase-0/README.md) | Meta tasks: phase planning, issue conversion, design-set updates | Open | Seven phase-design planning briefs; toolchain brief P0-008; control-panel automation briefs P0-009–P0-012 |
-| [1](phase-1/README.md) | Stage 0 — sandbox exchange | Repartitioned into 30 experience-led increments; independent re-audit pending | Three derivation tasks produced P1-002, P1-004, and P1-006 for child-status increments 1–3; P1-007 assigns the independent harness-output-area derivation |
+| [1](phase-1/README.md) | Stage 0 — sandbox exchange | Repartitioned into 30 experience-led increments; independent re-audit pending | Four derivation tasks produced P1-002, P1-004, P1-006, and P1-008 for increments 1–4; P1-009 assigns first-live-output derivation |
 | 2 | Stage 1 — first real vendor | Scheduled via Plan Phase 2 | Not yet derived |
 | 3 | Stage 2 — structured views and resume | Scheduled via Plan Phase 3 | Not yet derived |
 | 4 | Stage 3 — observe existing sandboxes | Scheduled via Plan Phase 4 | Not yet derived |
@@ -48,7 +48,7 @@ the former IDs; read them through this table:
 | P0-010 | P1-003 | Plan Phase 1 increment 2: sandbox-backed child status |
 | P1-011 | P1-004 | Report sandbox-backed child status |
 
-`P0-001`–`P0-007` are unchanged. The next IDs are `P0-013` and `P1-008`. A
+`P0-001`–`P0-007` are unchanged. The next IDs are `P0-013` and `P1-010`. A
 former `P0-008` or `P0-010` in older material still names the retired
 derivation task above; the current `P0-008` is the issue-routing task below.
 
@@ -90,14 +90,18 @@ These are phase outcome conditions, **not** task-graph dependency edges. The pla
 | [P1-005](phase-1/P1-005-plan-actual-child-status.md) | Phase 1 increment 3 implementation brief — actual child status | P1-003 | P1-003 (semantic: derivation must consume the `childStatus` contract and `Down` presentation defined in P1-004's brief and extend rather than redefine them) |
 | [P1-006](phase-1/P1-006-actual-child-status.md) | Phase 1 increment 3 — report the owned fake child's actual status | P1-004 | P1-004 (contract: implementation extends its additive `/api/session` `childStatus` values and validated `Down` presentation with owned-process `Running` and `Exited`) |
 | [P1-007](phase-1/P1-007-plan-harness-output-area.md) | Phase 1 increment 4 implementation brief — harness output area | P0-001 | P0-001 (semantic: derivation consumes the independently reviewed increment boundary and concern ownership in the Phase 1 design) |
+| [P1-008](phase-1/P1-008-harness-output-area.md) | Phase 1 increment 4 — present the truthful harness-output area | None | Existing attach-page composition is sufficient; no child-status or output behavior is consumed |
+| [P1-009](phase-1/P1-009-plan-first-live-child-output.md) | Phase 1 increment 5 implementation brief — first live child output | P1-005, P1-007 | P1-005 (semantic: derivation consumes the owned fake-child lifecycle brief); P1-007 (semantic: derivation consumes the distinct harness-output region brief) |
 
 **Partial derivation:** the seven phase-design tasks assign phase design. P1-001
 produced P1-002 for Phase 1 increment 1, P1-003 produced P1-004 for increment
-2, and P1-005 produced P1-006 for increment 3. P1-006 takes a `contract` edge
-on P1-004 because it extends that implemented brief's wire and presentation
-contract. P1-007 assigns increment 4's independent presentation derivation and
-depends only on the Phase 1 design produced by P0-001. No implementation ID for
-increment 4 or later has been reserved.
+2, P1-005 produced P1-006 for increment 3, and P1-007 produced P1-008 for
+increment 4. P1-006 takes a `contract` edge on P1-004 because it extends that
+implemented brief's wire and presentation contract. P1-008 is independent and
+owns a distinct presentation contract. P1-009 assigns increment 5's derivation
+and semantically depends on P1-005 and P1-007 because it consumes both briefs,
+not their implementation status. No implementation ID for increment 5 or later
+has been reserved.
 P0-008 is a derived toolchain brief (issue #149), not a phase-design task.
 P0-009 to P0-012 are derived briefs for automating the control panel's Refine,
 pull request, review/audit and return loop; they are meta tasks as repository
@@ -113,39 +117,36 @@ is never a dependency of a phase-design task. Recheck planned runtime
 prerequisites against HEAD when dispatching; Stage 6's proven first adapter is
 runtime execution evidence, not proof supplied by a completed planning task.
 
-Graph: 19 nodes, 14 edges; critical path **5 tasks**: P0-002 → P0-003 →
+Graph: 21 nodes, 16 edges; critical path **5 tasks**: P0-002 → P0-003 →
 P0-004 → P0-005 → P0-007. P0-002 → P0-007 is also a consumed-artifact
 edge; P0-001 → P1-001 → P1-003 → P1-005 is the Phase 1 design and serial derivation
-chain. P1-002 → P1-004 orders the sandbox-backed implementation after the
+chain, and P1-005 → P1-009 is one consumed-artifact branch into increment 5.
+P1-002 → P1-004 orders the sandbox-backed implementation after the
 presentation identity it replaces, and P1-004 → P1-006 orders the additive
 contract extension. P0-001 → P1-007 records the independent increment 4 design
-input. P0-009 → P0-010 → P0-011 → P0-012 is the control-panel automation chain;
+input; P1-007 → P1-009 is the other consumed-artifact branch. P1-008 is an
+independent implementation root. P0-009 → P0-010 → P0-011 → P0-012 is the control-panel automation chain;
 at four tasks it is shorter than the critical path. Longest-path layer widths
-are 6, 5, 4, 3, 1, so average layer width is **3.8** (19/5); root width is
-**6**: P0-001, P0-002, P0-006, P0-008, P0-009 and P1-002. These are unweighted
-graph measures, not duration estimates. Currently available: P0-002, P0-006,
-P0-008, P0-009, P1-006 and P1-007.
+are 7, 5, 4, 3, 2, so average layer width is **4.2** (21/5); root width is
+**7**: P0-001, P0-002, P0-006, P0-008, P0-009, P1-002 and P1-008. These are
+unweighted graph measures, not duration estimates. Currently available:
+P0-002, P0-006, P0-009, P1-006 and P1-008.
 
 Concurrent write warnings: every phase-design brief forecasts edits to the
 shared index, Phase 0 coverage, and tracker for its independently derived
-follow-up; P1-001, P1-003, P1-005, and P1-007 also forecast Phase 1 coverage.
-The 14-node graph without P0-008 has **71 incomparable pairs**; P0-008 has no
-edges and is incomparable with all 14, for **85 total** across 15 nodes. The
-four control-panel briefs are comparable with one another through their chain
-and incomparable with all 15 other nodes, which adds 4 × 15 = 60 pairs for
-**145 total**. P0-009 to P0-012 each forecast writes to the panel's
+follow-up; P1-001, P1-003, P1-005, P1-007, and P1-009 also forecast Phase 1
+coverage. The 21-node graph has **179 incomparable pairs**. P0-009 to P0-012 each forecast writes to the panel's
 `task_scheduler.py`, `state.py`, `ui.py`, tests and README; their chain edges
 order those writes, so this is not a collision to rebase. They forecast no
 planning record and no file P0-008 forecasts, so P0-009 is available beside the
 other roots without a write collision. P1-006 forecasts overlapping
 session and React files with P1-004, but their contract edge orders those
-writes. P1-007's future implementation brief is presentation-only and may
-forecast `App.tsx`, `App.test.tsx`, and styles that overlap P1-004/P1-006; it
-has no semantic dependency on their behavior, so this is a write collision to
-rebase rather than an ordering edge. Among currently available tasks, P0-002,
-P0-006, P0-008, and P1-007 share planning-record writes (index, tracker, and
-Phase 0 coverage). P1-006's forecast product files do not overlap those planning
-artifacts. Rebase
+writes. P1-008 forecasts `App.tsx`, `App.test.tsx`, and possibly styles that
+overlap P1-004/P1-006; it has no semantic dependency on their behavior, so this
+is a write collision to rebase rather than an ordering edge. P1-009's planning
+record writes overlap other planning tasks, but its edges do not exist merely
+to order those files. Among currently available tasks, P0-002 and P0-006 share
+planning-record writes; P1-006 and P1-008 may overlap React files. Rebase
 and reconcile shared records rather than adding ordering-only edges. No task
 edits existing tracker status fields.
 
@@ -155,8 +156,9 @@ static `Child status: Unknown` presentation; P1-004 consumes and preserves that
 identity while uniquely owning the additive `/api/session` `childStatus: "Down"`
 contract and its validated replacement behavior. P1-006 extends that same wire
 and presentation contract with `Running` and `Exited`, and its contract edge on
-P1-004 prevents concurrent redefinition. P1-007 owns only a distinct output
-region and collides on files, not product meaning. The second is the control
+P1-004 prevents concurrent redefinition. P1-008 owns only a distinct output
+region and collides on files, not product meaning. P1-009 predicts a future
+extension of both surfaces, ordered through its planning prerequisites. The second is the control
 panel's stage-branch name and stage attempt record: P0-009 defines them, P0-010
 extends the record with completion and publication fields and fixes the
 identity of a stage pull request, P0-011 defines the `Report:` header and the

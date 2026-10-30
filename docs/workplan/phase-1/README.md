@@ -108,8 +108,8 @@ behavior must be described as such.
 | 1 | Child status presentation | [P1-002](P1-002-child-status-presentation.md), independently derived by [P1-001](P1-001-plan-owned-live-harness-output.md), owns the accessible static `Child status: Unknown` presentation |
 | 2 | Sandbox-backed child status | [P1-004](P1-004-sandbox-backed-child-status.md), independently derived by [P1-003](P1-003-plan-sandbox-backed-child-status.md), consumes P1-002 and owns the additive sandbox session `childStatus: "Down"` transport |
 | 3 | Actual child status | [P1-006](P1-006-actual-child-status.md), independently derived by [P1-005](P1-005-plan-actual-child-status.md), extends P1-004's session contract and owns fake-child launch, process observation, and `Running`/`Exited` status |
-| 4 | Harness output area | **Derivation assigned**: [P1-007](P1-007-plan-harness-output-area.md) derives one brief independently of increments 1–3; no implementation ID reserved |
-| 5 | First live child output | **Not yet derived** |
+| 4 | Harness output area | [P1-008](P1-008-harness-output-area.md), independently derived by [P1-007](P1-007-plan-harness-output-area.md), owns the accessible region and exact disconnected-view empty state |
+| 5 | First live child output | **Derivation assigned**: [P1-009](P1-009-plan-first-live-child-output.md) consumes the increment 3 and 4 briefs; no implementation ID reserved |
 | 6 | Incremental output | **Not yet derived** |
 | 7 | Draft versus submitted | **Not yet derived** |
 | 8 | Sandbox receipt | **Not yet derived** |
@@ -137,20 +137,24 @@ behavior must be described as such.
 | 30 | Manual refetch after overflow | **Not yet derived** |
 
 Coverage records brief derivation, not implementation. P1-002 and P1-004 have
-subsequently been implemented; P1-006 is the derived implementation brief ready
-for a different author to refine with `skills/refine-task/SKILL.md`. Its
-existence does not claim that child-process behavior has changed. P1-004 depends on P1-002 because it
+subsequently been implemented; P1-006 and P1-008 are derived implementation
+briefs ready for different authors to refine with `skills/refine-task/SKILL.md`.
+Their existence does not claim that child-process or output-area behavior has
+changed. P1-004 depends on P1-002 because it
 consumes that presentation identity. P1-006 takes a contract edge on P1-004
 because it extends the session values and presentation P1-004 defines. Each
 derivation is a Phase 1 planning task numbered in this phase's own sequence
 beside the brief it derives (P1-001 derived P1-002; P1-003 derived P1-004;
-P1-005 derived P1-006). P1-007 is the sole planning handoff for the independent
-increment 4 presentation. Remaining increments receive
+P1-005 derived P1-006; P1-007 derived P1-008). P1-009 is the sole planning
+handoff for increment 5 and consumes the briefs produced by P1-005 and P1-007.
+Remaining increments receive
 independently authored concrete Phase 1 planning handoffs **one at a time** as planning
-proceeds; no implementation ID for increment 4 or later is reserved. Planning
+proceeds; no implementation ID for increment 5 or later is reserved. Planning
 is pipelined with implementation: P1-007 depends only on P0-001 because the
 output-area presentation consumes the decided phase design and existing attach
-page, not the child-status implementation chain.
+page, not the child-status implementation chain. P1-009 depends on P1-005 and
+P1-007 because first live output consumes their derived actual-child-status and
+output-area briefs; it does not depend on either implementation task.
 The increment labels are not substitutes for task IDs or owners of completion
 deferrals. An implementation brief must include its own inherited safety and
 operability obligations; later increments never excuse a broken current slice.
