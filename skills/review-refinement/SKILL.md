@@ -10,13 +10,17 @@ its head (the refined). Read applicable `AGENTS.md` files and
 [`refine-task`](../refine-task/SKILL.md). Answer the five questions below, each
 with evidence: a command with its observed output, or a `file:line`.
 
-1. **Did it find problems with the original brief?** List each problem the
-   refinement fixed or reported, and check it against the code at HEAD.
+1. **Did it find problems with the original brief?** List each problem in the
+   original brief that the refinement fixed or reported, and check it against
+   the code at HEAD. A need that exists only because of the refinement's own
+   change is not one. Say whether each was resolved by a criterion or
+   verification, or by deciding behavior.
 2. **Did it make the brief too verbose or too sparse?** Compare section sizes,
    original against refined. Name the passages that are padding and the places
    an implementer would still have to guess.
-3. **Did it increase scope?** List every addition to Scope, Write set, Contract
-   surfaces, Acceptance criteria, and Deferrals that the original Objective does
+3. **Did it increase scope?** List every change to the Objective, and every
+   addition to Scope, Write set, Contract surfaces, Acceptance criteria, and
+   Deferrals that the original Objective does
    not already imply. A prescribed mechanism, added lifecycle behavior, or added
    verification, including one check repeated across equivalent options, is an addition even when it adds no capability. Name any idea a
    person rejected that the refined brief still mentions.
