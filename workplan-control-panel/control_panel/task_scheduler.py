@@ -356,6 +356,24 @@ class TaskScheduler:
             task_state.write_json(self.state_file, state)
             return {"expired": task_id, "stage": stage, "head": head}
 
+    def push_stage_branch(self, state: dict[str, Any], attempt: dict[str, Any], stage: str,
+                          task_id: str, number: int, head: str) -> str:
+        """Push the attempt's stage branch, and return the name it landed on.
+
+        The number was chosen from what origin listed a moment ago, so a branch can still be
+        there by the time of the push. The attempt then takes the next number and the record
+        is saved before the push is tried again, as it was before the first. Each pass raises
+        the number past a branch origin has, so this ends.
+        """
+        while True:
+            try:
+                repository.create_stage_branch(self.clone, "origin", attempt["branch"], head)
+                return attempt["branch"]
+            except repository.StageBranchExists:
+                number += 1
+                attempt["branch"] = repository.stage_branch(stage, task_id, number)
+                task_state.write_json(self.state_file, state)
+
     def stage(self, task_id: str, stage: str, pr_number: int | None = None):
         if stage not in ("refine", "implement", "audit"):
             raise TaskError(404, "Unknown stage")
@@ -391,7 +409,14 @@ class TaskScheduler:
                                 f"check {service}, then expire the {stage} stage to submit again")
             branch = repository.task_branch(task_id)
             if stage != "audit":
-                branch = repository.stage_branch(stage, task_id, len(attempts) + 1)
+                # Not len(attempts): a record can be lost, and a branch can land unrecorded.
+                try:
+                    number = repository.next_stage_number(
+                        self.clone, "origin", stage, task_id, (a.get("branch") for a in attempts))
+                except (OSError, ValueError, subprocess.SubprocessError) as error:
+                    raise TaskError(502, f"{task_id} could not read its {stage} stage branches "
+                                    "from origin; no Codex task was submitted") from error
+                branch = repository.stage_branch(stage, task_id, number)
                 fields.update(branch=branch)
             prompt = template.substitute(fields)
             attempts.append({"status": "submitting", "head": head,
@@ -406,12 +431,22 @@ class TaskScheduler:
                     url = claude.fire(self.audit_routine_url, self.audit_routine_token, prompt)
                 else:
                     try:
-                        repository.create_stage_branch(self.clone, "origin", branch, head)
+                        taken = self.push_stage_branch(state, attempts[-1], stage, task_id, number, head)
                     except (OSError, ValueError, subprocess.SubprocessError) as error:
-                        attempts.pop()
+                        # Nothing was sent, but a push that errored may still have landed, so the
+                        # record stays to keep its number taken. It is set aside rather than live:
+                        # no conversation is waiting on it, and the next launch need not clear it.
+                        attempts[-1].update(status="expired", failure="push",
+                                            updated_at=datetime.now(UTC).isoformat())
                         task_state.write_json(self.state_file, state)
                         raise TaskError(502, f"{task_id} could not create and push its {stage} "
-                                        "stage branch; no Codex task was submitted") from error
+                                        "stage branch; no Codex task was submitted. The branch "
+                                        "may have reached origin, so launching again takes the "
+                                        "next number") from error
+                    if taken != branch:
+                        # The agent is told which branch to commit to, and the number moved.
+                        branch = taken
+                        prompt = template.substitute({**fields, "branch": branch})
                     url = codex.submit(self.clone, self.environment, branch, prompt)
             except claude.RoutineError as error:
                 # The routine answered with a refusal, so nothing started.

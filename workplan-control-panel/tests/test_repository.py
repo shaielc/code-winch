@@ -105,11 +105,31 @@ class TaskBranchTests(GitRepositoryFixture, unittest.TestCase):
             branch = repository.stage_branch(stage, "P0-001", 1)
             repository.create_stage_branch(clone, "origin", branch, base)
             self.assertEqual(git(self.origin, "rev-parse", branch), base)
-            with self.assertRaises(ValueError):
+            # A distinct error, so the scheduler can take the next number instead of failing.
+            with self.assertRaises(repository.StageBranchExists):
                 repository.create_stage_branch(clone, "origin", branch, base)
         repository.delete_stage_branches(clone, "origin", "P0-001")
         self.assertEqual(git(self.origin, "for-each-ref", "--format=%(refname)",
                              "refs/heads/refine", "refs/heads/implement"), "")
+
+    def test_the_next_stage_number_is_one_past_the_highest_on_the_remote_or_on_record(self):
+        clone = self.clone("worker")
+        self.start(clone)
+        next_number = lambda recorded=(): repository.next_stage_number(
+            clone, "origin", "implement", "P0-001", recorded)
+        self.assertEqual(next_number(), 1)
+        tip = repository.task_head(clone, "P0-001")
+        # Only this task's and this stage's numbered branches count: another stage, another
+        # task, and names that merely share the glob must not push the number up.
+        for name in ("implement/P0-001-1", "implement/P0-001-3", "refine/P0-001-7",
+                     "implement/P0-002-9", "implement/P0-001-4-old", "implement/P0-001-x"):
+            git(self.origin, "branch", name, tip)
+        self.assertEqual(next_number(), 4)
+        # A branch deleted from the remote is still a number the task's history has used.
+        self.assertEqual(next_number(["implement/P0-001-6"]), 7)
+        # Records that are not this stage's numbered branch are ignored, legacy ones with none.
+        self.assertEqual(next_number([None, "", "refine/P0-001-12", "implement/P0-002-12",
+                                      "implement/P0-001-12-old", "task/P0-001"]), 4)
 
 
 class RebaseTests(GitRepositoryFixture, unittest.TestCase):
