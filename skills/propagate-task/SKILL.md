@@ -17,11 +17,11 @@ Reconstruct its refinement, implementation, and propagation PRs, including
 merged changes, open proposals, audited commits, and recorded dispositions.
 Do not assume an implementation is present just because its PR is open.
 
-**Refuse to propagate unless `task-implement-merge` ran on the source
+**Refuse to propagate unless `audit-finalize` ran on the source
 implementation PR**: its verdict record for the audited head is in the PR
 discussion and covers every finding. A PR merged without that record, or a
 finding without a verdict, sends the work back to
-`skills/task-implement-merge/SKILL.md`; report what is missing and stop.
+`skills/audit-finalize/SKILL.md`; report what is missing and stop.
 
 Give each finding a stable reference: source PR, audit, finding label, and
 observed behavior. Preserve its original classification and its recorded
@@ -91,7 +91,7 @@ the ledger comment.
 
 ## Done
 
-Propagation ran only after `task-implement-merge` recorded a verdict for every
+Propagation ran only after `audit-finalize` recorded a verdict for every
 finding. Every accepted Defect and Deferrable finding has a checked
 existing-task destination or an issue; every tracked hardening finding has an
 issue; every rejected finding is in the ledger with its verdict link. The

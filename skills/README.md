@@ -31,7 +31,7 @@ skills/
 | [`review-refinement`](review-refinement/SKILL.md) | refinement reviewer | Judging a refinement against the original brief: problems found, size, scope, value and cost |
 | [`implement-task`](implement-task/SKILL.md) | task implementer | Building, verifying, and opening the task PR |
 | [`audit-task`](audit-task/SKILL.md) | independent task auditor | Judging the implementation against its accepted brief |
-| [`task-implement-merge`](task-implement-merge/SKILL.md) | implementation merge operator | Checking the current audit, obtaining finding verdicts, and merging implementation into the task branch |
+| [`audit-finalize`](audit-finalize/SKILL.md) | audit finalizer | Checking the current audit and recording a person's verdict and any fix request for every finding on the implementation PR, without merging |
 | [`close-phase`](close-phase/SKILL.md) | phase closer | Explicitly ending a phase and preserving its system record |
 | [`propagate-task`](propagate-task/SKILL.md) | task agent or maintainer | Routing audit findings to tasks/issues and opening a new-branch propagation PR into the task branch |
 | [`reflect-task`](reflect-task/SKILL.md) | task agent or maintainer | Finding flaws in the development methodology and improving its planning, handoffs, and decisions |
@@ -40,9 +40,10 @@ skills/
 Use different authors for phase design and task derivation. Derivation,
 refinement, implementation, and audit of a task are separate assignments.
 The flow is architecture → phase → task → optional phase revision → next task;
-dispatched task delivery is refine → implement → audit → task-implement-merge.
-That merge goes into the task integration branch; its PR to the default branch
-remains a separate operation.
+dispatched task delivery is refine → implement → audit → audit-finalize.
+A person then merges the implementation PR into the task integration branch, by
+hand or by explicitly asking an agent; its PR to the default branch remains a
+separate operation.
 
 Audience matters. Say who a skill is for when you add one: an agent should be
 able to tell from the table whether a skill is addressed to it before loading
@@ -84,7 +85,7 @@ brief before implementation; the implementer builds the accepted brief; the
 auditor posts its report on the implementation PR. The root `AGENTS.md` routes
 agents to the same operations.
 
-`task-implement-merge` handles the audited implementation PR explicitly; it is
+`audit-finalize` handles the audited implementation PR explicitly; it is
 not a new automatically dispatched control-panel stage. `propagate-task`
 reconstructs the branch stack and submits follow-up changes through a separate
 PR into the task branch. `reflect-task` examines the development method rather

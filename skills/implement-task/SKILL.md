@@ -139,5 +139,5 @@ brief verification pass or their limits are reported. Contract changes have
 matching design updates, deferrals have real owners, and the PR names only
 `Task: <ID>`. Status fields remain untouched. A different auditor uses
 `skills/audit-task/SKILL.md` to judge the result.
-Use `skills/task-implement-merge/SKILL.md` to handle finding verdicts and merge
-that audited implementation PR into the task branch.
+Use `skills/audit-finalize/SKILL.md` to record finding verdicts and fix
+requests; a person merges that audited implementation PR into the task branch.
