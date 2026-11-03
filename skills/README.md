@@ -35,12 +35,15 @@ skills/
 | [`close-phase`](close-phase/SKILL.md) | phase closer | Explicitly ending a phase and preserving its system record |
 | [`propagate-task`](propagate-task/SKILL.md) | task agent or maintainer | Routing audit findings to tasks/issues and opening a new-branch propagation PR into the task branch |
 | [`reflect-task`](reflect-task/SKILL.md) | task agent or maintainer | Finding flaws in the development methodology and improving its planning, handoffs, and decisions |
+| [`track-methodology-issue`](track-methodology-issue/SKILL.md) | task agent or maintainer | Finding or creating methodology tracking issues and recording observations, amendments, and their later outcomes |
 | [`refine-guidance`](refine-guidance/SKILL.md) | maintainer, in an interactive session | Removing redundant and outdated instructions, unused skills, and gaps across docs, skills, and agent extensions, with approval for each change |
 
 Use different authors for phase design and task derivation. Derivation,
 refinement, implementation, and audit of a task are separate assignments.
 The flow is architecture → phase → task → optional phase revision → next task;
-dispatched task delivery is refine → implement → audit → audit-finalize.
+task delivery is refine → review-refinement → implement → audit →
+audit-finalize. The refinement review is separate from the control panel's
+refine, implement, and audit dispatches and happens before implementation.
 A person then merges the implementation PR into the task integration branch, by
 hand or by explicitly asking an agent; its PR to the default branch remains a
 separate operation.
@@ -89,7 +92,8 @@ agents to the same operations.
 not a new automatically dispatched control-panel stage. `propagate-task`
 reconstructs the branch stack and submits follow-up changes through a separate
 PR into the task branch. `reflect-task` examines the development method rather
-than deciding findings or merging changes.
+than deciding findings or merging changes; `track-methodology-issue` records
+its observations and amendments on the fitting tracking issues.
 
 Keep that wiring narrow. A dispatched agent is pointed at the skill addressed to
 it, not at every skill in this directory.

@@ -35,6 +35,7 @@ subtree.
   use `create-phase`, `extend-phase`, `revise-phase`, or `audit-phase`. A separate
   task author uses `derive-task`. Dispatched tasks use `refine-task`,
   `implement-task`, and `audit-task`, with a different author for each operation.
+  `review-refinement` reviews the refined brief before implementation starts.
   `audit-finalize` records a person's verdict and any fix request for every
   audit finding; a person merges the implementation into its task branch.
   `propagate-task` routes follow-ups through a separate PR to

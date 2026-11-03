@@ -52,10 +52,10 @@ repeat occurrence strengthens the evidence but is not a prerequisite.
 5. Report the observation, process cause, exact change, expected effect, and
    remaining uncertainty. If no methodology problem is supported, say so and
    leave the process unchanged.
-6. Record each observation in the tracking issue for its operation. Mark each
-   one an amendment addresses as fixed by amendment, with the amendment PR's
-   link. A later occurrence of a marked observation shows the amendment did not
-   work.
+6. Use [`track-methodology-issue`](../track-methodology-issue/SKILL.md) to find
+   or create the fitting tracking issues and record each observation. After step
+   7 opens an amendment PR, return to the issues to link it and mark addressed
+   observations fixed by amendment; that status does not prove the fix works.
 7. Commit amendments on their own branch and open a PR into the task branch.
    Do not push to the task branch directly or add commits to the branch of a
    PR that is already merged.
