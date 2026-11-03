@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import threading
 import time
@@ -154,19 +155,212 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
                 self.assertEqual(result['status'], 'submitted')
                 self.assertTrue(self.panel.stage('P0-001', stage)['reused'])
                 self.assertIn('--branch', submitted[-1])
-                self.assertEqual(submitted[-1][-2], 'task/P0-001')
+                self.assertEqual(submitted[-1][-2], f'{stage}/P0-001-1')
                 self.assertTrue(submitted[-1][-1].startswith(prefix))
                 unwrapped = ' '.join(submitted[-1][-1].split())
-                self.assertIn('new branch from `task/P0-001`', unwrapped)
-                self.assertIn('base is `task/P0-001`', unwrapped)
+                self.assertIn(f'`{stage}/P0-001-1`', unwrapped)
+                self.assertNotIn('Include `Task:', unwrapped)
         self.assertEqual(len(submitted), 2)
+        stages = self.panel.snapshot()['state']['tasks']['P0-001']['stages']
+        base = git(self.origin, 'rev-parse', 'task/P0-001')
+        for stage in ('refine', 'implement'):
+            self.assertEqual(git(self.origin, 'rev-parse', f'{stage}/P0-001-1'), base)
+            self.assertEqual(stages[stage][0]['branch'], f'{stage}/P0-001-1')
+            self.assertEqual(stages[stage][0]['base'], base)
         page = render(self.panel.tracker(), self.panel.snapshot()['state'], '', False)
         # Each stage is one control per view — the table's and the tree's — and opens the
         # conversation its dispatch returned, pointed at the view that serves it.
         for number in (1, 2):
             self.assertEqual(
                 page.count(f'data-state="open" href="https://chatgpt.com/remote/task_e_{number}"'), 2)
+        for stage in ('refine', 'implement'):
+            self.assertEqual(page.count(f'>{stage}/P0-001-1</small>'), 2)
         self.assertNotIn('clipboard', page)
+
+    def stages(self, stage):
+        return self.panel.snapshot()['state']['tasks']['P0-001'].get('stages', {}).get(stage, [])
+
+    def stage_branch_tips(self, stage):
+        refs = git(self.origin, 'for-each-ref', '--format=%(refname:short) %(objectname)',
+                   f'refs/heads/{stage}')
+        return dict(line.split() for line in refs.splitlines())
+
+    def cell_states(self, stage):
+        page = render(self.panel.tracker(), self.panel.snapshot()['state'], '', False)
+        return re.findall(rf'data-task="P0-001" data-stage="{stage}"[^>]*>'
+                          r'<a class="stage-icon" data-state="(\w+)"', page)
+
+    def test_failed_stage_branch_push_submits_nothing_and_keeps_the_attempt_set_aside(self):
+        self.panel.sync()
+        with patch.object(repository, 'create_stage_branch', side_effect=OSError('rejected')), \
+                patch.object(codex, 'submit') as submit:
+            with self.assertRaises(TaskError) as error:
+                self.panel.stage('P0-001', 'implement')
+        self.assertEqual(error.exception.status, 502)
+        self.assertIn('P0-001 could not create and push', str(error.exception))
+        submit.assert_not_called()
+        # Whether the push reached origin is unknown, so its number stays on record. It is not
+        # a submission: nothing was sent, it links to no conversation, and it blocks no retry.
+        (attempt,) = self.stages('implement')
+        self.assertEqual((attempt['status'], attempt['failure'], attempt['branch']),
+                         ('expired', 'push', 'implement/P0-001-1'))
+        self.assertNotIn('task_url', attempt)
+        self.assertEqual(self.cell_states('implement'), ['launch', 'launch'])
+
+    def test_a_push_that_lands_and_then_errors_does_not_strand_the_stage(self):
+        self.panel.sync()
+        real = repository.github_run
+
+        def lands_then_fails(*command, cwd, capture=True):
+            output = real(*command, cwd=cwd, capture=capture)
+            if command[:2] == ('git', 'push'):
+                raise subprocess.CalledProcessError(128, command, stderr='connection reset')
+            return output
+
+        with patch.object(repository, 'github_run', side_effect=lands_then_fails), \
+                patch.object(codex, 'submit') as submit:
+            with self.assertRaises(TaskError) as error:
+                self.panel.stage('P0-001', 'implement')
+        self.assertEqual(error.exception.status, 502)
+        submit.assert_not_called()
+        base = git(self.origin, 'rev-parse', 'task/P0-001')
+        # The panel was told the push failed, but the branch is on origin.
+        self.assertEqual(self.stage_branch_tips('implement'), {'implement/P0-001-1': base})
+        self.assertEqual([(a['status'], a['branch']) for a in self.stages('implement')],
+                         [('expired', 'implement/P0-001-1')])
+
+        with patch.object(codex, 'submit', return_value='https://chatgpt.com/codex/cloud/tasks/retry') as submit:
+            result = self.panel.stage('P0-001', 'implement')
+            self.assertEqual((result['status'], result['branch']), ('submitted', 'implement/P0-001-2'))
+            self.assertEqual(submit.call_args.args[2], 'implement/P0-001-2')
+            prompt = ' '.join(submit.call_args.args[3].split())
+            self.assertIn('`implement/P0-001-2`', prompt)
+            self.assertNotIn('implement/P0-001-1', prompt)
+            self.assertTrue(self.panel.stage('P0-001', 'implement')['reused'])
+            submit.assert_called_once()
+        # The branch that landed is left as it was, and the retry is a branch of its own.
+        self.assertEqual(self.stage_branch_tips('implement'),
+                         {'implement/P0-001-1': base, 'implement/P0-001-2': base})
+        self.assertEqual([(a['status'], a['branch']) for a in self.stages('implement')],
+                         [('expired', 'implement/P0-001-1'), ('submitted', 'implement/P0-001-2')])
+
+    def test_lost_attempt_history_does_not_make_the_panel_collide_with_origin(self):
+        self.panel.sync()
+        with patch.object(codex, 'submit', return_value='https://chatgpt.com/codex/cloud/tasks/one'):
+            self.panel.stage('P0-001', 'implement')
+        base = git(self.origin, 'rev-parse', 'task/P0-001')
+        elsewhere = git(self.origin, 'rev-parse', 'main')
+        git(self.origin, 'branch', 'implement/P0-001-3', elsewhere)
+        state = task_state.load_state(self.panel.state_file)
+        state['tasks']['P0-001']['stages'] = {}
+        task_state.write_json(self.panel.state_file, state)
+
+        # With no record, origin alone decides: past its highest number, not into the gap.
+        with patch.object(codex, 'submit', return_value='https://chatgpt.com/codex/cloud/tasks/two') as submit:
+            result = self.panel.stage('P0-001', 'implement')
+        self.assertEqual((result['status'], result['branch']), ('submitted', 'implement/P0-001-4'))
+        self.assertEqual(submit.call_args.args[2], 'implement/P0-001-4')
+        self.assertEqual(self.stage_branch_tips('implement'),
+                         {'implement/P0-001-1': base, 'implement/P0-001-3': elsewhere,
+                          'implement/P0-001-4': base})
+
+        # A number on record that origin no longer has (a merged branch, deleted) is not reused.
+        git(self.origin, 'branch', '-D', 'implement/P0-001-1', 'implement/P0-001-3', 'implement/P0-001-4')
+        state = task_state.load_state(self.panel.state_file)
+        state['tasks']['P0-001']['stages']['implement'][0].update(branch='implement/P0-001-5')
+        task_state.write_json(self.panel.state_file, state)
+        self.panel.expire_stage('P0-001', 'implement')
+        with patch.object(codex, 'submit', return_value='https://chatgpt.com/codex/cloud/tasks/three'):
+            self.assertEqual(self.panel.stage('P0-001', 'implement')['branch'], 'implement/P0-001-6')
+
+    def test_a_stage_branch_found_on_origin_moves_the_attempt_to_the_next_number(self):
+        self.panel.sync()
+        elsewhere = git(self.origin, 'rev-parse', 'main')
+        for number in (1, 2):
+            git(self.origin, 'branch', f'implement/P0-001-{number}', elsewhere)
+        base = git(self.origin, 'rev-parse', 'task/P0-001')
+        # A lookup that went stale, as when the branch lands between the lookup and the push.
+        with patch.object(repository, 'next_stage_number', return_value=1), \
+                patch.object(codex, 'submit', return_value='https://chatgpt.com/codex/cloud/tasks/one') as submit:
+            result = self.panel.stage('P0-001', 'implement')
+        self.assertEqual((result['status'], result['branch']), ('submitted', 'implement/P0-001-3'))
+        self.assertEqual(submit.call_args.args[2], 'implement/P0-001-3')
+        prompt = ' '.join(submit.call_args.args[3].split())
+        self.assertIn('`implement/P0-001-3`', prompt)
+        self.assertNotIn('implement/P0-001-1', prompt)
+        # One attempt, moved to the number it took, not one per number it tried.
+        (attempt,) = self.stages('implement')
+        self.assertEqual((attempt['status'], attempt['branch'], attempt['base']),
+                         ('submitted', 'implement/P0-001-3', base))
+        self.assertEqual(self.stage_branch_tips('implement'),
+                         {'implement/P0-001-1': elsewhere, 'implement/P0-001-2': elsewhere,
+                          'implement/P0-001-3': base})
+
+    def test_the_number_taken_after_a_collision_is_recorded_before_codex_is_called(self):
+        self.panel.sync()
+        git(self.origin, 'branch', 'implement/P0-001-1', git(self.origin, 'rev-parse', 'main'))
+        with patch.object(repository, 'next_stage_number', return_value=1), \
+                patch.object(codex, 'submit', side_effect=TimeoutError()):
+            with self.assertRaises(TaskError):
+                self.panel.stage('P0-001', 'implement')
+        # The reply may have been lost after Codex accepted, and it was sent on the new branch.
+        (attempt,) = self.stages('implement')
+        self.assertEqual((attempt['status'], attempt['branch']), ('submitting', 'implement/P0-001-2'))
+        self.assertEqual(self.cell_states('implement'), ['unknown', 'unknown'])
+
+    def test_an_unreadable_stage_branch_listing_pushes_submits_and_records_nothing(self):
+        self.panel.sync()
+        with patch.object(repository, 'next_stage_number',
+                          side_effect=subprocess.CalledProcessError(128, ['git', 'ls-remote'])), \
+                patch.object(repository, 'create_stage_branch') as create, \
+                patch.object(codex, 'submit') as submit:
+            with self.assertRaises(TaskError) as error:
+                self.panel.stage('P0-001', 'implement')
+        self.assertEqual(error.exception.status, 502)
+        self.assertIn('P0-001 could not read its implement stage branches', str(error.exception))
+        create.assert_not_called()
+        submit.assert_not_called()
+        self.assertEqual(self.stages('implement'), [])
+
+    def test_attempts_recorded_before_this_change_still_load_render_and_are_numbered_past(self):
+        self.panel.sync()
+        head = git(self.origin, 'rev-parse', 'task/P0-001')
+        codex_url = lambda name: f'https://chatgpt.com/codex/cloud/tasks/task_e_{name}'
+        state = task_state.load_state(self.panel.state_file)
+        state['tasks']['P0-001']['stages'] = {
+            # From before stage branches: no branch, no base.
+            'refine': [{'status': 'expired', 'head': 'f' * 40, 'task_url': codex_url('old'),
+                        'updated_at': '2026-10-01T00:00:00+00:00'},
+                       {'status': 'submitted', 'head': head, 'task_url': codex_url('new'),
+                        'updated_at': '2026-10-02T00:00:00+00:00'}],
+            # From the first stage-branch release: a branch and its base, and no failure mark.
+            'implement': [{'status': 'submitted', 'head': head, 'branch': 'implement/P0-001-1',
+                           'base': head, 'task_url': codex_url('branch'),
+                           'updated_at': '2026-10-03T00:00:00+00:00'}],
+        }
+        task_state.write_json(self.panel.state_file, state)
+
+        page = render(self.panel.tracker(), self.panel.snapshot()['state'], '', False)
+        for name in ('new', 'branch'):
+            self.assertEqual(page.count(f'data-state="open" href="https://chatgpt.com/remote/task_e_{name}"'), 2)
+        self.assertEqual(page.count('<span class="earlier" hidden><a href="https://chatgpt.com/remote/task_e_old"'), 2)
+        # Only the record that has a branch names one.
+        self.assertEqual(page.count('class="stage-branch"'), 2)
+        self.assertEqual(page.count('>implement/P0-001-1</small>'), 2)
+
+        with patch.object(codex, 'submit', side_effect=[codex_url('again-1'), codex_url('again-2')]) as submit:
+            # Still standing at this revision, so no branch is made and nothing is sent.
+            for stage in ('refine', 'implement'):
+                self.assertTrue(self.panel.stage('P0-001', stage)['reused'])
+            submit.assert_not_called()
+            self.assertEqual(self.stage_branch_tips('refine'), {})
+            # A relaunch numbers past what is on record, and a record with no branch holds no number.
+            for stage, branch in (('refine', 'refine/P0-001-1'), ('implement', 'implement/P0-001-2')):
+                self.panel.expire_stage('P0-001', stage)
+                self.assertEqual(self.panel.stage('P0-001', stage)['branch'], branch)
+        self.assertEqual([a['status'] for a in self.stages('refine')], ['expired', 'expired', 'submitted'])
+        self.assertEqual([a.get('branch') for a in self.stages('refine')], [None, None, 'refine/P0-001-1'])
+        self.assertEqual([a['status'] for a in self.stages('implement')], ['expired', 'submitted'])
 
     def test_rebase_moves_the_task_onto_main_and_reopens_its_stages(self):
         self.panel.sync()
@@ -339,6 +533,7 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
         attempts = self.panel.snapshot()['state']['tasks']['P0-001']['stages']['refine']
         self.assertEqual([a['status'] for a in attempts], ['expired', 'submitted'])
         self.assertEqual([a['task_url'] for a in attempts], urls)
+        self.assertEqual([a['branch'] for a in attempts], ['refine/P0-001-1', 'refine/P0-001-2'])
         self.assertEqual({a['head'] for a in attempts}, {attempts[0]['head']})
         # Both conversations survive the retirement: the icon opens the newest, and the
         # retired one stays reachable from that stage's right-click menu.
@@ -381,6 +576,7 @@ class PanelFlowTests(GitRepositoryFixture, unittest.TestCase):
         attempts = self.panel.snapshot()['state']['tasks']['P0-001']['stages']['refine']
         self.assertEqual([a['status'] for a in attempts], ['submitted', 'submitted'])
         self.assertEqual(len({a['head'] for a in attempts}), 2)
+        self.assertEqual([a['branch'] for a in attempts], ['refine/P0-001-1', 'refine/P0-001-2'])
 
     def test_expire_respects_lock_and_completed_tracker(self):
         self.panel.sync()

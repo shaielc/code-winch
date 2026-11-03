@@ -5,8 +5,10 @@ credential is involved; everything local stays on run().
 """
 
 import json
+import re
 import subprocess
 import tempfile
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +63,63 @@ def save_tracker(path: Path, tracker: dict[str, Any]) -> None:
 
 def task_branch(task_id: str) -> str:
     return f"task/{task_id}"
+
+
+class StageBranchExists(ValueError):
+    """The remote already has the stage branch, so nothing was pushed."""
+
+
+def stage_branch(stage: str, task_id: str, number: int) -> str:
+    return f"{stage}/{task_id}-{number}"
+
+
+def stage_branch_number(stage: str, task_id: str, branch: Any) -> int | None:
+    """The N in `<stage>/<ID>-<N>`, or None for any other name.
+
+    Matching is exact rather than by glob, so another stage's or another task's branch, or a
+    name that only shares the prefix, never counts as one of this task's numbers.
+    """
+    if not isinstance(branch, str):
+        return None
+    found = re.fullmatch(rf"{re.escape(stage)}/{re.escape(task_id)}-([0-9]+)", branch)
+    return int(found.group(1)) if found else None
+
+
+def next_stage_number(clone: Path, remote: str, stage: str, task_id: str,
+                      recorded: Iterable[Any] = ()) -> int:
+    """One past the highest `<stage>/<ID>-<N>` the remote has or the task's records name.
+
+    The remote says what exists, including a branch whose push landed without the panel
+    hearing back, or whose record is gone. The records say what was used: a stage branch is
+    deleted once its pull request merges, and its number must not be handed out again.
+    """
+    output = github_run("git", "ls-remote", "--heads", remote,
+                        f"refs/heads/{stage}/{task_id}-*", cwd=clone)
+    names = [line.split("\t", 1)[1].removeprefix("refs/heads/")
+             for line in output.splitlines() if "\t" in line]
+    numbers = (stage_branch_number(stage, task_id, name) for name in (*names, *recorded))
+    return max((number for number in numbers if number is not None), default=0) + 1
+
+
+def create_stage_branch(clone: Path, remote: str, branch: str, base: str) -> None:
+    """Push a new stage branch at the recorded task tip without rewriting an old one."""
+    ref = f"refs/heads/{branch}"
+    if github_run("git", "ls-remote", "--heads", remote, ref, cwd=clone):
+        raise StageBranchExists(f"stage branch {branch} already exists")
+    github_run("git", "push", remote, f"{base}:{ref}", cwd=clone)
+
+
+def delete_stage_branches(clone: Path, remote: str, task_id: str) -> None:
+    """Delete every numbered Refine and Implement branch owned by a task."""
+    output = github_run("git", "ls-remote", "--heads", remote,
+                        f"refs/heads/refine/{task_id}-*",
+                        f"refs/heads/implement/{task_id}-*", cwd=clone)
+    refs = [line.split("\t", 1)[1] for line in output.splitlines() if "\t" in line]
+    if refs:
+        github_run("git", "push", "--quiet", remote, "--delete", *refs, cwd=clone)
+    for ref in refs:
+        run("git", "update-ref", "-d", f"refs/remotes/{remote}/{ref.removeprefix('refs/heads/')}",
+            cwd=clone)
 
 
 def ensure_task_branch(clone: Path, remote: str, base: str, task_id: str,
