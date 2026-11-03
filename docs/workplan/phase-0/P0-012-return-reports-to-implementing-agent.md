@@ -68,7 +68,7 @@ prompt. Proposed approach, for the refiner to confirm against code at dispatch:
 ## Non-goals
 
 Acting on human comments; merging or approving; recording finding verdicts
-(`task-implement-merge`); returning Defect, Deferrable or Harden findings
+(`audit-finalize`); returning Defect, Deferrable or Harden findings
 without a person; continuing the original Codex conversation; `@codex` comments
 through the GitHub integration, which are unverified for the panel's GitHub App.
 
@@ -146,5 +146,5 @@ None.
 
 `workplan-control-panel/codex-interfaces.md`;
 `workplan-control-panel/README.md`; `skills/audit-task/SKILL.md`;
-`skills/review-refinement/SKILL.md`; `skills/task-implement-merge/SKILL.md`;
+`skills/review-refinement/SKILL.md`; `skills/audit-finalize/SKILL.md`;
 ADR-0004; `docs/testing.md` (Control panel gate); P0-010; P0-011.
