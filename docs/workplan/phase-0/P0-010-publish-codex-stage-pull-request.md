@@ -2,145 +2,181 @@
 
 **Phase:** 0 — Plan the implementation phases
 **Shape:** capability
-**Dependencies:** P0-009 (contract: publishes onto the `<stage>/<ID>-<N>` branch and extends the stage attempt record that P0-009 defines)
+**Dependencies:** P0-009 (contract: publish onto the recorded `<stage>/<ID>-<N>` branch and extend P0-009's stage-attempt record)
 
-Second of four control-panel automation tasks (P0-009 to P0-012). This is a
-Phase 0 meta task because the control panel is repository tooling, not the
-product; see P0-009. The shape is the nearest fit: it adds observable behavior to
-the panel, reached by its API, UI and a background check.
+Second of four control-panel automation tasks (P0-009 to P0-012). The panel is
+repository tooling, so Phase 0 owns this capability. P0-009 is complete at HEAD:
+Refine and Implement attempts record `branch`, `base`, `head`, status and the
+Codex task URL, and the numbered branch exists on origin before dispatch.
 
 ## Objective
 
-When a Refine or Implement Codex task finishes, its changes are on
-`<stage>/<ID>-<N>` and a pull request into `task/<ID>` is open, without anyone
-opening Codex's web UI.
+When a Refine or Implement Codex task finishes, the running panel publishes its
+changes as one commit on the recorded stage branch and opens one pull request
+from that branch into `task/<ID>`, without operator action.
 
 ## Scope
 
-Use the stage attempt's recorded branch from P0-009 for publication and retries;
-do not reconstruct a fixed branch name or allocate another number.
-
-`codex cloud exec` returns only a task URL. The CLI can report a task's status
-and print its unified diff, but it cannot read the agent's messages or session
-history, so the pull request is described from what the panel itself knows
-(`workplan-control-panel/codex-interfaces.md`). Proposed approach, for the
-refiner to confirm against code at dispatch:
-
-- Notice completion without an operator action by reading the task's status
-  from `codex cloud list --json` (`pending`, `ready`, `applied`, `error`).
-  `ready` or `applied` publishes; `error` records a failure; a finished task
-  with an empty diff records that no changes were made.
-- Fetch the task's diff with `codex cloud diff`, preserving its trailing
-  newline, and apply it in a temporary worktree at the stage branch's tip. The
-  panel's own clone is never the apply target.
-- Make one commit authored by the panel, with subject `<ID>: <Refine|Implement>
-  <task title>` and body `Task: <ID>`, push it to `<stage>/<ID>-<N>`, then open the
-  pull request with `gh pr create --base task/<ID> --head <stage>/<ID>-<N> --fill`.
-  A pull request already open for that head is reused, not duplicated.
-- Record on the stage attempt the Codex task id, outcome, published tip, and
-  pull request number and URL. Show the stage as running, published, failed or
-  no-changes, with the reason, in the stage cell and tree view.
-- Add a route that retries publishing for a stage whose task finished but whose
-  push or pull request failed.
+- Add a bounded background reconciliation loop for live Refine and Implement
+  attempts. Start and stop it with the HTTP server, check promptly after startup,
+  and isolate per-attempt failures. Parse the Codex task ID from `task_url` and
+  follow every `codex cloud list --json` cursor before treating it as absent.
+- Map Codex `pending` to running, `ready` and `applied` to publishable, and
+  `error` to terminal failure. Older attempt records without publication fields
+  must continue to load and render.
+- Fetch `codex cloud diff <task-id>` for a publishable attempt. Preserve bytes
+  significant to `git apply`; extend the shared process wrapper rather than
+  bypassing it if its stripped-text return cannot do that.
+- In a temporary worktree at the recorded remote stage-branch tip, apply the
+  entire diff and always remove the worktree. A failed apply records failure and
+  leaves the remote unchanged. For Refine, inspect the applied result and refuse
+  it unless the only changed path is the tracker-selected exact brief,
+  `docs/workplan/<task.brief>`; never trust paths claimed by agent output.
+- Record a successfully applied diff with no resulting changes as terminal
+  `no-changes`. Otherwise create one commit with subject
+  `<ID>: <Refine|Implement> <task title>` and body `Task: <ID>`, then push it to
+  the recorded branch through the GitHub-credentialled command path.
+- Reuse an open pull request whose head is the recorded branch and whose base is
+  `task/<ID>`. Otherwise run `gh pr create --base task/<ID> --head
+  <stage>/<ID>-<N> --fill`, validate its result, and record its number and URL.
+  The commit message intentionally supplies the `--fill` title and body.
+- Make commit, push and pull-request creation restart-safe and idempotent. After
+  a lost push reply or a `gh` failure, recognize the remote published tip and
+  resume without applying or committing again. Never force-push a branch that
+  moved unexpectedly.
+- Extend the attempt with Codex task ID, last observed status, publication
+  outcome, published tip, pull-request number and URL, and a safe failure reason.
+  Re-read under the state lock before every write and update only the same live
+  attempt; no Codex, Git, or GitHub subprocess runs while that lock is held.
+- Add `POST /api/tasks/<ID>/<refine|implement>/publish` to retry a finished
+  attempt whose publication failed or was interrupted. Refuse unknown tasks,
+  Audit, and stages without a publishable attempt. Use the same idempotent path
+  as background reconciliation.
+- Show running, published, failed, and no-changes in both stage-cell renderings.
+  Published links to the pull request; failed exposes its reason and retry.
+  Document the automatic check, states, and route in the panel README.
 
 ## Required constraints
 
-- No slow external call (`codex`, `git push`, `gh`) runs while the state lock
-  is held; state is re-read before it is written.
-- `GH_TOKEN` stays out of every `codex` call. Pushing and `gh` go through
-  `github_run` and nothing else, and a test shows the new calls respect that.
-- Agent output is untrusted. A Refine diff that changes anything but
-  `docs/workplan/<brief>` is not published and the reason is recorded. A diff
-  that does not apply cleanly is a recorded failure, never a partial push.
-- The pull request's title, body and branch name name exactly one task ID, so
-  the task-status gate (`scripts/stamp_task_completion.py --check-only`) passes.
-- Publishing the same finished task twice yields one commit and one pull
-  request.
-- HEAD has no Codex status reader. If one has landed by dispatch time, use it;
-  do not add a second.
+- `GH_TOKEN` is absent from every `codex` child. Push and `gh` use `github_run`;
+  local worktree, apply, and commit commands do not.
+- Refine changes outside the exact brief and diffs that do not apply completely
+  are recorded failures and push nothing.
+- Empty diff, Codex error, and validation failure do not dispatch another task.
+- Publication uses P0-009's recorded branch; it neither allocates nor rewrites
+  a stage branch.
+- State locks protect only reads and writes. A stale worker cannot overwrite an
+  expired or superseded attempt.
 
 ## Non-goals
 
-The agent's own summary text in the pull request (not readable through the
-Codex CLI), best-of-N attempts (`--attempt`), creating the stage branch
-(P0-009), starting reviewers, and returning reports.
+- Agent summaries or session history, which the Codex CLI does not expose.
+- Best-of-N attempts or `codex cloud diff --attempt` selection.
+- Stage-branch creation, new Codex dispatch, review/audit startup, or reports.
+- Audit-stage publication or the final task pull request into `main`.
 
 ## Runtime reachability
 
-The panel process started by `python3 -m control_panel` or
-`workplan-control-panel/compose.yml` checks dispatched tasks while it runs; the
-retry route is part of its HTTP API and the UI.
+`python3 -m control_panel` and the `control-panel` Compose service start the
+completion reconciler with the HTTP server. The scheduler path is also reachable
+through the retry route, and the table and dependency-tree views show its result.
 
 ## Write set
 
-- `workplan-control-panel/control_panel/task_scheduler.py`
 - `workplan-control-panel/control_panel/api.py`
-- `workplan-control-panel/control_panel/integrations/codex.py`
-- `workplan-control-panel/control_panel/integrations/repository.py`
-- `workplan-control-panel/control_panel/integrations/process.py` (only if a diff cannot pass through `run()` unmodified)
+- `workplan-control-panel/control_panel/task_scheduler.py`
 - `workplan-control-panel/control_panel/state.py`
 - `workplan-control-panel/control_panel/ui.py`
-- `workplan-control-panel/tests/`
+- `workplan-control-panel/control_panel/integrations/codex.py`
+- `workplan-control-panel/control_panel/integrations/process.py`
+- `workplan-control-panel/control_panel/integrations/repository.py`
+- `workplan-control-panel/tests/test_task_scheduler.py`
+- `workplan-control-panel/tests/test_ui.py`
 - `workplan-control-panel/README.md`
 
 ## Contract surfaces
 
-The stage attempt's completion and publication fields; the publish-retry route;
-the commit-message convention (`<ID>: …`, body `Task: <ID>`); the identity of a
-stage pull request (head `<stage>/<ID>-<N>`, base `task/<ID>`). P0-011 and P0-012
-consume these.
+- Persisted stage-attempt completion and publication fields.
+- API: `POST /api/tasks/<ID>/<refine|implement>/publish`.
+- Stage pull request: head `<stage>/<ID>-<N>`, base `task/<ID>`.
+- Commit: subject `<ID>: <Refine|Implement> <task title>`, body `Task: <ID>`.
+
+P0-011 and P0-012 consume these surfaces.
 
 ## Demonstration
 
-Against a local bare remote, a fake `codex` on `PATH` that reports `pending`
-then `ready` and prints a fixed diff, and a stubbed `gh`:
+Run the panel against a local bare origin with a fake `codex` on `PATH` whose
+status changes from `pending` to `ready` and whose diff is fixed, plus a stub
+`gh` that records arguments:
 
-    $ POST /api/tasks/<ID>/refine, then wait for the fake to report ready
-    → expect: refine/<ID>-<N> on origin has one new commit on top of task/<ID> with
-      subject "<ID>: Refine <title>"; `gh pr create --base task/<ID> --head
-      refine/<ID>-<N> --fill` was called once; the stage cell shows published
-    $ the fake reports error
-    → expect: nothing pushed; the stage cell shows failed with a reason
-    $ the fake's diff also edits tasks.json (Refine)
-    → expect: not published; the reason names the path
-    $ POST the retry route twice for a published stage
-    → expect: still one commit and one pull request
+    $ curl -sS -X POST -H 'Content-Type: application/json' \
+        -H "Authorization: Bearer $PANEL_TOKEN" -d '{}' \
+        http://127.0.0.1:8765/api/tasks/<ID>/refine
+    $ git --git-dir=/path/to/origin.git log -1 --format='%s%n%b' refine/<ID>-1
+    → expect after ready: one commit above task/<ID>, subject
+      "<ID>: Refine <title>", body "Task: <ID>"; `gh` records one
+      `pr create --base task/<ID> --head refine/<ID>-1 --fill`; both views show
+      published and link to the pull request
 
-Optionally, with a real Codex environment, confirm `codex cloud list --json` and
-`codex cloud diff` output on the installed CLI match what the panel reads.
+    $ curl -sS -X POST -H 'Content-Type: application/json' \
+        -H "Authorization: Bearer $PANEL_TOKEN" -d '{}' \
+        http://127.0.0.1:8765/api/tasks/<ID>/refine/publish
+    $ curl -sS -X POST -H 'Content-Type: application/json' \
+        -H "Authorization: Bearer $PANEL_TOKEN" -d '{}' \
+        http://127.0.0.1:8765/api/tasks/<ID>/refine/publish
+    → expect: still one publication commit and one pull-request creation
+
+Repeat with Codex `error`, then a Refine diff that also edits
+`docs/workplan/tasks.json`:
+
+    → expect: the branch tip does not move; both views show failed and a safe
+      reason identifies the Codex error or out-of-bounds path
+
+Real Codex/GitHub use is optional. If available, compare the installed CLI's
+paged list and diff output with what the panel accepts; do not publish an
+artificial task solely for this check.
 
 ## Verification
 
-- `cd workplan-control-panel && python3 -m unittest discover -s tests`.
-- Negative cases: `error` status, empty diff, diff that does not apply, Refine
-  diff outside its brief, push rejected, `gh` failing after the push (retry
-  then opens the pull request without a second commit), and `GH_TOKEN` absent
-  from the `codex` child.
-- Say what could not run here, including any real Codex or GitHub use.
+- `cd workplan-control-panel && python3 -m unittest discover -s tests`
+- Focused integration coverage uses a local bare remote, fake `codex`, and
+  stubbed `gh` for pending-to-ready publication and the retry route.
+- Negative coverage: paged/missing/malformed status, Codex error, empty and
+  non-applying diffs, out-of-bounds Refine diff, moved branch, rejected push,
+  `gh` failure after push, and expiry/supersession during an external call.
+- Process-boundary coverage proves diff content is preserved, `GH_TOKEN` is
+  absent from Codex and present only for `github_run`, and external commands do
+  not hold the state lock.
+- Report unavailable checks, including real Codex or GitHub use.
 
 ## Acceptance criteria
 
-- [ ] A finished Codex task is published to `<stage>/<ID>-<N>` as one panel-authored
-      commit and a pull request into `task/<ID>` opened with `--fill`, with no
-      operator action.
-- [ ] `error`, empty-diff, non-applying and out-of-bounds outcomes are recorded
-      with a reason and push nothing.
-- [ ] Publishing or retrying twice produces one commit and one pull request.
-- [ ] The pull request passes the task-status check-only gate.
-- [ ] No `codex` call receives `GH_TOKEN`, and no external call runs under the
-      state lock.
-- [ ] The stage cell shows running, published, failed and no-changes states.
+- [ ] Without operator action, pending-to-ready/applied produces one commit on
+      the recorded branch and one pull request into `task/<ID>`; both views show
+      and link the result.
+- [ ] Codex error, empty result, non-applying diff, out-of-bounds Refine diff,
+      and moved branch produce their visible terminal state and push no agent
+      changes.
+- [ ] Reconciliation, restart, and retries cannot create a second commit or pull
+      request, including after a successful push followed by failure.
+- [ ] The `--fill` title and body name exactly one task, and the body passes
+      `scripts/stamp_task_completion.py --check-only` metadata validation.
+- [ ] Codex never receives `GH_TOKEN`; only GitHub operations do; external calls
+      neither hold the state lock nor overwrite a superseded attempt.
+- [ ] The retry API and both views distinguish running, published, failed, and
+      no-changes with safe, actionable output.
 
 ## Deferrals
 
 | Deferred | Owning task |
 |---|---|
-| Starting the review-refinement or audit session on the published pull request | P0-011 |
-| Reading the report and passing it back to the implementing agent | P0-012 |
+| Starting review-refinement or audit on the published pull request | P0-011 |
+| Reading the report and passing it to the implementing agent | P0-012 |
 
 ## Traces to
 
-`workplan-control-panel/codex-interfaces.md`;
-`workplan-control-panel/codex-cloud-cli.md`;
-`workplan-control-panel/README.md`; ADR-0004; `docs/testing.md` (Control panel
-gate); `scripts/stamp_task_completion.py`; P0-009.
+`workplan-control-panel/codex-interfaces.md` (Codex Cloud and GitHub);
+`workplan-control-panel/codex-cloud-cli.md` (status, paging, and diff);
+`workplan-control-panel/README.md` (scheduler, API, credentials, runtime);
+ADR-0004; `docs/testing.md` (Control panel gate);
+`scripts/stamp_task_completion.py`; P0-009.
