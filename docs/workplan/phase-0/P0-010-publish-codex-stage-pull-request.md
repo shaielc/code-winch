@@ -94,36 +94,23 @@ consume these.
 
 ## Demonstration
 
-Use the maintained panel UI in an **isolated, configured** control-panel
-deployment (startup and sign-in: `workplan-control-panel/README.md`). Use a
-real, eligible workplan task already being processed there; do not create a
-synthetic task or build a fake Codex/GitHub environment for this manual check.
-The task must have a Refine or Implement stage that actually produces a diff.
-This check requires working Codex Cloud and GitHub credentials; report the
-specific unavailable prerequisite if it cannot run.
+In an isolated, configured panel deployment (see
+`workplan-control-panel/README.md`), use a real eligible task with a Refine
+or Implement Codex run that produces a diff. This is a manual check through
+the maintained panel, not a request to construct a fake Codex/GitHub harness.
 
-1. Open the panel, sign in, and use **Prepare** if the selected task is not
-   prepared. Select **Refine** (or **Implement**) in its stage cell and observe
-   the recorded conversation and numbered stage branch.
-2. After the Codex task finishes, reload the panel. Observe **published** and
-   open the stage's pull-request link. On GitHub, verify that its head is the
-   recorded stage branch, its base is `task/<ID>`, and its publication commit
-   has subject `<ID>: <Refine|Implement> <title>` and body `Task: <ID>`.
-   Confirm that the branch contains the task's expected changed files.
-3. From a terminal with access to that isolated panel, set `PANEL_URL` to
-   its base URL and `TASK_ID` to the selected task ID. With `PANEL_TOKEN` set
-   to that panel's token, run the same retry twice:
+1. Sign in to the panel, prepare the task if necessary, and launch its Refine
+   or Implement stage. Note the numbered stage branch and conversation link.
+2. When Codex finishes, refresh the panel. The stage shows **published** and
+   links to a GitHub PR from that branch into `task/<ID>`. Check the PR's
+   commit subject `<ID>: <Refine|Implement> <title>`, body `Task: <ID>`,
+   and its expected changes.
+3. Retry publication twice using the stage's publish action (or the documented
+   `POST /api/tasks/<ID>/<refine|implement>/publish` API). Refresh the PR:
+   its head commit and PR number remain unchanged.
 
-       curl -fsS -X POST -H "Authorization: Bearer $PANEL_TOKEN" \\
-         -H 'Content-Type: application/json' -d '{}' \\
-         "$PANEL_URL/api/tasks/$TASK_ID/refine/publish"
-
-   (Use `implement/publish` instead when demonstrating Implement.) Reload
-   the stage and PR. The same publication commit and PR must remain, with no
-   additional publication commit.
-
-Keep the manual demonstration distinct from fake-backed negative coverage in
-Verification. Record what was actually observed, not predicted output.
+Record observed results and any unavailable Codex/GitHub prerequisites.
+Exercise failure cases in Verification, not by manufacturing manual fixtures.
 
 ## Verification
 
