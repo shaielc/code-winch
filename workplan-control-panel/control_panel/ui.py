@@ -427,6 +427,15 @@ Expire releases a local reservation. No expiry cancels a cloud task or removes a
     stageMenu.append(actionItem(
       "Expire " + stage + (icon.dataset.state === "unknown" ? " (outcome unknown)" : ""),
       cell.dataset.expireHint, cell.dataset.expireReason, () => expireStage(cell)));
+    if (stage !== "audit") stageMenu.append(actionItem(
+      "Publish / retry publication", "Publish this finished stage without creating another commit.",
+      "", async () => {{
+        try {{
+          const data = await act("api/tasks/" + encodeURIComponent(cell.dataset.task) + "/" + stage + "/publish");
+          showMessage("Publication status: " + data.status + (data.reason ? " — " + data.reason : ""));
+          setTimeout(() => location.reload(), 500);
+        }} catch (error) {{ showMessage(error.message, true); }}
+      }}));
     const earlier = cell.querySelector(".earlier");
     Array.from(earlier ? earlier.children : []).forEach(link => {{
       stageMenu.append(linkItem(link.href, "Earlier conversation " + link.textContent));
@@ -773,6 +782,15 @@ def stage_cell(entry: dict[str, Any], stage: str, runnable: set[str]) -> str:
         for index, attempt in enumerate(earlier, 1))
     branch = html.escape(live.get("branch", "")) if live else ""
     branch_label = f'<small class="stage-branch" title="{branch}">{branch}</small>' if branch else ""
+    publication = ""
+    if live and live.get("status") in ("submitted", "running", "published", "failed", "no-changes"):
+        publication_status = "running" if live["status"] in ("submitted", "running") else live["status"]
+        reason_text = html.escape(live.get("reason", ""))
+        if live.get("pull_request_url"):
+            publication_status = (f'<a href="{html.escape(live["pull_request_url"])}" '
+                                  f'target="_blank" rel="noopener">{publication_status}</a>')
+        publication = (f'<small class="publication-state" title="{reason_text}">'
+                       f'{publication_status}{": " + reason_text if reason_text else ""}</small>')
     return (
         f'<span class="stage-cell" data-stage-cell data-task="{html.escape(entry["id"])}" '
         f'data-stage="{stage}" data-service="{SERVICES[stage]}" '
@@ -781,7 +799,7 @@ def stage_cell(entry: dict[str, Any], stage: str, runnable: set[str]) -> str:
         f'data-expire-hint="{html.escape(expire_hint)}">'
         f'<a class="stage-icon" data-state="{state}" {anchor} title="{html.escape(title)}" '
         f'aria-label="{html.escape(label)}">{CLAUDE_ICON if stage == "audit" else CODEX_ICON}</a>'
-        f'{branch_label}<span class="earlier" hidden>{history}</span></span>'
+        f'{branch_label}{publication}<span class="earlier" hidden>{history}</span></span>'
     )
 
 

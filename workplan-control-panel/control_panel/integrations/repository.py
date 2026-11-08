@@ -26,6 +26,10 @@ class RebaseConflict(Exception):
     """A branch could not be replayed without a conflict, so nothing was pushed."""
 
 
+class PublishConflict(Exception):
+    """An agent diff was unsafe or did not apply completely."""
+
+
 def ensure_clone(clone: Path, url: str) -> None:
     """Create the panel's dedicated main checkout, unless it is already there.
 
@@ -212,6 +216,56 @@ def create_task_pull_request(clone: Path, task_id: str, title: str) -> str:
     if not url.startswith("http"):
         raise ValueError("gh returned no pull request URL")
     return url
+
+
+def stage_pull_request(clone: Path, task_id: str, branch: str) -> dict[str, Any] | None:
+    listed = json.loads(github_run(
+        "gh", "pr", "list", "--head", branch, "--base", task_branch(task_id),
+        "--state", "open", "--json", "number,url", "--limit", "1", cwd=clone))
+    return listed[0] if listed else None
+
+
+def publish_stage(clone: Path, task_id: str, title: str, stage: str, branch: str,
+                  base: str, patch: str) -> str:
+    """Apply one complete patch in a disposable worktree, commit, and push it."""
+    with tempfile.TemporaryDirectory() as scratch:
+        worktree = Path(scratch) / "worktree"
+        run("git", "worktree", "add", "--detach", str(worktree), base, cwd=clone)
+        try:
+            patch_file = Path(scratch) / "agent.diff"
+            patch_file.write_text(patch)
+            try:
+                run("git", "apply", "--check", str(patch_file), cwd=worktree)
+                run("git", "apply", str(patch_file), cwd=worktree)
+            except subprocess.CalledProcessError as error:
+                raise PublishConflict("The Codex diff did not apply cleanly") from error
+            if stage == "refine":
+                changed = run("git", "diff", "--name-only", cwd=worktree).splitlines()
+                expected = next((item["brief"] for item in json.loads(
+                    (worktree / TRACKER).read_text())["tasks"] if item["id"] == task_id), None)
+                allowed = f"docs/workplan/{expected}" if expected else ""
+                if not changed or any(path != allowed for path in changed):
+                    raise PublishConflict("Refine changed files outside its task brief")
+            run("git", "add", "-A", cwd=worktree)
+            run("git", "commit", "-m", f"{task_id}: {stage.title()} {title}",
+                "-m", f"Task: {task_id}", cwd=worktree)
+            tip = run("git", "rev-parse", "HEAD", cwd=worktree)
+            github_run("git", "push", "origin", f"{tip}:refs/heads/{branch}", cwd=worktree)
+            return tip
+        finally:
+            run("git", "worktree", "remove", "--force", str(worktree), cwd=clone)
+
+
+def create_stage_pull_request(clone: Path, task_id: str, branch: str) -> dict[str, Any]:
+    existing = stage_pull_request(clone, task_id, branch)
+    if existing:
+        return existing
+    url = github_run("gh", "pr", "create", "--base", task_branch(task_id),
+                     "--head", branch, "--fill", cwd=clone).splitlines()[-1].strip()
+    found = stage_pull_request(clone, task_id, branch)
+    if not found:
+        raise ValueError(f"gh created {url!r}, but the pull request could not be found")
+    return found
 
 
 def task_pull_requests(clone: Path, task_id: str) -> list[dict[str, Any]]:
