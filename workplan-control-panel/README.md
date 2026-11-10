@@ -260,7 +260,10 @@ worktree, the main worktree, or `${CODE_WINCH_CONFIG_DIR:-/var/code-winch}/workp
 
 While the panel runs it polls submitted Refine and Implement tasks. A finished diff is
 applied in a temporary worktree, committed to the recorded numbered stage branch, pushed,
-and opened as a pull request into the task branch. The stage cell reports **running**,
+and opened as a pull request into the task branch. The changed files are read from the
+index after staging, so files the diff adds, deletes or renames count as well as edits;
+a Refine diff that changes any file other than the brief the tracker names at the stage's
+base is recorded as failed and nothing is pushed. The stage cell reports **running**,
 **published**, **failed**, or **no-changes** and links a published pull request. Its
 right-click menu can retry publication; the equivalent endpoint is
 `POST /api/tasks/<ID>/<refine|implement>/publish` with an empty JSON object. Retries reuse a
