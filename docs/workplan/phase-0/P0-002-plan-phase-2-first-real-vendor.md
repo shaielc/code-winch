@@ -6,35 +6,101 @@
 
 ## Objective
 
-Produce a reviewed `docs/workplan/phase-2/README.md` with decided ordered increments for roadmap Stage 1, and a single planning-shape task in Phase 2 that derives its first increment, created with `skills/phase-increment-handoff/SKILL.md`.
+Produce an independently audited `docs/workplan/phase-2/README.md` that decides
+the ordered, observable increments for roadmap Stage 1, including the first real
+vendor and native-exit boundary, and hand its first increment to exactly one
+tracked Phase 2 planning task created with
+`skills/phase-increment-handoff/SKILL.md`.
 
 ## Scope
 
-- Decide the Stage 1 first-vendor choice under D1 when this phase opens, based on supported CLI behavior and sanitized evidence; decide D5 only if its terminal-semantics trigger occurs.
-- Partition one genuine adapter seam behind the existing wrapper/page, capability descriptor and launch/input/output boundaries, and independently observable native exit reporting.
-- Retain fake-profile parity as a shipped configuration; plan required vendor login at the single-user stage depth without claiming Stage 5 scoped-credential enforcement.
+- Use `skills/create-phase/SKILL.md` and `skills/shared/phase-design.md` to author
+  `docs/workplan/phase-2/README.md`. Start from the attach page, standalone fake
+  binary, and absent runner/adapter inventory recorded in `docs/state.md` and
+  verify those claims against HEAD. Treat the unfinished Phase 1 increments as
+  planned prerequisites, citing `docs/workplan/phase-1/README.md` and their
+  coverage rather than presenting Stage 0 exchange as implemented.
+- Resolve D1 when Phase 2 opens: name one vendor CLI, cite dated first-party
+  documentation and a sanitized, reproducible observation (or explicitly
+  labelled source-only evidence) for its launch, login, input/output, exit, and
+  non-interactive/terminal behavior. Record why that evidence is sufficient for
+  the first adapter without turning the observed vendor dialect into the generic
+  product contract.
+- Apply D5's trigger to that evidence. If the selected CLI requires TTY
+  detection, raw mode, resize, or another terminal semantic, decide the PTY
+  boundary and the observable evidence for it; otherwise record that the trigger
+  did not occur and keep pipes as the planned Stage 1 requirement. Do not leave
+  PTY-versus-pipes for the later task author or implementer to choose.
+- Partition Stage 1 from the shipped interaction surface into the smallest
+  independently observable increments. Assign one owner to the selected
+  vendor's descriptor/capabilities, launch and login, input/output translation,
+  same-page exchange, fake-profile parity, and native-exit reporting. Separate
+  native exit facts from their stable Code Winch interpretation, and state what
+  a person observes for success, non-zero exit, signal termination, and an
+  unlaunchable or unauthenticated CLI. Combine concerns only where a smaller
+  increment would have no useful observation, and record that rationale.
+- Preserve the existing Stage 0 attach contract and malleable fake profile as
+  prerequisites to extend, not constraints imposed by the fake's private
+  JSON-line dialect. Keep required vendor login at Stage 1's single-user depth;
+  route scoped credential injection and enforcement to roadmap Stage 5 and a
+  second adapter/workflows to Stage 6.
+- After the phase artifact is decided, obtain an independent `audit-phase`
+  report against its commit and resolve every blocking artifact finding. Then
+  complete every `phase-increment-handoff` action in this task: allocate the next
+  Phase 2 ID, create one planning-shape brief for the phase's lowest uncovered
+  increment, add its pending tracker entry with the semantic edge on P0-002, and
+  reconcile the index plus Phase 0 and Phase 2 coverage without changing any
+  existing status field.
 
 ## Required constraints
 
-No real adapter, descriptor, codec, native exit interpretation or PTY implementation exists at the derivation baseline (docs/state.md). Stage 0 exchange remains a predicted starting capability, never marked implemented.
+No real adapter, descriptor, codec, native-exit interpretation, or PTY
+implementation exists at HEAD. `cmd/winch-sandbox/main.go` composes only the
+attach server; `cmd/fake-harness/main.go` is a standalone fixture; and
+`internal/adapters/harness/` does not exist. Stage 0 exchange remains a planned
+prerequisite, never an implemented baseline claim.
 
 Existing architecture and roadmap specify the wrapper boundary sufficiently to design this artifact; recheck the actual Stage 0 source at dispatch rather than adding an ordering-only dependency.
 
-Use `skills/create-phase/SKILL.md` as the phase-author operation, with `skills/shared/phase-design.md` and the workplan model. The required behavior is a decided phase artifact, an independent `audit-phase` review, the single planning-shape task from `skills/phase-increment-handoff/SKILL.md`, and consistent tracker/index/Phase 0 and phase coverage. Product behavior and commands described there are predictions. Preserve Phase 0's decided boundaries and all task status fields.
+The phase artifact records outcomes and evidence limits, not implementation
+commands, fixture protocols, or file forecasts. Product behavior described by
+the phase is predicted. Preserve Phase 0's decided boundary, the frozen tracker
+schema, and every existing task status and metadata field.
 
 ## Non-goals
 
-Second vendor/workflows (Stage 6), run start/stop lifecycle (Stage 4), stop escalation and orphan recovery (Stage 5).
+- Implementing the adapter, descriptor, codec, PTY, exit mapping, login flow, or
+  any other product behavior.
+- A second vendor or workflows (Stage 6); product-owned run start/stop lifecycle
+  (Stage 4); and stop escalation, orphan recovery, scoped credential injection,
+  or egress enforcement (Stage 5).
+- Deriving an implementation brief or reserving an implementation ID. The one
+  Phase 2 task created here owns derivation of the first decided increment.
 
-This task derives no implementation brief and allocates no implementation ID; the planning task it creates assigns that derivation. Product implementation and completion claims based only on a design remain excluded.
+Product completion claims based only on a phase design or vendor-source evidence
+remain excluded.
 
 ## Planning outputs and handoff
 
-The phase author creates `docs/workplan/phase-2/README.md`, records its source-supported current baseline and planned prerequisites, chooses ordered increments and concern owners, states exit observations, and marks implementation task coverage **not yet derived**. Update this phase's row in the index and Phase 0 coverage. Proposed approach: inspect current source and applicable AGENTS first, compare against roadmap Stage 1, then write and review one bounded artifact. No product protocol or substrate implementation is prescribed by this brief.
+The phase author creates `docs/workplan/phase-2/README.md` in the phase format.
+It distinguishes the source-supported HEAD baseline from unfinished Phase 1
+prerequisites; decides the D1 vendor and D5 disposition; gives every Stage 1
+concern one owner; orders independently observable increments; states exit
+observations and their evidence limits; and initially marks all implementation
+brief coverage **not yet derived**. The workplan index and Phase 0 coverage point
+to the same artifact.
 
-A separate phase auditor uses `skills/audit-phase/SKILL.md` against the decided design. Resolve blocking artifact findings.
+A separate phase auditor uses `skills/audit-phase/SKILL.md` against the decided
+artifact commit. The task change records the reviewed commit and the
+disposition of each finding; unresolved blocking findings prevent completion.
 
-Handoff: complete `skills/phase-increment-handoff/SKILL.md` in this task. It creates a single planning-shape task, `docs/workplan/phase-2/<allocated-ID>-plan-<increment-slug>.md` numbered in Phase 2, that derives the phase's first increment with a **semantic dependency on P0-002**, because it consumes the reviewed `docs/workplan/phase-2/README.md` produced here. That task completes the same handoff for the next increment. Dispatch this phase-design task through a separate refiner using `skills/refine-task/SKILL.md` against current HEAD.
+Handoff: complete `skills/phase-increment-handoff/SKILL.md` in this task. It
+creates `docs/workplan/phase-2/<allocated-ID>-plan-<increment-slug>.md` for the
+lowest-order uncovered increment. The allocated ID is the next Phase 2 ID at
+implementation time. Its tracker and brief carry a **semantic dependency on
+P0-002** because it consumes the reviewed Phase 2 artifact. It allocates no
+implementation ID and, in turn, requires the same handoff after it derives the
+increment's implementation brief.
 
 ## Write set
 
@@ -57,27 +123,80 @@ None changed in product code or wire schemas. This task decides only phase-2's d
 After creating the design and its planning task, a reviewer runs from the repository root:
 
 ```sh
-sed -n '1,240p' docs/workplan/phase-2/README.md
-rg -n 'phase-2|P0-002|Plan Phase 2' docs/workplan/README.md docs/workplan/phase-0/README.md
+test -f docs/workplan/phase-2/README.md && sed -n '1,260p' docs/workplan/phase-2/README.md
+rg -n 'phase-2|P0-002|Plan Phase 2' docs/workplan/README.md docs/workplan/phase-0/README.md docs/workplan/phase-2/README.md
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+tracker = json.loads(Path("docs/workplan/tasks.json").read_text())
+tasks = tracker["tasks"]
+handoffs = [task for task in tasks if task["phase"] == 2 and task["depends_on"] == ["P0-002"]]
+assert len(handoffs) == 1, handoffs
+task = handoffs[0]
+brief = Path("docs/workplan") / task["brief"]
+assert task["status"] == "pending" and brief.is_file(), task
+text = brief.read_text()
+assert "**Shape:** planning" in text and "P0-002 (semantic:" in text
+print(task["id"], task["title"], task["brief"])
+PY
 bash scripts/list-available-tasks.sh
 ```
 
-Expected artifact observations: The design identifies one first vendor, evidence for any PTY requirement, and an observable native exit result plus interpretation while retaining fake parity. Both index and Phase 0 locate the same design and its planning task. Inspect that task's tracker entry and brief: they agree on its real Phase 2 ID/path and semantic dependency on P0-002, name the phase's first increment, and leave implementation-brief coverage not yet derived. Availability reflects the tracker dependencies, not a claimed runtime milestone. Obtain the independent auditor's findings against the reviewed commit; artifact creation alone is not an audit verdict.
+Expected artifact observations: the phase names one vendor and separates dated
+vendor evidence, source-supported HEAD behavior, and planned prerequisites. It
+records a decided D5 disposition, retains fake parity, and gives native success,
+failure, signal, and launch/login failures observable interpretations. The index
+and Phase 0 point to that design and to the same single Phase 2 planning task;
+the Python check prints its real ID/title/path and proves its pending semantic
+edge and planning brief. Availability reflects tracker dependencies, not a
+runtime milestone. The independent audit report identifies the reviewed commit
+and has no unresolved blocking finding.
 
 ## Verification
 
-- Independent `audit-phase` review checks baseline evidence, decided boundaries, task fit, source links and exit observations; reject absent prerequisites presented as existing behavior.
-- Validate tracker against its unchanged schema, resolve dependency IDs/brief paths, and compare tracker/index/Phase 0 coverage; `bash scripts/list-available-tasks.sh` must preserve availability semantics. Confirm every `phase-increment-handoff` action holds and no implementation ID was allocated.
-- `git diff --check`, completion-script tests (`python3 -m unittest discover -s test`) and `make check` per AGENTS. Report unavailable toolchains explicitly; do not claim a Go/runtime gate passed when it did not run. No runtime capability is added by this task.
+- Independent `audit-phase` review checks the baseline/prerequisite distinction,
+  D1 evidence, D5 disposition, increment partition, concern ownership, task fit,
+  exit observations, and evidence limits; absent prerequisites presented as
+  existing behavior are blocking findings.
+- Run `python3 -m jsonschema -i docs/workplan/tasks.json
+  docs/workplan/tasks.schema.json`; verify every brief path and dependency ID
+  resolves; and compare tracker, index, Phase 0, and Phase 2 coverage.
+- Run the Demonstration block and `bash scripts/list-available-tasks.sh`; confirm
+  every `phase-increment-handoff` action holds, exactly one Phase 2 planning task
+  was allocated, no implementation ID was allocated, and existing availability
+  semantics did not change except for the new task being blocked on P0-002.
+- Run the repository gates required by `docs/testing.md` and `git diff --check`.
+  No Go, web, container, or real-vendor runtime pass is evidence for this
+  planning task unless that command actually ran; this task adds no runtime
+  capability.
 
 ## Acceptance criteria
 
-- [ ] The target artifact is reachable from the index, has the phase-format sections, number-only Order values and descriptive Increment titles, and has no candidate boundary left for the task author to decide.
-- [ ] The design identifies one first vendor, evidence for any PTY requirement, and an observable native exit result plus interpretation while retaining fake parity.
-- [ ] Source evidence and planned prerequisites are labelled separately; injecting a missing prerequisite or a premature completion assertion yields an audit finding, not a pass.
-- [ ] Every included concern has one owner, excluded roadmap concerns have their source destination, and a real deferred decision retains its explicit trigger.
+- [ ] The Phase 2 artifact is reachable from the index, has every phase-format
+  section, uses number-only `Order` values and descriptive increment titles, and
+  leaves no vendor, PTY, increment, ownership, or evidence-boundary candidate
+  for the later task author to decide.
+- [ ] The design names one first vendor and supplies dated, sanitized evidence
+  for launch, login, I/O, exit, and terminal behavior; missing or contradictory
+  evidence is visible to the auditor and blocks acceptance.
+- [ ] D5 is either triggered with a decided PTY boundary and observable terminal
+  evidence, or explicitly not triggered with evidence that pipes satisfy the
+  selected CLI; it is not decided from the fake fixture's present behavior.
+- [ ] Native success, non-zero exit, signal termination, and launch/login failure
+  each have an observable native fact and planned stable interpretation, while
+  fake-profile parity remains a shipped Stage 1 outcome.
+- [ ] HEAD evidence, source-only vendor evidence, and unfinished Phase 1
+  prerequisites are labelled separately; a missing prerequisite or premature
+  implementation claim is a blocking audit finding.
+- [ ] Every included concern has exactly one increment owner; combined concerns
+  explain why separation has no useful observation; and excluded concerns point
+  to roadmap Stages 4, 5, or 6 or retain D5's explicit trigger as applicable.
 - [ ] Independent phase audit has no unresolved blocking findings; index and Phase 0 match the reviewed artifact.
-- [ ] Every `phase-increment-handoff` action holds: exactly one planning-shape task in Phase 2 derives the phase's first increment, with a semantic dependency on P0-002 and matching tracker, index, and Phase 0 and phase coverage. A missing task blocks completion.
+- [ ] Every `phase-increment-handoff` action holds: exactly one planning-shape
+  task in Phase 2 derives the lowest-order uncovered increment, with a semantic
+  dependency on P0-002 and matching tracker, brief, index, Phase 0, and Phase 2
+  coverage. A missing or duplicate task blocks completion.
 - [ ] Unproduced implementation briefs are labelled not yet derived and have no speculative IDs.
 - [ ] Existing runtime/source behavior, frozen tracker schema, and task status fields remain intact.
 
