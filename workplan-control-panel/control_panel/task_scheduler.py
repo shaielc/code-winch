@@ -108,7 +108,8 @@ class TaskScheduler:
                                                attempt["branch"], attempt["base"], patch)
                 self._record_attempt(task_id, stage, head, {
                     "status": "running", "codex_task_id": codex_id, "published_tip": tip})
-            pull = repository.create_stage_pull_request(self.clone, task_id, attempt["branch"])
+            pull = repository.create_stage_pull_request(self.clone, task_id, attempt["branch"],
+                                                        tip)
             return self._record_attempt(task_id, stage, head, {
                 "status": "published", "codex_task_id": codex_id, "published_tip": tip,
                 "pull_request_number": pull["number"], "pull_request_url": pull["url"],

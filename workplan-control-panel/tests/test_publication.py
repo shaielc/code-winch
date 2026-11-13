@@ -2,7 +2,8 @@
 
 Codex and gh are replaced at the panel's integration seam; git runs for real against a local
 bare origin. What this does not prove: the real `codex cloud list`/`diff` output shapes, and
-that GitHub accepts the push and `gh pr create --fill` with the App's credential.
+that GitHub accepts the push and `gh pr create --fill` with the App's credential. `--fill`
+itself is emulated by the `git log` range gh reads, not run.
 """
 
 import json
@@ -188,7 +189,7 @@ class PublicationTests(GitRepositoryFixture, unittest.TestCase):
         self.assertEqual(git(self.origin, "log", "-1", "--format=%s%n%b", tip).strip(),
                          "P0-001: Refine Upstream\nTask: P0-001")
         self.assertEqual(git(self.origin, "diff", "--name-only", base, tip), BRIEF)
-        create.assert_called_once_with(self.panel.clone, "P0-001", "refine/P0-001-1")
+        create.assert_called_once_with(self.panel.clone, "P0-001", "refine/P0-001-1", tip)
 
         # The next poll and an explicit retry find it published and commit nothing more.
         create = self.publish(self.brief_diff())
@@ -229,14 +230,37 @@ class PublicationTests(GitRepositoryFixture, unittest.TestCase):
         with patch.object(repository, "stage_pull_request", return_value=PULL), \
                 patch.object(repository, "github_run") as gh:
             self.assertEqual(repository.create_stage_pull_request(
-                self.panel.clone, "P0-001", "refine/P0-001-1"), PULL)
+                self.panel.clone, "P0-001", "refine/P0-001-1", "unused"), PULL)
         gh.assert_not_called()
 
+    def test_fill_sees_exactly_the_published_commit(self):
+        # Before the fix gh ran in the clone, where the pushed head had no local branch, and
+        # failed with "ambiguous argument 'origin/task/P0-002...refine/P0-002-1'".
+        self.submit("refine")
+        tip = repository.publish_stage(self.panel.clone, "P0-001", "Upstream", "refine",
+                                       "refine/P0-001-1", self.attempt("refine")["base"],
+                                       self.brief_diff())
+        # A stale base would widen the range to the task's opening commit too.
+        git(self.panel.clone, "update-ref", "refs/remotes/origin/task/P0-001", "origin/main")
+        filled = []
+
+        def github(*command, cwd, capture=True):
+            if command[0] != "gh":
+                return process.run(*command, cwd=cwd)
+            # What `gh pr create --fill` reads to compute its title and body.
+            filled.append(process.run("git", "log", "--cherry", "--format=%s%n%b",
+                                      "origin/task/P0-001...refine/P0-001-1", cwd=cwd))
+            self.assertEqual(command, ("gh", "pr", "create", "--base", "task/P0-001",
+                                       "--head", "refine/P0-001-1", "--fill"))
+            return PULL["url"]
+
         with patch.object(repository, "stage_pull_request", side_effect=[None, PULL]), \
-                patch.object(repository, "github_run", return_value=PULL["url"]) as gh:
-            repository.create_stage_pull_request(self.panel.clone, "P0-001", "refine/P0-001-1")
-        self.assertEqual(gh.call_args.args, ("gh", "pr", "create", "--base", "task/P0-001",
-                                             "--head", "refine/P0-001-1", "--fill"))
+                patch.object(repository, "github_run", side_effect=github):
+            self.assertEqual(repository.create_stage_pull_request(
+                self.panel.clone, "P0-001", "refine/P0-001-1", tip), PULL)
+        self.assertEqual(filled, ["P0-001: Refine Upstream\nTask: P0-001"])
+        self.assertEqual(len(git(self.panel.clone, "worktree", "list").splitlines()), 1)
+        self.assertEqual(git(self.panel.clone, "branch", "--list", "refine/P0-001-1"), "")
 
     def test_retry_refuses_a_stage_with_no_attempt(self):
         with self.assertRaises(TaskError) as refused:
