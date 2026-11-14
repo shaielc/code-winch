@@ -55,11 +55,18 @@ class TaskScheduler:
         for task_id, record in snapshot["tasks"].items():
             for stage in ("refine", "implement"):
                 for attempt in record.get("stages", {}).get(stage, []):
-                    if attempt.get("status") not in ("submitted", "running"):
+                    # An attempt from before numbered stage branches has nowhere to publish.
+                    if attempt.get("status") not in ("submitted", "running") \
+                            or not attempt.get("branch"):
                         continue
                     task = tracker.get(task_id)
-                    if task:
+                    if not task:
+                        continue
+                    try:
                         self._publish_attempt(task, stage, attempt)
+                    except TaskError:
+                        # Expired or replaced meanwhile; one attempt must not stop the pass.
+                        continue
 
     @staticmethod
     def _codex_id(attempt: dict[str, Any]) -> str | None:
@@ -135,6 +142,8 @@ class TaskScheduler:
         attempt = attempts[-1] if attempts else None
         if not task or not attempt or attempt.get("status") not in ("failed", "running", "published"):
             raise TaskError(409, "This stage has no finished publication to retry")
+        if not attempt.get("branch"):
+            raise TaskError(409, "This submission predates stage branches and cannot be published")
         return self._publish_attempt(task, stage, attempt)
 
     def start_sync(self, event=None, only=None):
