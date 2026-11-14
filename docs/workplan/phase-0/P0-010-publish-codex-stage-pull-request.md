@@ -2,7 +2,7 @@
 
 **Phase:** 0 — Plan the implementation phases
 **Shape:** capability
-**Dependencies:** P0-009 (contract: publishes onto the `<stage>/<ID>` branch and extends the stage attempt record that P0-009 defines)
+**Dependencies:** P0-009 (contract: publishes onto the `<stage>/<ID>-<N>` branch and extends the stage attempt record that P0-009 defines)
 
 Second of four control-panel automation tasks (P0-009 to P0-012). This is a
 Phase 0 meta task because the control panel is repository tooling, not the
@@ -12,27 +12,32 @@ the panel, reached by its API, UI and a background check.
 ## Objective
 
 When a Refine or Implement Codex task finishes, its changes are on
-`<stage>/<ID>` and a pull request into `task/<ID>` is open, without anyone
+`<stage>/<ID>-<N>` and a pull request into `task/<ID>` is open, without anyone
 opening Codex's web UI.
 
 ## Scope
 
+Use the stage attempt's recorded branch from P0-009 for publication and retries;
+do not reconstruct a fixed branch name or allocate another number.
+
 `codex cloud exec` returns only a task URL. The CLI can report a task's status
 and print its unified diff, but it cannot read the agent's messages or session
 history, so the pull request is described from what the panel itself knows
-(`workplan-control-panel/codex-interfaces.md`). Proposed approach, for the
-refiner to confirm against code at dispatch:
+(`workplan-control-panel/codex-interfaces.md`). Implement against the existing
+stage-attempt record and repository helpers:
 
-- Notice completion without an operator action by reading the task's status
-  from `codex cloud list --json` (`pending`, `ready`, `applied`, `error`).
-  `ready` or `applied` publishes; `error` records a failure; a finished task
-  with an empty diff records that no changes were made.
-- Fetch the task's diff with `codex cloud diff`, preserving its trailing
-  newline, and apply it in a temporary worktree at the stage branch's tip. The
-  panel's own clone is never the apply target.
+- Notice completion without an operator action through the Codex CLI status
+  listing (`pending`, `ready`, `applied`, `error`). Locate the recorded task
+  across pages before deciding that it is absent; `ready` or `applied`
+  publishes, `error` records failure, and an empty finished diff records
+  no changes.
+- Fetch the task's diff with `codex cloud diff` without changing bytes needed
+  by `git apply`. `integrations/process.py` currently strips captured output;
+  ensure this diff path does not. Apply in a temporary worktree at the recorded
+  stage branch's tip; the panel's own clone is never the apply target.
 - Make one commit authored by the panel, with subject `<ID>: <Refine|Implement>
-  <task title>` and body `Task: <ID>`, push it to `<stage>/<ID>`, then open the
-  pull request with `gh pr create --base task/<ID> --head <stage>/<ID> --fill`.
+  <task title>` and body `Task: <ID>`, push it to `<stage>/<ID>-<N>`, then open the
+  pull request with `gh pr create --base task/<ID> --head <stage>/<ID>-<N> --fill`.
   A pull request already open for that head is reused, not duplicated.
 - Record on the stage attempt the Codex task id, outcome, published tip, and
   pull request number and URL. Show the stage as running, published, failed or
@@ -42,8 +47,8 @@ refiner to confirm against code at dispatch:
 
 ## Required constraints
 
-- No slow external call (`codex`, `git push`, `gh`) runs while the state lock
-  is held; state is re-read before it is written.
+- Publication performs no slow external call (`codex`, `git push`, `gh`) while
+  holding the state lock, and rechecks the live attempt before writing state.
 - `GH_TOKEN` stays out of every `codex` call. Pushing and `gh` go through
   `github_run` and nothing else, and a test shows the new calls respect that.
 - Agent output is untrusted. A Refine diff that changes anything but
@@ -53,8 +58,8 @@ refiner to confirm against code at dispatch:
   the task-status gate (`scripts/stamp_task_completion.py --check-only`) passes.
 - Publishing the same finished task twice yields one commit and one pull
   request.
-- HEAD has no Codex status reader. If one has landed by dispatch time, use it;
-  do not add a second.
+- Reuse existing Codex status or repository helpers if present at implementation
+  time rather than adding competing readers or PR operations.
 
 ## Non-goals
 
@@ -84,45 +89,50 @@ retry route is part of its HTTP API and the UI.
 
 The stage attempt's completion and publication fields; the publish-retry route;
 the commit-message convention (`<ID>: …`, body `Task: <ID>`); the identity of a
-stage pull request (head `<stage>/<ID>`, base `task/<ID>`). P0-011 and P0-012
+stage pull request (head `<stage>/<ID>-<N>`, base `task/<ID>`). P0-011 and P0-012
 consume these.
 
 ## Demonstration
 
-Against a local bare remote, a fake `codex` on `PATH` that reports `pending`
-then `ready` and prints a fixed diff, and a stubbed `gh`:
+In an isolated, configured panel deployment (see
+`workplan-control-panel/README.md`), use a real eligible task with a Refine
+or Implement Codex run that produces a diff. This is a manual check through
+the maintained panel, not a request to construct a fake Codex/GitHub harness.
 
-    $ POST /api/tasks/<ID>/refine, then wait for the fake to report ready
-    → expect: refine/<ID> on origin has one new commit on top of task/<ID> with
-      subject "<ID>: Refine <title>"; `gh pr create --base task/<ID> --head
-      refine/<ID> --fill` was called once; the stage cell shows published
-    $ the fake reports error
-    → expect: nothing pushed; the stage cell shows failed with a reason
-    $ the fake's diff also edits tasks.json (Refine)
-    → expect: not published; the reason names the path
-    $ POST the retry route twice for a published stage
-    → expect: still one commit and one pull request
+1. Sign in to the panel, prepare the task if necessary, and launch its Refine
+   or Implement stage. Note the numbered stage branch and conversation link.
+2. When Codex finishes, refresh the panel. The stage shows **published** and
+   links to a GitHub PR from that branch into `task/<ID>`. Check the PR's
+   commit subject `<ID>: <Refine|Implement> <title>`, body `Task: <ID>`,
+   and its expected changes.
+3. Retry publication twice using the stage's publish action (or the documented
+   `POST /api/tasks/<ID>/<refine|implement>/publish` API). Refresh the PR:
+   its head commit and PR number remain unchanged.
 
-Optionally, with a real Codex environment, confirm `codex cloud list --json` and
-`codex cloud diff` output on the installed CLI match what the panel reads.
+Record observed results and any unavailable Codex/GitHub prerequisites.
+Exercise failure cases in Verification, not by manufacturing manual fixtures.
 
 ## Verification
 
 - `cd workplan-control-panel && python3 -m unittest discover -s tests`.
-- Negative cases: `error` status, empty diff, diff that does not apply, Refine
-  diff outside its brief, push rejected, `gh` failing after the push (retry
-  then opens the pull request without a second commit), and `GH_TOKEN` absent
-  from the `codex` child.
+- Focused checks: a recorded task beyond the first status page is found;
+  diff content needed by `git apply` is preserved (the shared runner currently
+  strips it); `error`, empty diff, non-applying diff, out-of-brief Refine diff,
+  and push rejection do not publish agent changes.
+- A `gh` failure after a successful push is retryable without another commit
+  or pull request. Verify duplicate publication attempts and `GH_TOKEN` absent
+  from Codex, with no new publication subprocess under the state lock.
 - Say what could not run here, including any real Codex or GitHub use.
 
 ## Acceptance criteria
 
-- [ ] A finished Codex task is published to `<stage>/<ID>` as one panel-authored
+- [ ] A finished Codex task is published to `<stage>/<ID>-<N>` as one panel-authored
       commit and a pull request into `task/<ID>` opened with `--fill`, with no
       operator action.
 - [ ] `error`, empty-diff, non-applying and out-of-bounds outcomes are recorded
       with a reason and push nothing.
-- [ ] Publishing or retrying twice produces one commit and one pull request.
+- [ ] Publishing or retrying twice, including after a push succeeded but PR
+      creation failed, produces one commit and one pull request.
 - [ ] The pull request passes the task-status check-only gate.
 - [ ] No `codex` call receives `GH_TOKEN`, and no external call runs under the
       state lock.
