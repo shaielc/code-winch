@@ -93,6 +93,34 @@ class PublicationTests(GitRepositoryFixture, unittest.TestCase):
 
     # Outcomes that publish nothing
 
+    def test_a_submission_from_before_stage_branches_is_skipped_not_fatal(self):
+        # Before the fix a live state file holding one of these raised KeyError: 'branch'
+        # on every poll, so no attempt checked after it was ever published.
+        self.submit("implement")
+        legacy = {"status": "submitted", "head": self.attempt("implement")["head"],
+                  "task_url": "https://chatgpt.com/codex/cloud/tasks/task_e_0",
+                  "updated_at": "2026-10-01T00:00:00+00:00"}
+        with self.panel.locked():
+            state = task_state.load_state(self.panel.state_file)
+            # Refine is checked before Implement, so the legacy attempt comes first.
+            state["tasks"]["P0-001"]["stages"]["refine"] = [dict(legacy)]
+            task_state.write_json(self.panel.state_file, state)
+
+        create = self.publish(self.brief_diff())
+        self.assertEqual(self.attempt("implement")["status"], "published")
+        create.assert_called_once()
+        self.assertEqual(self.attempt("refine"), legacy)
+        with self.assertRaises(TaskError) as refused:
+            self.panel.retry_publish("P0-001", "refine")
+        self.assertEqual(refused.exception.status, 409)
+
+    def test_an_attempt_expired_mid_publication_does_not_stop_the_pass(self):
+        self.submit("implement")
+        changed = TaskError(409, "The stage attempt changed while publication was running")
+        with patch.object(self.panel, "_publish_attempt", side_effect=changed) as publish:
+            self.panel.publish_finished()
+        publish.assert_called_once()
+
     def test_a_pending_task_is_left_running_and_untouched(self):
         self.submit("implement")
         create = self.publish(self.brief_diff(), status="pending")
