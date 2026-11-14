@@ -10,7 +10,8 @@ TIMEOUT = 300
 
 
 def run(*command: str, cwd: Path, capture: bool = True,
-        extra_env: dict[str, str] | None = None) -> str:
+        extra_env: dict[str, str] | None = None, strip: bool = True,
+        remove_env: tuple[str, ...] = ()) -> str:
     """Run the command, logging why it failed before the caller decides what to say.
 
     The caller turns the failure into a message for the operator, which deliberately
@@ -20,6 +21,9 @@ def run(*command: str, cwd: Path, capture: bool = True,
     credential reaches the one command that needs it instead of everything the panel runs.
     """
     try:
+        environment = {**os.environ, **(extra_env or {})}
+        for name in remove_env:
+            environment.pop(name, None)
         result = subprocess.run(
             command,
             cwd=cwd,
@@ -28,7 +32,7 @@ def run(*command: str, cwd: Path, capture: bool = True,
             stdout=subprocess.PIPE if capture else None,
             stderr=subprocess.PIPE if capture else None,
             timeout=TIMEOUT,
-            env={**os.environ, **extra_env} if extra_env else None,
+            env=environment,
         )
     except subprocess.CalledProcessError as error:
         logs.failure(f"{logs.command(command)} exited {error.returncode}",
@@ -38,7 +42,8 @@ def run(*command: str, cwd: Path, capture: bool = True,
         logs.failure(f"{logs.command(command)} timed out after {TIMEOUT}s",
                      error.stderr or error.stdout)
         raise
-    return result.stdout.strip() if capture else ""
+    output = result.stdout if capture else ""
+    return output.strip() if strip else output
 
 
 def failure_message(error: Exception) -> str:

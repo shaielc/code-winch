@@ -113,6 +113,7 @@ class Handler(BaseHTTPRequestHandler):
                 r"(refine|implement|audit|expire|prepare|rebase|pull-request|create-pull-request)",
                 path)
             stage_match = re.fullmatch(r"/api/tasks/(P\d+-\d{3})/(refine|implement|audit)/expire", path)
+            publish_match = re.fullmatch(r"/api/tasks/(P\d+-\d{3})/(refine|implement)/publish", path)
             if path == "/api/session":
                 if not self.bearer_valid():
                     self.respond(401, {"error": "Enter a valid API token to sign in."})
@@ -133,6 +134,8 @@ class Handler(BaseHTTPRequestHandler):
             elif match and match[2] == "prepare":
                 self.respond(202, self.scheduler.start_sync(only=match[1]))
                 return
+            elif publish_match:
+                result = self.scheduler.retry_publish(*publish_match.groups())
             elif stage_match:
                 result = self.scheduler.expire_stage(*stage_match.groups())
             elif match and match[2] == "expire":
@@ -211,6 +214,7 @@ def main() -> int:
         os.environ.get("CLAUDE_AUDIT_ROUTINE_URL", ""),
         os.environ.get("CLAUDE_AUDIT_ROUTINE_TOKEN", ""),
     )
+    Handler.scheduler.start_monitor()
     with ThreadingHTTPServer((args.host, args.port), Handler) as server:
         logs.output(f"control panel on http://{args.host}:{args.port}")
         try:
