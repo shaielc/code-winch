@@ -17,33 +17,53 @@ request's current head, with no button press.
 
 ## Scope
 
-Use the published attempt's recorded branch and pull request from P0-010 to
-identify its stage; multiple numbered attempts may have open pull requests.
+P0-010 records `branch`, `published_tip`, `pull_request_number`, and
+`pull_request_url` on the exact numbered Refine or Implement attempt before
+returning it from `_publish_attempt`. Extend that publication path rather than
+rediscovering a pull request from the task base: after publication is recorded,
+start the reviewer for that attempt's recorded pull request and published tip.
+Multiple numbered attempts may remain open, so neither the automatic path nor
+its idempotence may be keyed only by task ID or base branch.
 
-Audit is today a button that fires a Claude routine with a prompt naming one
-pull request. Review-refinement has a skill (`skills/review-refinement/SKILL.md`)
-and no panel stage. Proposed approach, for the refiner to confirm against code
-at dispatch:
-
-- When P0-010 publishes a stage pull request, or pushes a new head to one,
-  start the matching session once for that head: `review-refinement` for
-  `refine/<ID>-<N>`, `audit` for `implement/<ID>-<N>`. A head that already has a live
-  session is not started again.
-- Add the review-refinement stage with its prompt, record, route and UI
-  control, beside Audit. Pick a stage name that does not collide with the
-  existing tests that expect `/api/tasks/<ID>/review` to return 404.
-- Decide how the review-refinement request reaches Claude. The existing
-  routine's own prompt accepts only audit requests, so either configure a second
-  routine (new URL and token settings in `compose.yml`, `.env.example`, `api.py`
-  and the README) or widen the existing routine's prompt, and say which.
-- Make the pull request selection explicit. The automatic start passes the pull
-  request it just published. The manual Audit control prefers the
-  `implement/<ID>-<N>` pull request, because an open Refine pull request on the same
-  base would otherwise defeat its "exactly one candidate" rule.
+- Add `review-refinement` as a panel stage beside `audit`, including a bundled
+  prompt, attempt record, API route, UI control and conversation link. Use the
+  route/stage slug `review-refinement`; keep `/api/tasks/<ID>/review` unknown as
+  current API tests require. The existing `audit` stage and manual control stay
+  supported.
+- Use a separate Claude routine for review-refinement, configured by
+  `CLAUDE_REVIEW_REFINEMENT_ROUTINE_URL` and
+  `CLAUDE_REVIEW_REFINEMENT_ROUTINE_TOKEN`. The existing routine prompt accepts
+  only audit requests, so sharing it would weaken the routine-side request
+  boundary. Thread both stage configurations from `api.py` into the scheduler,
+  through `compose.yml` and `.env.example`, and document their setup.
+- Generalise the Claude integration's configuration errors so they identify the
+  selected routine instead of always naming the audit variables. Preserve its
+  distinction between an HTTP refusal, which proves no session started, and an
+  accepted or transport failure, whose outcome is uncertain.
+- Factor reviewer start so the automatic publication path can supply the exact
+  stage attempt, pull-request URL/number and `published_tip` without calling
+  `repository.task_pull_requests`. A Refine publication starts
+  `review-refinement`; an Implement publication starts `audit`. Record reviewer
+  attempts against both the pull request and head so a repeated publication
+  check reuses the one session for that pair.
+- Keep manual starts explicit. Manual review-refinement targets an open
+  `refine/<ID>-<N>` stage pull request and manual audit targets an open
+  `implement/<ID>-<N>` stage pull request. Filter by the recorded head-ref prefix
+  before applying an optional pull-request number; if more than one matching
+  candidate remains, return the candidates for UI selection. An open pull
+  request for the other stage must never create ambiguity.
+- Persist the `submitting` reviewer attempt before firing its routine. On a
+  `RoutineError`, remove that attempt and surface the refusal without an
+  automatic retry. On a timeout, malformed accepted response or other uncertain
+  failure, retain the attempt so the operator must inspect Claude and explicitly
+  expire it before trying again. Do not hold the state lock during the routine
+  HTTP request; recheck the attempt identity under the lock before recording its
+  returned session URL.
 - Both prompts require the report's first line to be
-  `Report: <review-refinement|audit> <ID> <head-sha>`; an audit report also states
-  its audit state on the next line (`Not Complete`, `Input Required` or
-  `Complete`, as in `skills/audit-task/SKILL.md`). P0-012 relies on this header.
+  `Report: <review-refinement|audit> <ID> <head-sha>`. The audit prompt also
+  requires the next line to state `Not Complete`, `Input Required` or `Complete`
+  as defined by `skills/audit-task/SKILL.md`. Both prompts require a comment-only
+  pull-request review. P0-012 consumes this header.
 
 ## Required constraints
 
@@ -56,9 +76,10 @@ at dispatch:
 - Text sent to the routine is data, not instruction, as the routine's own
   prompt already treats it; the new prompt names only the task, pull request
   and head.
-- Starting is idempotent per pull request head, as Audit is today, and the
+- Starting is idempotent per reviewer stage, pull request and head. The
   persist-before-act rule keeps an uncertain outcome visible rather than
-  repeating it.
+  repeating it, including when publication polling overlaps or the panel
+  restarts.
 
 ## Non-goals
 
@@ -78,10 +99,13 @@ URLs and tokens the panel is given.
 - `workplan-control-panel/control_panel/task_scheduler.py`
 - `workplan-control-panel/control_panel/api.py`
 - `workplan-control-panel/control_panel/integrations/claude.py`
-- `workplan-control-panel/control_panel/integrations/repository.py`
-- `workplan-control-panel/control_panel/prompts/` (a new `review-refinement` prompt; `audit.md`)
+- `workplan-control-panel/control_panel/prompts/review-refinement.md`
+- `workplan-control-panel/control_panel/prompts/audit.md`
 - `workplan-control-panel/control_panel/ui.py`
-- `workplan-control-panel/tests/`
+- `workplan-control-panel/tests/test_claude.py`
+- `workplan-control-panel/tests/test_prompts.py`
+- `workplan-control-panel/tests/test_publication.py`
+- `workplan-control-panel/tests/test_task_scheduler.py`
 - `workplan-control-panel/README.md`, `claude-cloud-cli.md`, `compose.yml`, `.env.example`
 
 ## Contract surfaces
@@ -92,42 +116,62 @@ audit targets. P0-012 consumes the header and the sessions started here.
 
 ## Demonstration
 
-Against a local HTTP stub for the routine (as `tests/test_claude.py` does) and a
-published stage pull request recorded by the P0-010 path:
+Run the focused local panel scenarios, whose routine HTTP server and local Git
+repositories require no live Claude or GitHub account:
 
-    $ publish a refine/<ID>-<N> pull request
-    → expect: one routine request naming <ID>, the pull request and its head;
-      the stage cell links the session
-    $ publish an implement/<ID>-<N> pull request while refine/<ID>-<N> is open
-    → expect: the audit request names the implement pull request, not the refine one
-    $ push a new head to the same pull request
-    → expect: one new session for the new head, none for the old
-    $ the routine answers 429
-    → expect: no session recorded; the operator sees the refusal; no retry loop
+    $ cd workplan-control-panel
+    $ python3 -m unittest tests.test_publication tests.test_task_scheduler tests.test_claude
+    → expect: publishing a refine/<ID>-<N> pull request fires one
+      review-refinement request for its recorded URL and published tip, and the
+      stage cell links the returned session
+    → expect: publishing an implement/<ID>-<N> pull request while a Refine
+      pull request is open fires one audit request for the Implement pull request
+    → expect: repeated or overlapping publication checks at the same head
+      fire no duplicate; a distinct recorded head can start one new session
+    → expect: a 429 leaves no reviewer attempt or session, exposes the
+      refusal, and causes no automatic retry; an uncertain response leaves one
+      visible attempt and also causes no automatic retry
 
-Optionally, with real routines: the resulting review begins with the `Report:`
-header and lands as a comment-only review on the pull request.
+For the maintained hand check in an isolated configured panel deployment,
+publish one real Refine or Implement attempt as P0-010 describes. Observe the
+matching reviewer stage appear without pressing its button, follow its Claude
+session link, and verify that its eventual pull-request review starts with the
+required `Report:` line and is comment-only. Record if live routine credentials
+or GitHub access make this check unavailable.
 
 ## Verification
 
 - `cd workplan-control-panel && python3 -m unittest discover -s tests`.
-- Negative cases: refusal and uncertain outcomes record nothing started; a
-  second publish at the same head starts nothing; a missing routine setting
-  gives a clear error rather than a crash.
+- Focused cases: each publication stage selects its matching reviewer and exact
+  recorded pull request/head; other-stage and multiple numbered pull requests
+  cannot misdirect it; repeated and overlapping publication checks start one
+  session; a changed head starts one additional session.
+- Negative cases: an HTTP refusal removes the provisional attempt and starts no
+  retry; an uncertain outcome remains visible and blocks another fire; a
+  missing stage-specific routine setting gives a clear error rather than a
+  crash. Assert that routine I/O occurs outside the state lock and stale or
+  expired attempts are not overwritten when the call returns.
 - Say what could not run here, including any real routine use.
 
 ## Acceptance criteria
 
 - [ ] Publishing a stage pull request starts exactly one matching session for
-      that head without operator action.
-- [ ] A new head starts a new session; an unchanged head does not.
+      its recorded pull request and published head without operator action;
+      concurrent or repeated publication checks do not duplicate it.
+- [ ] A different recorded head may start one new session; an unchanged head
+      does not.
 - [ ] The audit targets the Implement pull request even when a Refine pull
-      request is open on the same base.
+      request is open on the same base, and review-refinement applies the
+      inverse rule.
 - [ ] Both prompts require the `Report:` header, and the review-refinement and
       audit prompts remain comment-only.
-- [ ] A refused request is surfaced and not retried automatically.
-- [ ] The routine settings for the new stage are documented and wired through
-      `compose.yml` and `.env.example`.
+- [ ] A refused request records no attempt or session and is surfaced without
+      automatic retry; an uncertain outcome remains visible and also is not
+      fired again automatically.
+- [ ] Both stages' routine settings are documented and wired through
+      `compose.yml` and `.env.example`, with stage-specific configuration errors.
+- [ ] No routine HTTP request runs under the state lock, and a returning request
+      cannot overwrite an attempt expired or replaced while it was in flight.
 
 ## Deferrals
 
