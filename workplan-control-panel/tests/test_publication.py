@@ -2,7 +2,8 @@
 
 Codex and gh are replaced at the panel's integration seam; git runs for real against a local
 bare origin. What this does not prove: the real `codex cloud list`/`diff` output shapes, and
-that GitHub accepts the push and `gh pr create --fill` with the App's credential.
+that GitHub accepts the push and `gh pr create --fill` with the App's credential. `--fill`
+itself is emulated by the `git log` range gh reads, not run.
 """
 
 import json
@@ -188,7 +189,7 @@ class PublicationTests(GitRepositoryFixture, unittest.TestCase):
         self.assertEqual(git(self.origin, "log", "-1", "--format=%s%n%b", tip).strip(),
                          "P0-001: Refine Upstream\nTask: P0-001")
         self.assertEqual(git(self.origin, "diff", "--name-only", base, tip), BRIEF)
-        create.assert_called_once_with(self.panel.clone, "P0-001", "refine/P0-001-1")
+        create.assert_called_once_with(self.panel.clone, "P0-001", "refine/P0-001-1", tip)
 
         # The next poll and an explicit retry find it published and commit nothing more.
         create = self.publish(self.brief_diff())
@@ -199,6 +200,45 @@ class PublicationTests(GitRepositoryFixture, unittest.TestCase):
             self.assertEqual(self.panel.retry_publish("P0-001", "refine")["status"], "published")
         found.assert_not_called()
         self.assertEqual(self.tips()["refine/P0-001-1"], tip)
+
+    def test_a_resubmission_at_the_same_tip_publishes_into_its_own_attempt(self):
+        # Before the fix results were matched by head, which both attempts share: the second
+        # run's publication overwrote the expired first attempt, and the second stayed
+        # submitted, so every poll committed and pushed it again.
+        self.submit("refine")
+        self.publish(self.brief_diff())
+        self.panel.expire_stage("P0-001", "refine")
+        with patch.object(codex, "submit",
+                          return_value="https://chatgpt.com/codex/cloud/tasks/task_e_2"):
+            self.panel.stage("P0-001", "refine")
+        attempts = self.panel.snapshot()["state"]["tasks"]["P0-001"]["stages"]["refine"]
+        self.assertEqual([item["branch"] for item in attempts],
+                         ["refine/P0-001-1", "refine/P0-001-2"])
+        self.assertEqual(attempts[0]["head"], attempts[1]["head"])
+        expired = dict(attempts[0])
+
+        create = self.publish(self.make_diff(lambda work: (work / BRIEF).write_text("again\n")))
+        first, second = self.panel.snapshot()["state"]["tasks"]["P0-001"]["stages"]["refine"]
+        self.assertEqual(first, expired)
+        tip = self.tips()["refine/P0-001-2"]
+        self.assertEqual((second["status"], second["codex_task_id"], second["published_tip"]),
+                         ("published", "task_e_2", tip))
+        create.assert_called_once_with(self.panel.clone, "P0-001", "refine/P0-001-2", tip)
+
+        create = self.publish(self.brief_diff())
+        create.assert_not_called()
+        self.assertEqual(self.tips()["refine/P0-001-2"], tip)
+
+    def test_publication_never_writes_into_an_attempt_expired_meanwhile(self):
+        self.submit("implement")
+        live = self.attempt("implement")
+        self.panel.expire_stage("P0-001", "implement")
+        expired = self.attempt("implement")
+        with self.assertRaises(TaskError) as refused:
+            self.panel._record_attempt("P0-001", "implement", live["branch"],
+                                       {"status": "published"})
+        self.assertEqual(refused.exception.status, 409)
+        self.assertEqual(self.attempt("implement"), expired)
 
     def test_a_gh_failure_after_the_push_retries_without_another_commit(self):
         self.submit("implement")
@@ -229,14 +269,37 @@ class PublicationTests(GitRepositoryFixture, unittest.TestCase):
         with patch.object(repository, "stage_pull_request", return_value=PULL), \
                 patch.object(repository, "github_run") as gh:
             self.assertEqual(repository.create_stage_pull_request(
-                self.panel.clone, "P0-001", "refine/P0-001-1"), PULL)
+                self.panel.clone, "P0-001", "refine/P0-001-1", "unused"), PULL)
         gh.assert_not_called()
 
+    def test_fill_sees_exactly_the_published_commit(self):
+        # Before the fix gh ran in the clone, where the pushed head had no local branch, and
+        # failed with "ambiguous argument 'origin/task/P0-002...refine/P0-002-1'".
+        self.submit("refine")
+        tip = repository.publish_stage(self.panel.clone, "P0-001", "Upstream", "refine",
+                                       "refine/P0-001-1", self.attempt("refine")["base"],
+                                       self.brief_diff())
+        # A stale base would widen the range to the task's opening commit too.
+        git(self.panel.clone, "update-ref", "refs/remotes/origin/task/P0-001", "origin/main")
+        filled = []
+
+        def github(*command, cwd, capture=True):
+            if command[0] != "gh":
+                return process.run(*command, cwd=cwd)
+            # What `gh pr create --fill` reads to compute its title and body.
+            filled.append(process.run("git", "log", "--cherry", "--format=%s%n%b",
+                                      "origin/task/P0-001...refine/P0-001-1", cwd=cwd))
+            self.assertEqual(command, ("gh", "pr", "create", "--base", "task/P0-001",
+                                       "--head", "refine/P0-001-1", "--fill"))
+            return PULL["url"]
+
         with patch.object(repository, "stage_pull_request", side_effect=[None, PULL]), \
-                patch.object(repository, "github_run", return_value=PULL["url"]) as gh:
-            repository.create_stage_pull_request(self.panel.clone, "P0-001", "refine/P0-001-1")
-        self.assertEqual(gh.call_args.args, ("gh", "pr", "create", "--base", "task/P0-001",
-                                             "--head", "refine/P0-001-1", "--fill"))
+                patch.object(repository, "github_run", side_effect=github):
+            self.assertEqual(repository.create_stage_pull_request(
+                self.panel.clone, "P0-001", "refine/P0-001-1", tip), PULL)
+        self.assertEqual(filled, ["P0-001: Refine Upstream\nTask: P0-001"])
+        self.assertEqual(len(git(self.panel.clone, "worktree", "list").splitlines()), 1)
+        self.assertEqual(git(self.panel.clone, "branch", "--list", "refine/P0-001-1"), "")
 
     def test_retry_refuses_a_stage_with_no_attempt(self):
         with self.assertRaises(TaskError) as refused:

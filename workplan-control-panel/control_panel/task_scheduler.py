@@ -66,14 +66,18 @@ class TaskScheduler:
         found = codex.TASK_URL.search(attempt.get("task_url", ""))
         return found.group(2) if found else attempt.get("codex_task_id")
 
-    def _record_attempt(self, task_id: str, stage: str, head: str,
+    def _record_attempt(self, task_id: str, stage: str, branch: str,
                         values: dict[str, Any]) -> dict[str, Any]:
-        """Recheck attempt identity under the lock, then write a short result."""
+        """Recheck attempt identity under the lock, then write a short result.
+
+        The numbered branch names one attempt. The head does not: expiring a stage and
+        submitting it again at the same task tip leaves two attempts on one head.
+        """
         with self.locked():
             current = task_state.load_state(self.state_file)
             attempts = current["tasks"].get(task_id, {}).get("stages", {}).get(stage, [])
-            attempt = next((item for item in attempts if item.get("head") == head), None)
-            if attempt is None:
+            attempt = next((item for item in attempts if item.get("branch") == branch), None)
+            if attempt is None or attempt.get("status") == "expired":
                 raise TaskError(409, "The stage attempt changed while publication was running")
             attempt.update(values, updated_at=datetime.now(UTC).isoformat())
             task_state.write_json(self.state_file, current)
@@ -81,10 +85,10 @@ class TaskScheduler:
 
     def _publish_attempt(self, task: dict[str, Any], stage: str,
                          attempt: dict[str, Any]) -> dict[str, Any]:
-        task_id, head = task["id"], attempt["head"]
+        task_id, branch = task["id"], attempt["branch"]
         codex_id = self._codex_id(attempt)
         if not codex_id:
-            return self._record_attempt(task_id, stage, head,
+            return self._record_attempt(task_id, stage, branch,
                                         {"status": "failed", "reason": "Codex task id is missing"})
         # A successful push is durable. A retry after gh failed starts here and never commits again.
         tip = attempt.get("published_tip")
@@ -94,31 +98,31 @@ class TaskScheduler:
                 if found is None or found.get("status") == "pending":
                     return attempt
                 if found.get("status") == "error":
-                    return self._record_attempt(task_id, stage, head, {
+                    return self._record_attempt(task_id, stage, branch, {
                         "status": "failed", "codex_task_id": codex_id,
                         "reason": "Codex reported an error"})
                 if found.get("status") not in ("ready", "applied"):
                     return attempt
                 patch = codex.diff(self.clone, codex_id)
                 if not patch.strip():
-                    return self._record_attempt(task_id, stage, head, {
+                    return self._record_attempt(task_id, stage, branch, {
                         "status": "no-changes", "codex_task_id": codex_id,
                         "reason": "Codex finished with no changes"})
                 tip = repository.publish_stage(self.clone, task_id, task["title"], stage,
-                                               attempt["branch"], attempt["base"], patch)
-                self._record_attempt(task_id, stage, head, {
+                                               branch, attempt["base"], patch)
+                self._record_attempt(task_id, stage, branch, {
                     "status": "running", "codex_task_id": codex_id, "published_tip": tip})
-            pull = repository.create_stage_pull_request(self.clone, task_id, attempt["branch"])
-            return self._record_attempt(task_id, stage, head, {
+            pull = repository.create_stage_pull_request(self.clone, task_id, branch, tip)
+            return self._record_attempt(task_id, stage, branch, {
                 "status": "published", "codex_task_id": codex_id, "published_tip": tip,
                 "pull_request_number": pull["number"], "pull_request_url": pull["url"],
                 "reason": "Published as a pull request"})
         except repository.PublishConflict as error:
-            return self._record_attempt(task_id, stage, head,
+            return self._record_attempt(task_id, stage, branch,
                                         {"status": "failed", "codex_task_id": codex_id,
                                          "reason": str(error)})
         except (OSError, ValueError, subprocess.SubprocessError) as error:
-            return self._record_attempt(task_id, stage, head,
+            return self._record_attempt(task_id, stage, branch,
                                         {"status": "failed", "codex_task_id": codex_id,
                                          "reason": failure_message(error)})
 

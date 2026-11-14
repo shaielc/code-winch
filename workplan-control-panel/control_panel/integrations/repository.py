@@ -264,12 +264,26 @@ def publish_stage(clone: Path, task_id: str, title: str, stage: str, branch: str
             run("git", "worktree", "remove", "--force", str(worktree), cwd=clone)
 
 
-def create_stage_pull_request(clone: Path, task_id: str, branch: str) -> dict[str, Any]:
+def create_stage_pull_request(clone: Path, task_id: str, branch: str,
+                              tip: str) -> dict[str, Any]:
     existing = stage_pull_request(clone, task_id, branch)
     if existing:
         return existing
-    url = github_run("gh", "pr", "create", "--base", task_branch(task_id),
-                     "--head", branch, "--fill", cwd=clone).splitlines()[-1].strip()
+    base = task_branch(task_id)
+    # --fill reads `git log origin/<base>...<head>` locally, so the base must be current and
+    # the head a local branch. The push went from a detached worktree, which left neither.
+    github_run("git", "fetch", "origin", f"+refs/heads/{base}:refs/remotes/origin/{base}",
+               cwd=clone)
+    with tempfile.TemporaryDirectory() as scratch:
+        worktree = Path(scratch) / "worktree"
+        # -B resets a branch an interrupted earlier attempt left behind.
+        run("git", "worktree", "add", "--quiet", "-B", branch, str(worktree), tip, cwd=clone)
+        try:
+            url = github_run("gh", "pr", "create", "--base", base, "--head", branch,
+                             "--fill", cwd=worktree).splitlines()[-1].strip()
+        finally:
+            run("git", "worktree", "remove", "--force", str(worktree), cwd=clone)
+            run("git", "branch", "-D", branch, cwd=clone)
     found = stage_pull_request(clone, task_id, branch)
     if not found:
         raise ValueError(f"gh created {url!r}, but the pull request could not be found")
